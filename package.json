@@ -4,8 +4,10 @@
 	"type": "module",
 	"scripts": {
 		"test": "echo \"Error: no test specified\" && exit 1",
+		"build": "rm -rf dist && bun build src/index.ts --outdir dist --minify --splitting --target=bun && tsc --emitDeclarationOnly --project tsconfig.json",
 		"format": "prettier --write \"./**/*.{js,jsx,ts,tsx,css,json,mjs}\"",
-		"dev": "bun run --watch src/backend/server.ts",
+		"dev": "bun run --watch example/server.ts",
+		"release": "bun run format && bun run build && bun publish",
 		"prune": "ts-prune --error",
 		"type-check": "bun run tsc --noEmit"
 	},
