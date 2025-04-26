@@ -1,9 +1,9 @@
 export default {
 	meta: {
-		type: 'problem',
+		type: "problem",
 		docs: {
 			description:
-				'Disallow nested functions that return non-component, non-singular JSX to enforce one component per file',
+				"Disallow nested functions that return non-component, non-singular JSX to enforce one component per file",
 			recommended: false
 		},
 		schema: []
@@ -13,29 +13,29 @@ export default {
 		function isJSX(node) {
 			return (
 				node &&
-				(node.type === 'JSXElement' || node.type === 'JSXFragment')
+				(node.type === "JSXElement" || node.type === "JSXFragment")
 			);
 		}
 
 		// Returns true if the JSX element is a component (its tag name starts with an uppercase letter).
 		function isJSXComponentElement(node) {
-			if (node && node.type === 'JSXElement') {
+			if (node && node.type === "JSXElement") {
 				const opening = node.openingElement;
 				if (opening && opening.name) {
-					if (opening.name.type === 'JSXIdentifier') {
+					if (opening.name.type === "JSXIdentifier") {
 						return /^[A-Z]/.test(opening.name.name);
 					}
-					if (opening.name.type === 'JSXMemberExpression') {
+					if (opening.name.type === "JSXMemberExpression") {
 						let current = opening.name;
 						while (
 							current &&
-							current.type === 'JSXMemberExpression'
+							current.type === "JSXMemberExpression"
 						) {
 							current = current.object;
 						}
 						return (
 							current &&
-							current.type === 'JSXIdentifier' &&
+							current.type === "JSXIdentifier" &&
 							/^[A-Z]/.test(current.name)
 						);
 					}
@@ -50,10 +50,10 @@ export default {
 		function isSingularJSXReturn(node) {
 			if (!isJSX(node)) return false;
 			let children = [];
-			if (node.type === 'JSXElement' || node.type === 'JSXFragment') {
+			if (node.type === "JSXElement" || node.type === "JSXFragment") {
 				children = node.children.filter((child) => {
-					if (child.type === 'JSXText') {
-						return child.value.trim() !== '';
+					if (child.type === "JSXText") {
+						return child.value.trim() !== "";
 					}
 					return true;
 				});
@@ -63,13 +63,13 @@ export default {
 					// If the singular child is also a JSX element or fragment,
 					// ensure that it doesn't have any meaningful children.
 					if (
-						child.type === 'JSXElement' ||
-						child.type === 'JSXFragment'
+						child.type === "JSXElement" ||
+						child.type === "JSXFragment"
 					) {
 						const innerChildren = child.children.filter(
 							(innerChild) => {
-								if (innerChild.type === 'JSXText') {
-									return innerChild.value.trim() !== '';
+								if (innerChild.type === "JSXText") {
+									return innerChild.value.trim() !== "";
 								}
 								return true;
 							}
@@ -95,18 +95,18 @@ export default {
 		}
 
 		return {
-			'FunctionDeclaration, FunctionExpression, ArrowFunctionExpression'(
+			"FunctionDeclaration, FunctionExpression, ArrowFunctionExpression"(
 				node
 			) {
 				pushFunction(node);
 			},
-			'FunctionDeclaration:exit'(node) {
+			"FunctionDeclaration:exit"(node) {
 				popFunction();
 			},
-			'FunctionExpression:exit'(node) {
+			"FunctionExpression:exit"(node) {
 				popFunction();
 			},
-			'ArrowFunctionExpression:exit'(node) {
+			"ArrowFunctionExpression:exit"(node) {
 				popFunction();
 			},
 
@@ -121,13 +121,13 @@ export default {
 					context.report({
 						node,
 						message:
-							'Nested function returning non-component, non-singular JSX detected. Extract it into its own component.'
+							"Nested function returning non-component, non-singular JSX detected. Extract it into its own component."
 					});
 				}
 			},
 
 			// For implicit returns in arrow functions, use the same checks.
-			'ArrowFunctionExpression > JSXElement'(node) {
+			"ArrowFunctionExpression > JSXElement"(node) {
 				if (
 					functionStack.length > 1 &&
 					!isJSXComponentElement(node) &&
@@ -136,16 +136,16 @@ export default {
 					context.report({
 						node,
 						message:
-							'Nested arrow function returning non-component, non-singular JSX detected. Extract it into its own component.'
+							"Nested arrow function returning non-component, non-singular JSX detected. Extract it into its own component."
 					});
 				}
 			},
-			'ArrowFunctionExpression > JSXFragment'(node) {
+			"ArrowFunctionExpression > JSXFragment"(node) {
 				if (functionStack.length > 1 && !isSingularJSXReturn(node)) {
 					context.report({
 						node,
 						message:
-							'Nested arrow function returning a non-singular JSX fragment detected. Extract it into its own component.'
+							"Nested arrow function returning a non-singular JSX fragment detected. Extract it into its own component."
 					});
 				}
 			}

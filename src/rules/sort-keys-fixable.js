@@ -17,48 +17,48 @@
 
 export default {
 	meta: {
-		type: 'suggestion',
+		type: "suggestion",
 		docs: {
 			description:
-				'enforce sorted keys in object literals with auto-fix (limited to simple cases, preserving comments)',
+				"enforce sorted keys in object literals with auto-fix (limited to simple cases, preserving comments)",
 			recommended: false
 		},
-		fixable: 'code',
+		fixable: "code",
 		// The schema supports the same options as the built-in sort-keys rule plus:
 		//   variablesBeforeFunctions: boolean (when true, non-function properties come before function properties)
 		schema: [
 			{
-				type: 'object',
+				type: "object",
 				properties: {
 					order: {
-						enum: ['asc', 'desc']
+						enum: ["asc", "desc"]
 					},
 					caseSensitive: {
-						type: 'boolean'
+						type: "boolean"
 					},
 					natural: {
-						type: 'boolean'
+						type: "boolean"
 					},
 					minKeys: {
-						type: 'integer',
+						type: "integer",
 						minimum: 2
 					},
 					variablesBeforeFunctions: {
-						type: 'boolean'
+						type: "boolean"
 					}
 				},
 				additionalProperties: false
 			}
 		],
 		messages: {
-			unsorted: 'Object keys are not sorted.'
+			unsorted: "Object keys are not sorted."
 		}
 	},
 
 	create(context) {
 		const sourceCode = context.getSourceCode();
 		const options = context.options[0] || {};
-		const order = options.order || 'asc';
+		const order = options.order || "asc";
 		const caseSensitive =
 			options.caseSensitive !== undefined ? options.caseSensitive : false;
 		const natural = options.natural !== undefined ? options.natural : false;
@@ -98,8 +98,8 @@ export default {
 		function isFunctionProperty(prop) {
 			return (
 				prop.value &&
-				(prop.value.type === 'FunctionExpression' ||
-					prop.value.type === 'ArrowFunctionExpression' ||
+				(prop.value.type === "FunctionExpression" ||
+					prop.value.type === "ArrowFunctionExpression" ||
 					prop.method === true)
 			);
 		}
@@ -121,15 +121,15 @@ export default {
 					}
 				}
 				const keyA =
-					a.key.type === 'Identifier'
+					a.key.type === "Identifier"
 						? a.key.name
 						: String(a.key.value);
 				const keyB =
-					b.key.type === 'Identifier'
+					b.key.type === "Identifier"
 						? b.key.name
 						: String(b.key.value);
 				let res = compareKeys(keyA, keyB);
-				if (order === 'desc') {
+				if (order === "desc") {
 					res = -res;
 				}
 				return res;
@@ -150,23 +150,23 @@ export default {
 									.map((comment) =>
 										sourceCode.getText(comment)
 									)
-									.join('\n') + '\n'
-							: '';
+									.join("\n") + "\n"
+							: "";
 					const trailingText =
 						trailingComments.length > 0
-							? '\n' +
+							? "\n" +
 								trailingComments
 									.map((comment) =>
 										sourceCode.getText(comment)
 									)
-									.join('\n')
-							: '';
+									.join("\n")
+							: "";
 					// Return the property text with its comments.
 					return (
 						leadingText + sourceCode.getText(prop) + trailingText
 					);
 				})
-				.join(', ');
+				.join(", ");
 		}
 
 		/**
@@ -188,14 +188,14 @@ export default {
 			const keys = node.properties.map((prop) => {
 				let keyName = null;
 				let isFunc = false;
-				if (prop.type === 'Property') {
+				if (prop.type === "Property") {
 					if (prop.computed) {
 						// Computed keys are not handled in the fixer.
 						autoFixable = false;
 					}
-					if (prop.key.type === 'Identifier') {
+					if (prop.key.type === "Identifier") {
 						keyName = prop.key.name;
-					} else if (prop.key.type === 'Literal') {
+					} else if (prop.key.type === "Literal") {
 						keyName = String(prop.key.value);
 					} else {
 						autoFixable = false;
@@ -203,8 +203,8 @@ export default {
 					// Determine if the property is a function.
 					if (prop.value) {
 						if (
-							prop.value.type === 'FunctionExpression' ||
-							prop.value.type === 'ArrowFunctionExpression' ||
+							prop.value.type === "FunctionExpression" ||
+							prop.value.type === "ArrowFunctionExpression" ||
 							prop.method === true
 						) {
 							isFunc = true;
@@ -235,7 +235,7 @@ export default {
 					if (prev.isFunction && !curr.isFunction) {
 						context.report({
 							node: curr.node.key,
-							messageId: 'unsorted',
+							messageId: "unsorted",
 							fix:
 								!fixProvided && autoFixable
 									? (fixer) => {
@@ -243,12 +243,12 @@ export default {
 												node.properties.filter(
 													(prop) =>
 														prop.type ===
-															'Property' &&
+															"Property" &&
 														!prop.computed &&
 														(prop.key.type ===
-															'Identifier' ||
+															"Identifier" ||
 															prop.key.type ===
-																'Literal')
+																"Literal")
 												);
 											if (fixableProps.length < minKeys) {
 												return null;
@@ -277,7 +277,7 @@ export default {
 						if (compareKeys(prev.keyName, curr.keyName) > 0) {
 							context.report({
 								node: curr.node.key,
-								messageId: 'unsorted',
+								messageId: "unsorted",
 								fix:
 									!fixProvided && autoFixable
 										? (fixer) => {
@@ -285,13 +285,13 @@ export default {
 													node.properties.filter(
 														(prop) =>
 															prop.type ===
-																'Property' &&
+																"Property" &&
 															!prop.computed &&
 															(prop.key.type ===
-																'Identifier' ||
+																"Identifier" ||
 																prop.key
 																	.type ===
-																	'Literal')
+																	"Literal")
 													);
 												if (
 													fixableProps.length <
@@ -327,7 +327,7 @@ export default {
 					if (compareKeys(prev.keyName, curr.keyName) > 0) {
 						context.report({
 							node: curr.node.key,
-							messageId: 'unsorted',
+							messageId: "unsorted",
 							fix:
 								!fixProvided && autoFixable
 									? (fixer) => {
@@ -335,12 +335,12 @@ export default {
 												node.properties.filter(
 													(prop) =>
 														prop.type ===
-															'Property' &&
+															"Property" &&
 														!prop.computed &&
 														(prop.key.type ===
-															'Identifier' ||
+															"Identifier" ||
 															prop.key.type ===
-																'Literal')
+																"Literal")
 												);
 											if (fixableProps.length < minKeys) {
 												return null;

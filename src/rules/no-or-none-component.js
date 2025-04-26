@@ -1,9 +1,9 @@
 export default {
 	meta: {
-		type: 'suggestion',
+		type: "suggestion",
 		docs: {
 			description:
-				'Prefer using logical && operator over ternary with null/undefined for conditional JSX rendering.',
+				"Prefer using logical && operator over ternary with null/undefined for conditional JSX rendering.",
 			recommended: false
 		},
 		messages: {
@@ -18,26 +18,26 @@ export default {
 				// Check if alternate is explicitly null or undefined
 				if (
 					alternate &&
-					((alternate.type === 'Literal' &&
+					((alternate.type === "Literal" &&
 						alternate.value === null) ||
-						(alternate.type === 'Identifier' &&
-							alternate.name === 'undefined'))
+						(alternate.type === "Identifier" &&
+							alternate.name === "undefined"))
 				) {
 					// Check if the node is within a JSX expression container.
 					if (
 						node.parent &&
-						node.parent.type === 'JSXExpressionContainer'
+						node.parent.type === "JSXExpressionContainer"
 					) {
 						const containerParent = node.parent.parent;
 						// Only flag if the JSXExpressionContainer is used as a child,
 						// not as a prop (i.e. not within a JSXAttribute)
 						if (
 							containerParent &&
-							containerParent.type !== 'JSXAttribute'
+							containerParent.type !== "JSXAttribute"
 						) {
 							context.report({
 								node,
-								messageId: 'useLogicalAnd'
+								messageId: "useLogicalAnd"
 							});
 						}
 					}

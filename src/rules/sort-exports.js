@@ -26,33 +26,33 @@
 
 export default {
 	meta: {
-		type: 'suggestion',
+		type: "suggestion",
 		docs: {
 			description:
-				'Enforce that top-level export declarations are sorted by exported name and, optionally, that variable exports come before function exports',
-			category: 'Stylistic Issues',
+				"Enforce that top-level export declarations are sorted by exported name and, optionally, that variable exports come before function exports",
+			category: "Stylistic Issues",
 			recommended: false
 		},
-		fixable: 'code',
+		fixable: "code",
 		schema: [
 			{
-				type: 'object',
+				type: "object",
 				properties: {
 					order: {
-						enum: ['asc', 'desc']
+						enum: ["asc", "desc"]
 					},
 					caseSensitive: {
-						type: 'boolean'
+						type: "boolean"
 					},
 					natural: {
-						type: 'boolean'
+						type: "boolean"
 					},
 					minKeys: {
-						type: 'integer',
+						type: "integer",
 						minimum: 2
 					},
 					variablesBeforeFunctions: {
-						type: 'boolean'
+						type: "boolean"
 					}
 				},
 				additionalProperties: false
@@ -60,16 +60,16 @@ export default {
 		],
 		messages: {
 			alphabetical:
-				'Export declarations are not sorted alphabetically. Expected order: {{expectedOrder}}.',
+				"Export declarations are not sorted alphabetically. Expected order: {{expectedOrder}}.",
 			variablesBeforeFunctions:
-				'Non-function exports should come before function exports.'
+				"Non-function exports should come before function exports."
 		}
 	},
 
 	create(context) {
 		const sourceCode = context.getSourceCode();
 		const options = context.options[0] || {};
-		const order = options.order || 'asc';
+		const order = options.order || "asc";
 		const caseSensitive =
 			options.caseSensitive !== undefined ? options.caseSensitive : false;
 		const natural = options.natural !== undefined ? options.natural : false;
@@ -89,7 +89,7 @@ export default {
 			return sourceCode
 				.getText(node)
 				.trim()
-				.replace(/\s*;?\s*$/, ';');
+				.replace(/\s*;?\s*$/, ";");
 		}
 
 		/**
@@ -108,7 +108,7 @@ export default {
 			let cmp = natural
 				? strA.localeCompare(strB, undefined, { numeric: true })
 				: strA.localeCompare(strB);
-			return order === 'asc' ? cmp : -cmp;
+			return order === "asc" ? cmp : -cmp;
 		}
 
 		/**
@@ -121,18 +121,18 @@ export default {
 		function getExportName(node) {
 			if (node.declaration) {
 				const decl = node.declaration;
-				if (decl.type === 'VariableDeclaration') {
+				if (decl.type === "VariableDeclaration") {
 					if (decl.declarations.length === 1) {
 						const id = decl.declarations[0].id;
-						if (id.type === 'Identifier') {
+						if (id.type === "Identifier") {
 							return id.name;
 						}
 					}
 				} else if (
-					decl.type === 'FunctionDeclaration' ||
-					decl.type === 'ClassDeclaration'
+					decl.type === "FunctionDeclaration" ||
+					decl.type === "ClassDeclaration"
 				) {
-					if (decl.id && decl.id.type === 'Identifier') {
+					if (decl.id && decl.id.type === "Identifier") {
 						return decl.id.name;
 					}
 				}
@@ -151,16 +151,16 @@ export default {
 		function isFunctionExport(node) {
 			if (node.declaration) {
 				const decl = node.declaration;
-				if (decl.type === 'VariableDeclaration') {
+				if (decl.type === "VariableDeclaration") {
 					if (decl.declarations.length === 1) {
 						const init = decl.declarations[0].init;
 						return (
 							init &&
-							(init.type === 'FunctionExpression' ||
-								init.type === 'ArrowFunctionExpression')
+							(init.type === "FunctionExpression" ||
+								init.type === "ArrowFunctionExpression")
 						);
 					}
-				} else if (decl.type === 'FunctionDeclaration') {
+				} else if (decl.type === "FunctionDeclaration") {
 					return true;
 				}
 				// Treat ClassDeclaration as non-function by default (can be adjusted if desired)
@@ -180,10 +180,10 @@ export default {
 		 * @returns {number}
 		 */
 		function sortComparator(a, b) {
-			const kindA = a.node.exportKind || 'value';
-			const kindB = b.node.exportKind || 'value';
+			const kindA = a.node.exportKind || "value";
+			const kindB = b.node.exportKind || "value";
 			if (kindA !== kindB) {
-				return kindA === 'type' ? -1 : 1;
+				return kindA === "type" ? -1 : 1;
 			}
 			if (variablesBeforeFunctions) {
 				if (a.isFunction !== b.isFunction) {
@@ -207,7 +207,7 @@ export default {
 			laterNames,
 			visited = new WeakSet()
 		) {
-			if (!node || typeof node !== 'object') {
+			if (!node || typeof node !== "object") {
 				return false;
 			}
 			if (visited.has(node)) {
@@ -215,7 +215,7 @@ export default {
 			}
 			visited.add(node);
 
-			if (node.type === 'Identifier' && laterNames.has(node.name)) {
+			if (node.type === "Identifier" && laterNames.has(node.name)) {
 				return true;
 			}
 
@@ -224,7 +224,7 @@ export default {
 					const value = node[key];
 					if (Array.isArray(value)) {
 						for (const element of value) {
-							if (element && typeof element === 'object') {
+							if (element && typeof element === "object") {
 								if (
 									hasForwardDependency(
 										element,
@@ -236,7 +236,7 @@ export default {
 								}
 							}
 						}
-					} else if (value && typeof value === 'object') {
+					} else if (value && typeof value === "object") {
 						if (hasForwardDependency(value, laterNames, visited)) {
 							return true;
 						}
@@ -279,7 +279,7 @@ export default {
 
 			// Determine if the block is unsorted.
 			let reportNeeded = false;
-			let messageId = 'alphabetical';
+			let messageId = "alphabetical";
 			for (let i = 1; i < items.length; i++) {
 				if (sortComparator(items[i - 1], items[i]) > 0) {
 					reportNeeded = true;
@@ -288,7 +288,7 @@ export default {
 						items[i - 1].isFunction &&
 						!items[i].isFunction
 					) {
-						messageId = 'variablesBeforeFunctions';
+						messageId = "variablesBeforeFunctions";
 					}
 					break;
 				}
@@ -314,7 +314,7 @@ export default {
 			// Report the error only if there is no dependency issue.
 			const expectedOrder = sortedItems
 				.map((item) => item.name)
-				.join(', ');
+				.join(", ");
 			context.report({
 				node: items[0].node,
 				messageId,
@@ -326,19 +326,19 @@ export default {
 					const fixableNodes = block.filter((n) => {
 						if (n.declaration) {
 							if (
-								n.declaration.type === 'VariableDeclaration' &&
+								n.declaration.type === "VariableDeclaration" &&
 								n.declaration.declarations.length === 1 &&
 								n.declaration.declarations[0].id.type ===
-									'Identifier'
+									"Identifier"
 							) {
 								return true;
 							}
 							if (
-								(n.declaration.type === 'FunctionDeclaration' ||
+								(n.declaration.type === "FunctionDeclaration" ||
 									n.declaration.type ===
-										'ClassDeclaration') &&
+										"ClassDeclaration") &&
 								n.declaration.id &&
-								n.declaration.id.type === 'Identifier'
+								n.declaration.id.type === "Identifier"
 							) {
 								return true;
 							}
@@ -354,7 +354,7 @@ export default {
 					}
 					const sortedText = sortedItems
 						.map((item) => generateExportText(item.node))
-						.join('\n');
+						.join("\n");
 					const first = block[0].range[0];
 					const last = block[block.length - 1].range[1];
 					// Prevent circular fixes: only apply the change if the text differs.
@@ -370,13 +370,13 @@ export default {
 		}
 
 		return {
-			'Program:exit'(node) {
+			"Program:exit"(node) {
 				const body = node.body;
 				let block = [];
 				for (let i = 0; i < body.length; i++) {
 					const n = body[i];
 					if (
-						n.type === 'ExportNamedDeclaration' &&
+						n.type === "ExportNamedDeclaration" &&
 						!n.source && // skip re-exports like export * from '...'
 						getExportName(n) !== null
 					) {

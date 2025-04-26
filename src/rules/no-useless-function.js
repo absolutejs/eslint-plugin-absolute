@@ -1,10 +1,10 @@
 export default {
 	meta: {
-		type: 'suggestion',
+		type: "suggestion",
 		docs: {
 			description:
-				'Disallow functions that have no parameters and just return an object literal; consider exporting the object directly, unless the function is used as a callback (e.g., in react-spring).',
-			category: 'Best Practices',
+				"Disallow functions that have no parameters and just return an object literal; consider exporting the object directly, unless the function is used as a callback (e.g., in react-spring).",
+			category: "Best Practices",
 			recommended: false
 		},
 		fixable: null
@@ -14,7 +14,7 @@ export default {
 			// Check if the node is an argument of a CallExpression
 			return (
 				node.parent &&
-				node.parent.type === 'CallExpression' &&
+				node.parent.type === "CallExpression" &&
 				node.parent.arguments.includes(node)
 			);
 		}
@@ -25,7 +25,7 @@ export default {
 				if (
 					node.params.length === 0 &&
 					node.body &&
-					node.body.type === 'ObjectExpression'
+					node.body.type === "ObjectExpression"
 				) {
 					// If the function is used as a callback (like in react-spring), skip reporting.
 					if (isCallbackFunction(node)) {
@@ -34,7 +34,7 @@ export default {
 					context.report({
 						node,
 						message:
-							'This function has no parameters and simply returns an object. Consider exporting the object directly instead of wrapping it in a function.'
+							"This function has no parameters and simply returns an object. Consider exporting the object directly instead of wrapping it in a function."
 					});
 				}
 			}

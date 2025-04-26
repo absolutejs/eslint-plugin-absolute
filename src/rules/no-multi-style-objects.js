@@ -6,11 +6,11 @@
 
 export default {
 	meta: {
-		type: 'problem',
+		type: "problem",
 		docs: {
 			description:
-				'Disallow grouping CSS style objects in a single export; export each style separately.',
-			category: 'Best Practices',
+				"Disallow grouping CSS style objects in a single export; export each style separately.",
+			category: "Best Practices",
 			recommended: false
 		},
 		schema: [] // no options
@@ -24,14 +24,14 @@ export default {
 			if (node.properties && node.properties.length > 0) {
 				const cssStyleProperties = node.properties.filter((prop) => {
 					if (prop.key) {
-						if (prop.key.type === 'Identifier') {
-							return prop.key.name.endsWith('Style');
+						if (prop.key.type === "Identifier") {
+							return prop.key.name.endsWith("Style");
 						}
 						if (
-							prop.key.type === 'Literal' &&
-							typeof prop.key.value === 'string'
+							prop.key.type === "Literal" &&
+							typeof prop.key.value === "string"
 						) {
-							return prop.key.value.endsWith('Style');
+							return prop.key.value.endsWith("Style");
 						}
 					}
 					return false;
@@ -40,7 +40,7 @@ export default {
 					context.report({
 						node,
 						message:
-							'Do not group CSS style objects in a single export; export each style separately.'
+							"Do not group CSS style objects in a single export; export each style separately."
 					});
 				}
 			}
@@ -51,7 +51,7 @@ export default {
 			ExportDefaultDeclaration(node) {
 				if (
 					node.declaration &&
-					node.declaration.type === 'ObjectExpression'
+					node.declaration.type === "ObjectExpression"
 				) {
 					checkObjectExpression(node.declaration);
 				}
@@ -60,7 +60,7 @@ export default {
 			ReturnStatement(node) {
 				if (
 					node.argument &&
-					node.argument.type === 'ObjectExpression'
+					node.argument.type === "ObjectExpression"
 				) {
 					checkObjectExpression(node.argument);
 				}

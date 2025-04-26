@@ -1,9 +1,9 @@
 export default {
 	meta: {
-		type: 'suggestion',
+		type: "suggestion",
 		docs: {
 			description:
-				'Disallow explicit return type annotations on functions, except when using type predicates for type guards or inline object literal returns (e.g., style objects).',
+				"Disallow explicit return type annotations on functions, except when using type predicates for type guards or inline object literal returns (e.g., style objects).",
 			recommended: false
 		},
 		schema: [],
@@ -15,7 +15,7 @@ export default {
 
 	create(context) {
 		return {
-			'FunctionDeclaration, FunctionExpression, ArrowFunctionExpression'(
+			"FunctionDeclaration, FunctionExpression, ArrowFunctionExpression"(
 				node
 			) {
 				if (node.returnType) {
@@ -23,30 +23,30 @@ export default {
 					const typeAnnotation = node.returnType.typeAnnotation;
 					if (
 						typeAnnotation &&
-						typeAnnotation.type === 'TSTypePredicate'
+						typeAnnotation.type === "TSTypePredicate"
 					) {
 						return;
 					}
 
 					// Allow if it's an arrow function that directly returns an object literal.
 					if (
-						node.type === 'ArrowFunctionExpression' &&
+						node.type === "ArrowFunctionExpression" &&
 						node.expression &&
 						node.body &&
-						node.body.type === 'ObjectExpression'
+						node.body.type === "ObjectExpression"
 					) {
 						return;
 					}
 
 					// Allow if the function has a block body with a single return statement that returns an object literal.
-					if (node.body && node.body.type === 'BlockStatement') {
+					if (node.body && node.body.type === "BlockStatement") {
 						const returns = node.body.body.filter(
-							(stmt) => stmt.type === 'ReturnStatement'
+							(stmt) => stmt.type === "ReturnStatement"
 						);
 						if (
 							returns.length === 1 &&
 							returns[0].argument &&
-							returns[0].argument.type === 'ObjectExpression'
+							returns[0].argument.type === "ObjectExpression"
 						) {
 							return;
 						}
@@ -55,7 +55,7 @@ export default {
 					// Otherwise, report an error.
 					context.report({
 						node: node.returnType,
-						messageId: 'noExplicitReturnType'
+						messageId: "noExplicitReturnType"
 					});
 				}
 			}

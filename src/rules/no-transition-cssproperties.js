@@ -10,7 +10,7 @@
 
 export default {
 	meta: {
-		type: 'problem',
+		type: "problem",
 		docs: {
 			description:
 				"Objects typed as CSSProperties must not include a 'transition' property as it conflicts with react-spring.",
@@ -30,7 +30,7 @@ export default {
 				// Ensure the variable identifier exists, is an Identifier, and has a type annotation.
 				if (
 					!node.id ||
-					node.id.type !== 'Identifier' ||
+					node.id.type !== "Identifier" ||
 					!node.id.typeAnnotation
 				) {
 					return;
@@ -41,18 +41,18 @@ export default {
 				// First try: check if it's a TSTypeReference with typeName "CSSProperties"
 				if (
 					typeAnnotation &&
-					typeAnnotation.type === 'TSTypeReference'
+					typeAnnotation.type === "TSTypeReference"
 				) {
 					const { typeName } = typeAnnotation;
 					if (
-						typeName.type === 'Identifier' &&
-						typeName.name === 'CSSProperties'
+						typeName.type === "Identifier" &&
+						typeName.name === "CSSProperties"
 					) {
 						isStyleType = true;
 					} else if (
-						typeName.type === 'TSQualifiedName' &&
+						typeName.type === "TSQualifiedName" &&
 						typeName.right &&
-						typeName.right.name === 'CSSProperties'
+						typeName.right.name === "CSSProperties"
 					) {
 						isStyleType = true;
 					}
@@ -63,7 +63,7 @@ export default {
 					const annotationText = sourceCode.getText(
 						node.id.typeAnnotation
 					);
-					if (annotationText.includes('CSSProperties')) {
+					if (annotationText.includes("CSSProperties")) {
 						isStyleType = true;
 					}
 				}
@@ -73,25 +73,25 @@ export default {
 				}
 
 				// Check that the initializer is an object literal.
-				if (node.init && node.init.type === 'ObjectExpression') {
+				if (node.init && node.init.type === "ObjectExpression") {
 					node.init.properties.forEach((prop) => {
 						// Only consider regular properties.
-						if (prop.type !== 'Property') {
+						if (prop.type !== "Property") {
 							return;
 						}
 						if (prop.computed) {
 							return;
 						}
 						let keyName = null;
-						if (prop.key.type === 'Identifier') {
+						if (prop.key.type === "Identifier") {
 							keyName = prop.key.name;
-						} else if (prop.key.type === 'Literal') {
+						} else if (prop.key.type === "Literal") {
 							keyName = String(prop.key.value);
 						}
-						if (keyName === 'transition') {
+						if (keyName === "transition") {
 							context.report({
 								node: prop,
-								messageId: 'forbiddenTransition'
+								messageId: "forbiddenTransition"
 							});
 						}
 					});

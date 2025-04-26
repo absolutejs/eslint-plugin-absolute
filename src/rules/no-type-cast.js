@@ -1,6 +1,6 @@
 export default {
 	meta: {
-		type: 'problem',
+		type: "problem",
 		docs: {
 			description:
 				'Disallow type assertions using "as", angle bracket syntax, or built-in conversion functions.',
@@ -13,8 +13,8 @@ export default {
 		function isBuiltInConversion(node) {
 			return (
 				node &&
-				node.type === 'Identifier' &&
-				['Number', 'String', 'Boolean'].includes(node.name)
+				node.type === "Identifier" &&
+				["Number", "String", "Boolean"].includes(node.name)
 			);
 		}
 
@@ -32,7 +32,7 @@ export default {
 				context.report({
 					node,
 					message:
-						'Type assertions using angle bracket syntax are not allowed.'
+						"Type assertions using angle bracket syntax are not allowed."
 				});
 			},
 			// Catch type conversions using built-in functions like Number(prop)

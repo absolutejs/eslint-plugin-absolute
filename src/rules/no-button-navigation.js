@@ -1,10 +1,10 @@
 export default {
 	meta: {
-		type: 'suggestion',
+		type: "suggestion",
 		docs: {
 			description:
-				'Enforce using anchor tags for navigation instead of buttons with onClick handlers that use window navigation methods (e.g., window.location, window.open)',
-			category: 'Best Practices',
+				"Enforce using anchor tags for navigation instead of buttons with onClick handlers that use window navigation methods (e.g., window.location, window.open)",
+			category: "Best Practices",
 			recommended: false
 		},
 		schema: []
@@ -21,23 +21,23 @@ export default {
 			const visited = new WeakSet();
 			function inspect(n) {
 				if (!n || found) return;
-				if (typeof n !== 'object') return; // Only objects can be added to WeakSet
+				if (typeof n !== "object") return; // Only objects can be added to WeakSet
 				if (visited.has(n)) return;
 				visited.add(n);
 
 				// Check for MemberExpressions like window.location or window.open
-				if (n.type === 'MemberExpression') {
+				if (n.type === "MemberExpression") {
 					if (
 						n.object &&
-						n.object.type === 'Identifier' &&
-						n.object.name === 'window' &&
+						n.object.type === "Identifier" &&
+						n.object.name === "window" &&
 						n.property &&
-						((n.property.type === 'Identifier' &&
-							(n.property.name === 'location' ||
-								n.property.name === 'open')) ||
-							(n.property.type === 'Literal' &&
-								(n.property.value === 'location' ||
-									n.property.value === 'open')))
+						((n.property.type === "Identifier" &&
+							(n.property.name === "location" ||
+								n.property.name === "open")) ||
+							(n.property.type === "Literal" &&
+								(n.property.value === "location" ||
+									n.property.value === "open")))
 					) {
 						found = true;
 						return;
@@ -45,18 +45,18 @@ export default {
 				}
 				// Check for CallExpressions like window.open()
 				if (
-					n.type === 'CallExpression' &&
+					n.type === "CallExpression" &&
 					n.callee &&
-					n.callee.type === 'MemberExpression'
+					n.callee.type === "MemberExpression"
 				) {
 					const callee = n.callee;
 					if (
 						callee.object &&
-						callee.object.type === 'Identifier' &&
-						callee.object.name === 'window' &&
+						callee.object.type === "Identifier" &&
+						callee.object.name === "window" &&
 						callee.property &&
-						callee.property.type === 'Identifier' &&
-						callee.property.name === 'open'
+						callee.property.type === "Identifier" &&
+						callee.property.name === "open"
 					) {
 						found = true;
 						return;
@@ -68,7 +68,7 @@ export default {
 						const child = n[key];
 						if (Array.isArray(child)) {
 							child.forEach(inspect);
-						} else if (child && typeof child === 'object') {
+						} else if (child && typeof child === "object") {
 							inspect(child);
 						}
 					}
@@ -84,25 +84,25 @@ export default {
 				// Check if the element is a <button>
 				if (
 					openingElement.name &&
-					openingElement.name.type === 'JSXIdentifier' &&
-					openingElement.name.name === 'button'
+					openingElement.name.type === "JSXIdentifier" &&
+					openingElement.name.name === "button"
 				) {
 					// Look for the onClick attribute
 					const attributes = openingElement.attributes;
 					for (const attr of attributes) {
 						if (
-							attr.type === 'JSXAttribute' &&
+							attr.type === "JSXAttribute" &&
 							attr.name &&
-							attr.name.name === 'onClick' &&
+							attr.name.name === "onClick" &&
 							attr.value &&
-							attr.value.type === 'JSXExpressionContainer'
+							attr.value.type === "JSXExpressionContainer"
 						) {
 							const expression = attr.value.expression;
 							if (containsWindowNavigation(expression)) {
 								context.report({
 									node: attr,
 									message:
-										'Use an anchor tag for navigation instead of a button with an onClick handler that uses window navigation methods.'
+										"Use an anchor tag for navigation instead of a button with an onClick handler that uses window navigation methods."
 								});
 							}
 						}

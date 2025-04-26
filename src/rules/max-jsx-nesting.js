@@ -1,21 +1,21 @@
 export default {
 	meta: {
-		type: 'suggestion',
+		type: "suggestion",
 		docs: {
 			description:
-				'Warn when JSX elements are nested too deeply, suggesting refactoring into a separate component.',
+				"Warn when JSX elements are nested too deeply, suggesting refactoring into a separate component.",
 			recommended: false
 		},
 		// The rule accepts a single numeric option (minimum 1)
 		schema: [
 			{
-				type: 'number',
+				type: "number",
 				minimum: 1
 			}
 		],
 		messages: {
 			tooDeeplyNested:
-				'JSX element is nested too deeply ({{level}} levels, allowed is {{maxAllowed}} levels). Consider refactoring into a separate component.'
+				"JSX element is nested too deeply ({{level}} levels, allowed is {{maxAllowed}} levels). Consider refactoring into a separate component."
 		}
 	},
 	create(context) {
@@ -34,8 +34,8 @@ export default {
 			let current = node.parent;
 			while (current) {
 				if (
-					current.type === 'JSXElement' ||
-					current.type === 'JSXFragment'
+					current.type === "JSXElement" ||
+					current.type === "JSXFragment"
 				) {
 					level++;
 				}
@@ -50,7 +50,7 @@ export default {
 				if (level > maxAllowed) {
 					context.report({
 						node,
-						messageId: 'tooDeeplyNested',
+						messageId: "tooDeeplyNested",
 						data: { level, maxAllowed }
 					});
 				}

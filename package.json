@@ -1,10 +1,18 @@
 {
 	"name": "eslint-plugin-absolute",
-	"version": "0.0.1",
+	"version": "0.0.2",
+	"description": "ESLint plugin for AbsoluteJS",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/absolutejs/eslint-plugin-absolute.git"
+	},
 	"type": "module",
+	"main": "./dist/index.js",
+	"license": "CC BY-NC 4.0",
+	"author": "Alex Kahn",
 	"scripts": {
 		"test": "echo \"Error: no test specified\" && exit 1",
-		"build": "rm -rf dist && bun build src/index.ts --outdir dist --minify --splitting --target=bun && tsc --emitDeclarationOnly --project tsconfig.json",
+		"build": "rm -rf dist && bun build src/index.js --outdir dist --splitting --target=bun",
 		"format": "prettier --write \"./**/*.{js,jsx,ts,tsx,css,json,mjs}\"",
 		"dev": "bun run --watch example/server.ts",
 		"release": "bun run format && bun run build && bun publish",

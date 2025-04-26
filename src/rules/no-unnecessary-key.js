@@ -14,16 +14,16 @@
 
 export default {
 	meta: {
-		type: 'problem',
+		type: "problem",
 		docs: {
 			description:
-				'enforce that the key prop is only used on components rendered as part of a mapping',
+				"enforce that the key prop is only used on components rendered as part of a mapping",
 			recommended: false
 		},
 		schema: [],
 		messages: {
 			unnecessaryKey:
-				'The key prop should only be used on elements that are directly rendered as part of an array mapping.'
+				"The key prop should only be used on elements that are directly rendered as part of an array mapping."
 		}
 	},
 
@@ -50,16 +50,16 @@ export default {
 		function isInsideMapCall(ancestors) {
 			return ancestors.some((node) => {
 				if (
-					node.type === 'CallExpression' &&
+					node.type === "CallExpression" &&
 					node.callee &&
-					node.callee.type === 'MemberExpression'
+					node.callee.type === "MemberExpression"
 				) {
 					const property = node.callee.property;
 					return (
-						(property.type === 'Identifier' &&
-							property.name === 'map') ||
-						(property.type === 'Literal' &&
-							property.value === 'map')
+						(property.type === "Identifier" &&
+							property.name === "map") ||
+						(property.type === "Literal" &&
+							property.value === "map")
 					);
 				}
 				return false;
@@ -76,7 +76,7 @@ export default {
 		 */
 		function isReturnedFromFunction(ancestors) {
 			// Look for a ReturnStatement in the ancestry.
-			return ancestors.some((node) => node.type === 'ReturnStatement');
+			return ancestors.some((node) => node.type === "ReturnStatement");
 		}
 
 		/**
@@ -89,9 +89,9 @@ export default {
 			// Find a key attribute.
 			const keyAttribute = node.attributes.find(
 				(attr) =>
-					attr.type === 'JSXAttribute' &&
+					attr.type === "JSXAttribute" &&
 					attr.name &&
-					attr.name.name === 'key'
+					attr.name.name === "key"
 			);
 
 			if (!keyAttribute) {
@@ -100,7 +100,7 @@ export default {
 
 			// Retrieve ancestors (using context.getAncestors if available).
 			const ancestors =
-				typeof context.getAncestors === 'function'
+				typeof context.getAncestors === "function"
 					? context.getAncestors()
 					: getAncestors(node);
 
@@ -117,7 +117,7 @@ export default {
 			// Otherwise, report the key prop as unnecessary.
 			context.report({
 				node: keyAttribute,
-				messageId: 'unnecessaryKey'
+				messageId: "unnecessaryKey"
 			});
 		}
 

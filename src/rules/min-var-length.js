@@ -13,24 +13,24 @@
  */
 export default {
 	meta: {
-		type: 'problem',
+		type: "problem",
 		docs: {
 			description:
-				'Disallow variable names shorter than the configured minimum length unless an outer variable with a longer name starting with the same characters exists. You can exempt specific variable names using the allowedVars option.',
+				"Disallow variable names shorter than the configured minimum length unless an outer variable with a longer name starting with the same characters exists. You can exempt specific variable names using the allowedVars option.",
 			recommended: false
 		},
 		schema: [
 			{
-				type: 'object',
+				type: "object",
 				properties: {
 					minLength: {
-						type: 'number',
+						type: "number",
 						default: 1
 					},
 					allowedVars: {
-						type: 'array',
+						type: "array",
 						items: {
-							type: 'string',
+							type: "string",
 							minLength: 1
 							// Note: The maxLength for each string should be at most the configured minLength.
 						},
@@ -50,7 +50,7 @@ export default {
 		const sourceCode = context.getSourceCode();
 		const options = context.options[0] || {};
 		const minLength =
-			typeof options.minLength === 'number' ? options.minLength : 1;
+			typeof options.minLength === "number" ? options.minLength : 1;
 		const allowedVars = options.allowedVars || [];
 
 		// Helper: walk up the node.parent chain to get ancestors.
@@ -75,15 +75,15 @@ export default {
 		// Fallback: get declared variable names in the nearest BlockStatement.
 		function getVariablesInNearestBlock(node) {
 			let current = node.parent;
-			while (current && current.type !== 'BlockStatement') {
+			while (current && current.type !== "BlockStatement") {
 				current = current.parent;
 			}
 			const names = [];
 			if (current && Array.isArray(current.body)) {
 				for (const stmt of current.body) {
-					if (stmt.type === 'VariableDeclaration') {
+					if (stmt.type === "VariableDeclaration") {
 						for (const decl of stmt.declarations) {
-							if (decl.id && decl.id.type === 'Identifier') {
+							if (decl.id && decl.id.type === "Identifier") {
 								names.push(decl.id.name);
 							}
 						}
@@ -102,17 +102,17 @@ export default {
 		function extractIdentifiersFromPattern(pattern, identifiers = []) {
 			if (!pattern) return identifiers;
 			switch (pattern.type) {
-				case 'Identifier':
+				case "Identifier":
 					identifiers.push(pattern.name);
 					break;
-				case 'ObjectPattern':
+				case "ObjectPattern":
 					for (const prop of pattern.properties) {
-						if (prop.type === 'Property') {
+						if (prop.type === "Property") {
 							extractIdentifiersFromPattern(
 								prop.value,
 								identifiers
 							);
-						} else if (prop.type === 'RestElement') {
+						} else if (prop.type === "RestElement") {
 							extractIdentifiersFromPattern(
 								prop.argument,
 								identifiers
@@ -120,13 +120,13 @@ export default {
 						}
 					}
 					break;
-				case 'ArrayPattern':
+				case "ArrayPattern":
 					for (const element of pattern.elements) {
 						if (element)
 							extractIdentifiersFromPattern(element, identifiers);
 					}
 					break;
-				case 'AssignmentPattern':
+				case "AssignmentPattern":
 					extractIdentifiersFromPattern(pattern.left, identifiers);
 					break;
 				default:
@@ -175,9 +175,9 @@ export default {
 			const ancestors = getAncestors(node);
 			for (const anc of ancestors) {
 				if (
-					anc.type === 'VariableDeclarator' &&
+					anc.type === "VariableDeclarator" &&
 					anc.id &&
-					anc.id.type === 'Identifier'
+					anc.id.type === "Identifier"
 				) {
 					const outerName = anc.id.name;
 					if (
@@ -189,9 +189,9 @@ export default {
 					}
 				}
 				if (
-					(anc.type === 'FunctionDeclaration' ||
-						anc.type === 'FunctionExpression' ||
-						anc.type === 'ArrowFunctionExpression') &&
+					(anc.type === "FunctionDeclaration" ||
+						anc.type === "FunctionExpression" ||
+						anc.type === "ArrowFunctionExpression") &&
 					Array.isArray(anc.params)
 				) {
 					for (const param of anc.params) {
@@ -207,7 +207,7 @@ export default {
 						}
 					}
 				}
-				if (anc.type === 'CatchClause' && anc.param) {
+				if (anc.type === "CatchClause" && anc.param) {
 					const names = extractIdentifiersFromPattern(anc.param, []);
 					for (const n of names) {
 						if (
@@ -230,7 +230,7 @@ export default {
 		 */
 		function checkIdentifier(node) {
 			const name = node.name;
-			if (typeof name === 'string' && name.length < minLength) {
+			if (typeof name === "string" && name.length < minLength) {
 				// If the name is in the allowed list, skip.
 				if (allowedVars.includes(name)) {
 					return;
@@ -238,7 +238,7 @@ export default {
 				if (!hasOuterCorrespondingIdentifier(name, node)) {
 					context.report({
 						node,
-						messageId: 'variableNameTooShort',
+						messageId: "variableNameTooShort",
 						data: { name, minLength }
 					});
 				}
@@ -252,24 +252,24 @@ export default {
 		function checkPattern(pattern) {
 			if (!pattern) return;
 			switch (pattern.type) {
-				case 'Identifier':
+				case "Identifier":
 					checkIdentifier(pattern);
 					break;
-				case 'ObjectPattern':
+				case "ObjectPattern":
 					for (const prop of pattern.properties) {
-						if (prop.type === 'Property') {
+						if (prop.type === "Property") {
 							checkPattern(prop.value);
-						} else if (prop.type === 'RestElement') {
+						} else if (prop.type === "RestElement") {
 							checkPattern(prop.argument);
 						}
 					}
 					break;
-				case 'ArrayPattern':
+				case "ArrayPattern":
 					for (const element of pattern.elements) {
 						if (element) checkPattern(element);
 					}
 					break;
-				case 'AssignmentPattern':
+				case "AssignmentPattern":
 					checkPattern(pattern.left);
 					break;
 				default:
@@ -283,7 +283,7 @@ export default {
 					checkPattern(node.id);
 				}
 			},
-			'FunctionDeclaration, FunctionExpression, ArrowFunctionExpression'(
+			"FunctionDeclaration, FunctionExpression, ArrowFunctionExpression"(
 				node
 			) {
 				for (const param of node.params) {
