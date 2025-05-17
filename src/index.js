@@ -1,6 +1,5 @@
 import noNestedJsxReturn from "./rules/no-nested-jsx-return.js";
 import explicitObjectTypes from "./rules/explicit-object-types.js";
-import noTypeCast from "./rules/no-type-cast.js";
 import sortKeysFixable from "./rules/sort-keys-fixable.js";
 import noTransitionCssproperties from "./rules/no-transition-cssproperties.js";
 import noExplicitReturnTypes from "./rules/no-explicit-return-types.js";
@@ -24,7 +23,6 @@ export default {
 	rules: {
 		"no-nested-jsx-return": noNestedJsxReturn,
 		"explicit-object-types": explicitObjectTypes,
-		"no-type-cast": noTypeCast,
 		"sort-keys-fixable": sortKeysFixable,
 		"no-transition-cssproperties": noTransitionCssproperties,
 		"no-explicit-return-type": noExplicitReturnTypes,

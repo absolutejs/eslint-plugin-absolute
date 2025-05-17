@@ -11,94 +11,67 @@ export default {
 	},
 	create(context) {
 		/**
-		 * Recursively inspects an AST node to see if it contains a reference to window.location or window.open.
-		 * Uses a WeakSet to track visited nodes to avoid infinite recursion.
-		 * @param {ASTNode} node - The node to inspect.
-		 * @returns {boolean} True if a window navigation reference is found.
+		 * Inspects an AST node *only* for MemberExpressions where
+		 * the object is literally `window` and the property is `open` or `location`.
 		 */
 		function containsWindowNavigation(node) {
 			let found = false;
-			const visited = new WeakSet();
 			function inspect(n) {
-				if (!n || found) return;
-				if (typeof n !== "object") return; // Only objects can be added to WeakSet
-				if (visited.has(n)) return;
-				visited.add(n);
-
-				// Check for MemberExpressions like window.location or window.open
-				if (n.type === "MemberExpression") {
-					if (
-						n.object &&
-						n.object.type === "Identifier" &&
-						n.object.name === "window" &&
-						n.property &&
-						((n.property.type === "Identifier" &&
-							(n.property.name === "location" ||
-								n.property.name === "open")) ||
-							(n.property.type === "Literal" &&
-								(n.property.value === "location" ||
-									n.property.value === "open")))
-					) {
-						found = true;
-						return;
-					}
-				}
-				// Check for CallExpressions like window.open()
+				if (found || !n || typeof n !== "object") return;
+				// Only match MemberExpressions on the global window identifier
 				if (
-					n.type === "CallExpression" &&
-					n.callee &&
-					n.callee.type === "MemberExpression"
+					n.type === "MemberExpression" &&
+					n.object.type === "Identifier" &&
+					n.object.name === "window" &&
+					n.property.type === "Identifier" &&
+					(n.property.name === "open" ||
+						n.property.name === "location")
 				) {
-					const callee = n.callee;
-					if (
-						callee.object &&
-						callee.object.type === "Identifier" &&
-						callee.object.name === "window" &&
-						callee.property &&
-						callee.property.type === "Identifier" &&
-						callee.property.name === "open"
-					) {
-						found = true;
-						return;
-					}
+					found = true;
+					return;
 				}
-				// Recursively inspect all child nodes
-				for (const key in n) {
-					if (Object.prototype.hasOwnProperty.call(n, key)) {
-						const child = n[key];
-						if (Array.isArray(child)) {
-							child.forEach(inspect);
-						} else if (child && typeof child === "object") {
-							inspect(child);
-						}
+				// recurse into children—but skip walking back up via `parent`
+				for (const key of Object.keys(n)) {
+					if (key === "parent") continue;
+					const child = n[key];
+					if (Array.isArray(child)) {
+						child.forEach(inspect);
+					} else {
+						inspect(child);
 					}
 				}
 			}
-			inspect(node);
+			// If it's a function, start at its body; otherwise start at the node itself
+			inspect(
+				node.type === "ArrowFunctionExpression" ||
+					node.type === "FunctionExpression"
+					? node.body
+					: node
+			);
 			return found;
 		}
 
 		return {
 			JSXElement(node) {
-				const openingElement = node.openingElement;
-				// Check if the element is a <button>
+				const { openingElement } = node;
+				// only care about <button ...>
 				if (
-					openingElement.name &&
 					openingElement.name.type === "JSXIdentifier" &&
 					openingElement.name.name === "button"
 				) {
-					// Look for the onClick attribute
-					const attributes = openingElement.attributes;
-					for (const attr of attributes) {
+					for (const attr of openingElement.attributes) {
 						if (
 							attr.type === "JSXAttribute" &&
-							attr.name &&
 							attr.name.name === "onClick" &&
-							attr.value &&
-							attr.value.type === "JSXExpressionContainer"
+							attr.value?.type === "JSXExpressionContainer"
 						) {
-							const expression = attr.value.expression;
-							if (containsWindowNavigation(expression)) {
+							const expr = attr.value.expression;
+							// only inspect the inline function, not any Identifier calls
+							if (
+								(expr.type === "ArrowFunctionExpression" ||
+									expr.type === "FunctionExpression") &&
+								containsWindowNavigation(expr)
+							) {
 								context.report({
 									node: attr,
 									message:

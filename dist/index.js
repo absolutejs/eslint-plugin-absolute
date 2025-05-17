@@ -1203,51 +1203,35 @@ var no_button_navigation_default = {
   create(context) {
     function containsWindowNavigation(node) {
       let found = false;
-      const visited = new WeakSet;
       function inspect(n) {
-        if (!n || found)
+        if (found || !n || typeof n !== "object")
           return;
-        if (typeof n !== "object")
+        if (n.type === "MemberExpression" && n.object.type === "Identifier" && n.object.name === "window" && n.property.type === "Identifier" && (n.property.name === "open" || n.property.name === "location")) {
+          found = true;
           return;
-        if (visited.has(n))
-          return;
-        visited.add(n);
-        if (n.type === "MemberExpression") {
-          if (n.object && n.object.type === "Identifier" && n.object.name === "window" && n.property && (n.property.type === "Identifier" && (n.property.name === "location" || n.property.name === "open") || n.property.type === "Literal" && (n.property.value === "location" || n.property.value === "open"))) {
-            found = true;
-            return;
-          }
         }
-        if (n.type === "CallExpression" && n.callee && n.callee.type === "MemberExpression") {
-          const callee = n.callee;
-          if (callee.object && callee.object.type === "Identifier" && callee.object.name === "window" && callee.property && callee.property.type === "Identifier" && callee.property.name === "open") {
-            found = true;
-            return;
-          }
-        }
-        for (const key in n) {
-          if (Object.prototype.hasOwnProperty.call(n, key)) {
-            const child = n[key];
-            if (Array.isArray(child)) {
-              child.forEach(inspect);
-            } else if (child && typeof child === "object") {
-              inspect(child);
-            }
+        for (const key of Object.keys(n)) {
+          if (key === "parent")
+            continue;
+          const child = n[key];
+          if (Array.isArray(child)) {
+            child.forEach(inspect);
+          } else {
+            inspect(child);
           }
         }
       }
-      inspect(node);
+      inspect(node.type === "ArrowFunctionExpression" || node.type === "FunctionExpression" ? node.body : node);
       return found;
     }
     return {
       JSXElement(node) {
-        const openingElement = node.openingElement;
-        if (openingElement.name && openingElement.name.type === "JSXIdentifier" && openingElement.name.name === "button") {
-          const attributes = openingElement.attributes;
-          for (const attr of attributes) {
-            if (attr.type === "JSXAttribute" && attr.name && attr.name.name === "onClick" && attr.value && attr.value.type === "JSXExpressionContainer") {
-              const expression = attr.value.expression;
-              if (containsWindowNavigation(expression)) {
+        const { openingElement } = node;
+        if (openingElement.name.type === "JSXIdentifier" && openingElement.name.name === "button") {
+          for (const attr of openingElement.attributes) {
+            if (attr.type === "JSXAttribute" && attr.name.name === "onClick" && attr.value?.type === "JSXExpressionContainer") {
+              const expr = attr.value.expression;
+              if ((expr.type === "ArrowFunctionExpression" || expr.type === "FunctionExpression") && containsWindowNavigation(expr)) {
                 context.report({
                   node: attr,
                   message: "Use an anchor tag for navigation instead of a button with an onClick handler that uses window navigation methods."
