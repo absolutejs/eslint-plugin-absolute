@@ -149,45 +149,6 @@ var explicit_object_types_default = {
   }
 };
 
-// src/rules/no-type-cast.js
-var no_type_cast_default = {
-  meta: {
-    type: "problem",
-    docs: {
-      description: 'Disallow type assertions using "as", angle bracket syntax, or built-in conversion functions.',
-      recommended: false
-    },
-    schema: []
-  },
-  create(context) {
-    function isBuiltInConversion(node) {
-      return node && node.type === "Identifier" && ["Number", "String", "Boolean"].includes(node.name);
-    }
-    return {
-      TSAsExpression(node) {
-        context.report({
-          node,
-          message: 'Type assertions using "as" syntax are not allowed.'
-        });
-      },
-      TSTypeAssertion(node) {
-        context.report({
-          node,
-          message: "Type assertions using angle bracket syntax are not allowed."
-        });
-      },
-      CallExpression(node) {
-        if (isBuiltInConversion(node.callee)) {
-          context.report({
-            node,
-            message: `Type assertions using "${node.callee.name}()" syntax are not allowed.`
-          });
-        }
-      }
-    };
-  }
-};
-
 // src/rules/sort-keys-fixable.js
 var sort_keys_fixable_default = {
   meta: {
@@ -1194,20 +1155,22 @@ var no_button_navigation_default = {
   meta: {
     type: "suggestion",
     docs: {
-      description: "Enforce using anchor tags for navigation instead of buttons with onClick handlers that use window navigation methods (e.g., window.location, window.open)",
+      description: "Enforce using anchor tags for navigation instead of buttons whose onClick handlers change the path. Allow only query/hash updates via window.location.search or history.replaceState(window.location.pathname + \u2026).",
       category: "Best Practices",
       recommended: false
     },
     schema: []
   },
   create(context) {
-    function containsWindowNavigation(node) {
-      let found = false;
-      function inspect(n) {
-        if (found || !n || typeof n !== "object")
+    function urlUsesAllowedLocation(argNode) {
+      let allowed = false;
+      const visited = new WeakSet;
+      function check(n) {
+        if (allowed || !n || typeof n !== "object" || visited.has(n))
           return;
-        if (n.type === "MemberExpression" && n.object.type === "Identifier" && n.object.name === "window" && n.property.type === "Identifier" && (n.property.name === "open" || n.property.name === "location")) {
-          found = true;
+        visited.add(n);
+        if (n.type === "MemberExpression" && n.object.type === "MemberExpression" && n.object.object.type === "Identifier" && n.object.object.name === "window" && n.object.property.type === "Identifier" && n.object.property.name === "location" && n.property.type === "Identifier" && (n.property.name === "pathname" || n.property.name === "search" || n.property.name === "hash")) {
+          allowed = true;
           return;
         }
         for (const key of Object.keys(n)) {
@@ -1215,14 +1178,75 @@ var no_button_navigation_default = {
             continue;
           const child = n[key];
           if (Array.isArray(child)) {
-            child.forEach(inspect);
+            child.forEach((c) => check(c));
           } else {
-            inspect(child);
+            check(child);
           }
         }
       }
-      inspect(node.type === "ArrowFunctionExpression" || node.type === "FunctionExpression" ? node.body : node);
-      return found;
+      check(argNode);
+      return allowed;
+    }
+    function containsWindowNavigation(node) {
+      let reason = null;
+      const visited = new WeakSet;
+      let sawReplaceCall = false;
+      let sawAllowedLocationRead = false;
+      function inspect(n, parent) {
+        if (reason || !n || typeof n !== "object" || visited.has(n))
+          return;
+        visited.add(n);
+        if (n.type === "MemberExpression" && n.object.type === "Identifier" && n.object.name === "window" && n.property.type === "Identifier" && n.property.name === "open") {
+          reason = "window.open";
+          return;
+        }
+        if (n.type === "AssignmentExpression" && n.left.type === "MemberExpression") {
+          const left = n.left;
+          if (left.object.type === "Identifier" && left.object.name === "window" && left.property.type === "Identifier" && left.property.name === "location") {
+            reason = "assignment to window.location";
+            return;
+          }
+          if (left.object.type === "MemberExpression" && left.object.object.type === "Identifier" && left.object.object.name === "window" && left.object.property.type === "Identifier" && left.object.property.name === "location") {
+            reason = "assignment to window.location sub-property";
+            return;
+          }
+        }
+        if (n.type === "MemberExpression" && n.object.type === "MemberExpression" && n.object.object.type === "Identifier" && n.object.object.name === "window" && n.object.property.type === "Identifier" && n.object.property.name === "location" && n.property.type === "Identifier" && n.property.name === "replace") {
+          if (parent && parent.type === "CallExpression") {
+            reason = "window.location.replace";
+            return;
+          }
+        }
+        if (n.type === "MemberExpression" && n.object.type === "MemberExpression" && n.object.object.type === "Identifier" && n.object.object.name === "window" && n.object.property.type === "Identifier" && n.object.property.name === "history" && n.property.type === "Identifier" && (n.property.name === "pushState" || n.property.name === "replaceState")) {
+          sawReplaceCall = true;
+        }
+        if (n.type === "MemberExpression" && n.object.type === "MemberExpression" && n.object.object.type === "Identifier" && n.object.object.name === "window" && n.object.property.type === "Identifier" && n.object.property.name === "location" && n.property.type === "Identifier" && (n.property.name === "search" || n.property.name === "pathname" || n.property.name === "hash")) {
+          sawAllowedLocationRead = true;
+        }
+        for (const key of Object.keys(n)) {
+          if (key === "parent" || reason)
+            continue;
+          const child = n[key];
+          if (Array.isArray(child)) {
+            child.forEach((c) => inspect(c, n));
+          } else {
+            inspect(child, n);
+          }
+          if (reason)
+            return;
+        }
+      }
+      inspect(node.type === "ArrowFunctionExpression" || node.type === "FunctionExpression" ? node.body : node, null);
+      if (reason) {
+        return { shouldReport: true, reason };
+      }
+      if (sawReplaceCall && !sawAllowedLocationRead) {
+        return {
+          shouldReport: true,
+          reason: "history.replace/pushState without reading window.location"
+        };
+      }
+      return { shouldReport: false, reason: null };
     }
     return {
       JSXElement(node) {
@@ -1231,11 +1255,14 @@ var no_button_navigation_default = {
           for (const attr of openingElement.attributes) {
             if (attr.type === "JSXAttribute" && attr.name.name === "onClick" && attr.value?.type === "JSXExpressionContainer") {
               const expr = attr.value.expression;
-              if ((expr.type === "ArrowFunctionExpression" || expr.type === "FunctionExpression") && containsWindowNavigation(expr)) {
-                context.report({
-                  node: attr,
-                  message: "Use an anchor tag for navigation instead of a button with an onClick handler that uses window navigation methods."
-                });
+              if (expr.type === "ArrowFunctionExpression" || expr.type === "FunctionExpression") {
+                const { shouldReport, reason } = containsWindowNavigation(expr);
+                if (shouldReport) {
+                  context.report({
+                    node: attr,
+                    message: `Use an anchor tag for navigation instead of a button whose onClick handler changes the path. ` + `Detected: ${reason}. Only query/hash updates (reading window.location.search, .pathname, or .hash) are allowed.`
+                  });
+                }
               }
             }
           }
@@ -1840,7 +1867,6 @@ var src_default = {
   rules: {
     "no-nested-jsx-return": no_nested_jsx_return_default,
     "explicit-object-types": explicit_object_types_default,
-    "no-type-cast": no_type_cast_default,
     "sort-keys-fixable": sort_keys_fixable_default,
     "no-transition-cssproperties": no_transition_cssproperties_default,
     "no-explicit-return-type": no_explicit_return_types_default,
