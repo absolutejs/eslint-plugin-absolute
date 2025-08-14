@@ -1,6 +1,6 @@
 {
 	"name": "eslint-plugin-absolute",
-	"version": "0.1.4",
+	"version": "0.1.6",
 	"description": "ESLint plugin for AbsoluteJS",
 	"repository": {
 		"type": "git",
@@ -24,6 +24,8 @@
 		"prettier": "3.5.3",
 		"ts-prune": "0.10.3",
 		"typescript": "5.8.2",
+		"@types/react": "19.1.0",
+		"@types/bun": "latest",
 		"typescript-eslint": "8.28.0"
 	}
 }

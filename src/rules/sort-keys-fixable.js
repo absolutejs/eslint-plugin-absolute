@@ -242,13 +242,15 @@ export default {
 											const fixableProps =
 												node.properties.filter(
 													(prop) =>
-														prop.type ===
+														(prop.type ===
 															"Property" &&
-														!prop.computed &&
-														(prop.key.type ===
-															"Identifier" ||
-															prop.key.type ===
-																"Literal")
+															!prop.computed &&
+															(prop.key.type ===
+																"Identifier" ||
+																prop.key
+																	.type ===
+																	"Literal")) ||
+														false
 												);
 											if (fixableProps.length < minKeys) {
 												return null;
@@ -284,14 +286,16 @@ export default {
 												const fixableProps =
 													node.properties.filter(
 														(prop) =>
-															prop.type ===
+															(prop.type ===
 																"Property" &&
-															!prop.computed &&
-															(prop.key.type ===
-																"Identifier" ||
-																prop.key
+																!prop.computed &&
+																(prop.key
 																	.type ===
-																	"Literal")
+																	"Identifier" ||
+																	prop.key
+																		.type ===
+																		"Literal")) ||
+															false
 													);
 												if (
 													fixableProps.length <
@@ -334,13 +338,15 @@ export default {
 											const fixableProps =
 												node.properties.filter(
 													(prop) =>
-														prop.type ===
+														(prop.type ===
 															"Property" &&
-														!prop.computed &&
-														(prop.key.type ===
-															"Identifier" ||
-															prop.key.type ===
-																"Literal")
+															!prop.computed &&
+															(prop.key.type ===
+																"Identifier" ||
+																prop.key
+																	.type ===
+																	"Literal")) ||
+														false
 												);
 											if (fixableProps.length < minKeys) {
 												return null;
@@ -368,8 +374,86 @@ export default {
 			}
 		}
 
+		// Also check object literals inside JSX prop expressions
+		function checkJSXAttributeObject(attr) {
+			if (
+				attr.value &&
+				attr.value.type === "JSXExpressionContainer" &&
+				attr.value.expression &&
+				attr.value.expression.type === "ObjectExpression"
+			) {
+				checkObjectExpression(attr.value.expression);
+			}
+		}
+
+		// Also sort JSX attributes on elements
+		function checkJSXOpeningElement(node) {
+			const attrs = node.attributes;
+			if (attrs.length < minKeys) return;
+
+			// Only fix when all are simple JSXAttribute with JSXIdentifier names and no spreads.
+			if (attrs.some((a) => a.type !== "JSXAttribute")) return;
+			if (attrs.some((a) => a.name.type !== "JSXIdentifier")) return;
+
+			const names = attrs.map((a) => a.name.name);
+			const cmp = (a, b) => {
+				let res = compareKeys(a, b);
+				return order === "desc" ? -res : res;
+			};
+
+			let outOfOrder = false;
+			for (let i = 1; i < names.length; i++) {
+				if (cmp(names[i - 1], names[i]) > 0) {
+					outOfOrder = true;
+					break;
+				}
+			}
+			if (!outOfOrder) return;
+
+			// Be conservative: only fix if there are no JSX comments/braces between attributes.
+			for (let i = 1; i < attrs.length; i++) {
+				const between = sourceCode.text.slice(
+					attrs[i - 1].range[1],
+					attrs[i].range[0]
+				);
+				if (between.includes("{")) {
+					// Likely contains a JSX comment or expression gap; report without fix.
+					context.report({
+						node: attrs[i].name,
+						messageId: "unsorted"
+					});
+					return;
+				}
+			}
+
+			const sorted = attrs
+				.slice()
+				.sort((a, b) => cmp(a.name.name, b.name.name));
+
+			const first = attrs[0];
+			const last = attrs[attrs.length - 1];
+			const replacement = sorted
+				.map((a) => sourceCode.getText(a))
+				.join(" ");
+
+			context.report({
+				node: first.name,
+				messageId: "unsorted",
+				fix(fixer) {
+					return fixer.replaceTextRange(
+						[first.range[0], last.range[1]],
+						replacement
+					);
+				}
+			});
+		}
+
 		return {
-			ObjectExpression: checkObjectExpression
+			ObjectExpression: checkObjectExpression,
+			JSXAttribute(node) {
+				checkJSXAttributeObject(node);
+			},
+			JSXOpeningElement: checkJSXOpeningElement
 		};
 	}
 };

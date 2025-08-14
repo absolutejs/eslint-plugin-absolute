@@ -280,7 +280,7 @@ var sort_keys_fixable_default = {
               node: curr.node.key,
               messageId: "unsorted",
               fix: !fixProvided && autoFixable ? (fixer) => {
-                const fixableProps = node.properties.filter((prop) => prop.type === "Property" && !prop.computed && (prop.key.type === "Identifier" || prop.key.type === "Literal"));
+                const fixableProps = node.properties.filter((prop) => prop.type === "Property" && !prop.computed && (prop.key.type === "Identifier" || prop.key.type === "Literal") || false);
                 if (fixableProps.length < minKeys) {
                   return null;
                 }
@@ -301,7 +301,7 @@ var sort_keys_fixable_default = {
                 node: curr.node.key,
                 messageId: "unsorted",
                 fix: !fixProvided && autoFixable ? (fixer) => {
-                  const fixableProps = node.properties.filter((prop) => prop.type === "Property" && !prop.computed && (prop.key.type === "Identifier" || prop.key.type === "Literal"));
+                  const fixableProps = node.properties.filter((prop) => prop.type === "Property" && !prop.computed && (prop.key.type === "Identifier" || prop.key.type === "Literal") || false);
                   if (fixableProps.length < minKeys) {
                     return null;
                   }
@@ -323,7 +323,7 @@ var sort_keys_fixable_default = {
               node: curr.node.key,
               messageId: "unsorted",
               fix: !fixProvided && autoFixable ? (fixer) => {
-                const fixableProps = node.properties.filter((prop) => prop.type === "Property" && !prop.computed && (prop.key.type === "Identifier" || prop.key.type === "Literal"));
+                const fixableProps = node.properties.filter((prop) => prop.type === "Property" && !prop.computed && (prop.key.type === "Identifier" || prop.key.type === "Literal") || false);
                 if (fixableProps.length < minKeys) {
                   return null;
                 }
@@ -341,8 +341,61 @@ var sort_keys_fixable_default = {
         }
       }
     }
+    function checkJSXAttributeObject(attr) {
+      if (attr.value && attr.value.type === "JSXExpressionContainer" && attr.value.expression && attr.value.expression.type === "ObjectExpression") {
+        checkObjectExpression(attr.value.expression);
+      }
+    }
+    function checkJSXOpeningElement(node) {
+      const attrs = node.attributes;
+      if (attrs.length < minKeys)
+        return;
+      if (attrs.some((a) => a.type !== "JSXAttribute"))
+        return;
+      if (attrs.some((a) => a.name.type !== "JSXIdentifier"))
+        return;
+      const names = attrs.map((a) => a.name.name);
+      const cmp = (a, b) => {
+        let res = compareKeys(a, b);
+        return order === "desc" ? -res : res;
+      };
+      let outOfOrder = false;
+      for (let i = 1;i < names.length; i++) {
+        if (cmp(names[i - 1], names[i]) > 0) {
+          outOfOrder = true;
+          break;
+        }
+      }
+      if (!outOfOrder)
+        return;
+      for (let i = 1;i < attrs.length; i++) {
+        const between = sourceCode.text.slice(attrs[i - 1].range[1], attrs[i].range[0]);
+        if (between.includes("{")) {
+          context.report({
+            node: attrs[i].name,
+            messageId: "unsorted"
+          });
+          return;
+        }
+      }
+      const sorted = attrs.slice().sort((a, b) => cmp(a.name.name, b.name.name));
+      const first = attrs[0];
+      const last = attrs[attrs.length - 1];
+      const replacement = sorted.map((a) => sourceCode.getText(a)).join(" ");
+      context.report({
+        node: first.name,
+        messageId: "unsorted",
+        fix(fixer) {
+          return fixer.replaceTextRange([first.range[0], last.range[1]], replacement);
+        }
+      });
+    }
     return {
-      ObjectExpression: checkObjectExpression
+      ObjectExpression: checkObjectExpression,
+      JSXAttribute(node) {
+        checkJSXAttributeObject(node);
+      },
+      JSXOpeningElement: checkJSXOpeningElement
     };
   }
 };
