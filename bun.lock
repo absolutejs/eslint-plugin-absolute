@@ -7,6 +7,7 @@
       "devDependencies": {
         "@types/bun": "latest",
         "@types/react": "19.2.7",
+        "@typescript-eslint/utils": "8.48.0",
         "eslint": "9.39.1",
         "prettier": "3.7.3",
         "ts-prune": "0.10.3",

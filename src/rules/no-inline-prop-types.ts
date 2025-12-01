@@ -1,11 +1,14 @@
-export default {
+import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+
+type Options = [];
+type MessageIds = "noInlinePropTypes";
+
+export const noInlinePropTypes: TSESLint.RuleModule<MessageIds, Options> = {
 	meta: {
 		type: "suggestion",
 		docs: {
 			description:
-				"Enforce that component prop types are not defined inline (using an object literal) but rather use a named type or interface.",
-			category: "Best Practices",
-			recommended: false
+				"Enforce that component prop types are not defined inline (using an object literal) but rather use a named type or interface."
 		},
 		schema: [],
 		messages: {
@@ -14,15 +17,16 @@ export default {
 		}
 	},
 
+	defaultOptions: [],
+
 	create(context) {
 		/**
 		 * Checks the node representing a parameter to determine if it is an ObjectPattern with an inline type literal.
 		 * @param {ASTNode} param The parameter node from the function declaration/expression.
 		 */
-		function checkParameter(param) {
+		function checkParameter(param: TSESTree.Parameter) {
 			// Ensure we are dealing with a destructured object pattern with a type annotation.
 			if (
-				param &&
 				param.type === "ObjectPattern" &&
 				param.typeAnnotation &&
 				param.typeAnnotation.type === "TSTypeAnnotation"
@@ -42,13 +46,22 @@ export default {
 		return {
 			// Applies to FunctionDeclaration, ArrowFunctionExpression, and FunctionExpression nodes.
 			"FunctionDeclaration, ArrowFunctionExpression, FunctionExpression"(
-				node
+				node:
+					| TSESTree.FunctionDeclaration
+					| TSESTree.ArrowFunctionExpression
+					| TSESTree.FunctionExpression
 			) {
 				// It is common to define props as the first parameter.
-				const firstParam = node.params[0];
-				if (firstParam) {
-					checkParameter(firstParam);
+				if (node.params.length === 0) {
+					return;
 				}
+
+				const firstParam = node.params[0];
+				if (!firstParam) {
+					return;
+				}
+
+				checkParameter(firstParam);
 			}
 		};
 	}

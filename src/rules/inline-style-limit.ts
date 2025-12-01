@@ -1,11 +1,14 @@
-export default {
+import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+
+type Options = [number | { maxKeys?: number }];
+type MessageIds = "extractStyle";
+
+export const inlineStyleLimit: TSESLint.RuleModule<MessageIds, Options> = {
 	meta: {
 		type: "suggestion",
 		docs: {
 			description:
-				"Disallow inline style objects with too many keys and encourage extracting them",
-			category: "Best Practices",
-			recommended: false
+				"Disallow inline style objects with too many keys and encourage extracting them"
 		},
 		schema: [
 			{
@@ -33,6 +36,8 @@ export default {
 		}
 	},
 
+	defaultOptions: [3],
+
 	create(context) {
 		const option = context.options[0];
 		// If a number is passed directly, use it as maxKeys; otherwise, extract maxKeys from the object (default to 3)
@@ -42,9 +47,12 @@ export default {
 				: (option && option.maxKeys) || 3;
 
 		return {
-			JSXAttribute(node) {
+			JSXAttribute(node: TSESTree.JSXAttribute) {
 				// Check if the attribute name is 'style'
-				if (node.name.name !== "style") {
+				if (
+					node.name.type !== "JSXIdentifier" ||
+					node.name.name !== "style"
+				) {
 					return;
 				}
 
@@ -59,7 +67,8 @@ export default {
 
 					// Count only "Property" nodes (ignoring spread elements or others)
 					const keyCount = styleObject.properties.filter(
-						(prop) => prop.type === "Property"
+						(prop): prop is TSESTree.Property =>
+							prop.type === "Property"
 					).length;
 
 					// Report only if the number of keys exceeds the allowed maximum

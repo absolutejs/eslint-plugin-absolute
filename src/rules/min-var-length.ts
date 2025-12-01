@@ -1,23 +1,19 @@
-/**
- * @fileoverview Disallow variable names shorter than a specified minimum length unless an outer variable
- * with a corresponding longer name exists, with an option to exempt specific variable names.
- *
- * Options:
- *  - minLength: a number specifying the minimum allowed length for variable names. Defaults to 1.
- *  - allowedVars: an array of variable names that are exempt from the minimum length rule.
- *    Each allowed variable name should have a length of at least 1 and at most minLength.
- *
- * This rule checks variable declarations, function parameters, catch clauses,
- * and destructuring patterns. It uses the ESLint v9 APIs (via the scopeManager on the
- * SourceCode object) and a custom helper to get ancestors.
- */
-export default {
+import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+
+type MinVarLengthOption = {
+	minLength?: number;
+	allowedVars?: string[];
+};
+
+type Options = [MinVarLengthOption?];
+type MessageIds = "variableNameTooShort";
+
+export const minVarLength: TSESLint.RuleModule<MessageIds, Options> = {
 	meta: {
 		type: "problem",
 		docs: {
 			description:
-				"Disallow variable names shorter than the configured minimum length unless an outer variable with a longer name starting with the same characters exists. You can exempt specific variable names using the allowedVars option.",
-			recommended: false
+				"Disallow variable names shorter than the configured minimum length unless an outer variable with a longer name starting with the same characters exists. You can exempt specific variable names using the allowedVars option."
 		},
 		schema: [
 			{
@@ -46,17 +42,27 @@ export default {
 		}
 	},
 
+	defaultOptions: [{}],
+
 	create(context) {
 		const sourceCode = context.getSourceCode();
-		const options = context.options[0] || {};
-		const minLength =
-			typeof options.minLength === "number" ? options.minLength : 1;
-		const allowedVars = options.allowedVars || [];
+		const options = context.options[0];
+		const configuredMinLength =
+			options && typeof options.minLength === "number"
+				? options.minLength
+				: 1;
+		const configuredAllowedVars =
+			options && Array.isArray(options.allowedVars)
+				? options.allowedVars
+				: [];
+
+		const minLength = configuredMinLength;
+		const allowedVars = configuredAllowedVars;
 
 		// Helper: walk up the node.parent chain to get ancestors.
-		function getAncestors(node) {
-			const ancestors = [];
-			let current = node.parent;
+		function getAncestors(node: TSESTree.Node) {
+			const ancestors: TSESTree.Node[] = [];
+			let current: TSESTree.Node | null | undefined = node.parent;
 			while (current) {
 				ancestors.push(current);
 				current = current.parent;
@@ -65,21 +71,30 @@ export default {
 		}
 
 		// Helper: retrieve the scope for a given node using the scopeManager.
-		function getScope(node) {
-			return (
-				sourceCode.scopeManager.acquire(node) ||
-				sourceCode.scopeManager.globalScope
-			);
+		function getScope(node: TSESTree.Node): TSESLint.Scope.Scope | null {
+			const scopeManager = sourceCode.scopeManager;
+			if (!scopeManager) {
+				return null;
+			}
+			const acquired = scopeManager.acquire(node);
+			if (acquired) {
+				return acquired;
+			}
+			return scopeManager.globalScope ?? null;
 		}
 
 		// Fallback: get declared variable names in the nearest BlockStatement.
-		function getVariablesInNearestBlock(node) {
-			let current = node.parent;
+		function getVariablesInNearestBlock(node: TSESTree.Node) {
+			let current: TSESTree.Node | null | undefined = node.parent;
 			while (current && current.type !== "BlockStatement") {
 				current = current.parent;
 			}
-			const names = [];
-			if (current && Array.isArray(current.body)) {
+			const names: string[] = [];
+			if (
+				current &&
+				current.type === "BlockStatement" &&
+				Array.isArray(current.body)
+			) {
 				for (const stmt of current.body) {
 					if (stmt.type === "VariableDeclaration") {
 						for (const decl of stmt.declarations) {
@@ -99,7 +114,10 @@ export default {
 		 * @param {string[]} identifiers Array to accumulate names.
 		 * @returns {string[]} Array of identifier names.
 		 */
-		function extractIdentifiersFromPattern(pattern, identifiers = []) {
+		function extractIdentifiersFromPattern(
+			pattern: TSESTree.Node | null,
+			identifiers: string[] = []
+		): string[] {
 			if (!pattern) return identifiers;
 			switch (pattern.type) {
 				case "Identifier":
@@ -122,8 +140,9 @@ export default {
 					break;
 				case "ArrayPattern":
 					for (const element of pattern.elements) {
-						if (element)
+						if (element) {
 							extractIdentifiersFromPattern(element, identifiers);
+						}
 					}
 					break;
 				case "AssignmentPattern":
@@ -144,10 +163,16 @@ export default {
 		 * @param {ASTNode} node The current identifier node.
 		 * @returns {boolean} True if an outer variable is found.
 		 */
-		function hasOuterCorrespondingIdentifier(shortName, node) {
+		function hasOuterCorrespondingIdentifier(
+			shortName: string,
+			node: TSESTree.Identifier
+		) {
 			// First, try using the scope manager.
-			let currentScope = getScope(node);
-			let outer = currentScope.upper;
+			const startingScope = getScope(node);
+			let outer =
+				startingScope && startingScope.upper
+					? startingScope.upper
+					: null;
 			while (outer) {
 				for (const variable of outer.variables) {
 					if (
@@ -228,9 +253,9 @@ export default {
 		 * and no outer variable with a longer name starting with the short name is found, it reports an error.
 		 * @param {ASTNode} node The Identifier node.
 		 */
-		function checkIdentifier(node) {
+		function checkIdentifier(node: TSESTree.Identifier) {
 			const name = node.name;
-			if (typeof name === "string" && name.length < minLength) {
+			if (name.length < minLength) {
 				// If the name is in the allowed list, skip.
 				if (allowedVars.includes(name)) {
 					return;
@@ -249,7 +274,7 @@ export default {
 		 * Recursively checks a pattern node for identifiers.
 		 * @param {ASTNode} pattern The pattern node.
 		 */
-		function checkPattern(pattern) {
+		function checkPattern(pattern: TSESTree.Node | null) {
 			if (!pattern) return;
 			switch (pattern.type) {
 				case "Identifier":
@@ -266,7 +291,9 @@ export default {
 					break;
 				case "ArrayPattern":
 					for (const element of pattern.elements) {
-						if (element) checkPattern(element);
+						if (element) {
+							checkPattern(element);
+						}
 					}
 					break;
 				case "AssignmentPattern":
@@ -278,19 +305,22 @@ export default {
 		}
 
 		return {
-			VariableDeclarator(node) {
+			VariableDeclarator(node: TSESTree.VariableDeclarator) {
 				if (node.id) {
 					checkPattern(node.id);
 				}
 			},
 			"FunctionDeclaration, FunctionExpression, ArrowFunctionExpression"(
-				node
+				node:
+					| TSESTree.FunctionDeclaration
+					| TSESTree.FunctionExpression
+					| TSESTree.ArrowFunctionExpression
 			) {
 				for (const param of node.params) {
 					checkPattern(param);
 				}
 			},
-			CatchClause(node) {
+			CatchClause(node: TSESTree.CatchClause) {
 				if (node.param) {
 					checkPattern(node.param);
 				}

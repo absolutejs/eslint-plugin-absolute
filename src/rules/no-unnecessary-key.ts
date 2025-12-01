@@ -12,13 +12,17 @@
  * Note: This rule does not auto-fix.
  */
 
-export default {
+import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+
+type Options = [];
+type MessageIds = "unnecessaryKey";
+
+export const noUnnecessaryKey: TSESLint.RuleModule<MessageIds, Options> = {
 	meta: {
 		type: "problem",
 		docs: {
 			description:
-				"enforce that the key prop is only used on components rendered as part of a mapping",
-			recommended: false
+				"enforce that the key prop is only used on components rendered as part of a mapping"
 		},
 		schema: [],
 		messages: {
@@ -27,11 +31,13 @@ export default {
 		}
 	},
 
+	defaultOptions: [],
+
 	create(context) {
 		// Polyfill for context.getAncestors if it's not available.
-		function getAncestors(node) {
-			const ancestors = [];
-			let current = node.parent;
+		function getAncestors(node: TSESTree.Node) {
+			const ancestors: TSESTree.Node[] = [];
+			let current: TSESTree.Node | null | undefined = node.parent;
 			while (current) {
 				ancestors.push(current);
 				current = current.parent;
@@ -47,23 +53,28 @@ export default {
 		 * @param {ASTNode[]} ancestors - The array of ancestor nodes.
 		 * @returns {boolean} True if a mapping is detected; otherwise, false.
 		 */
-		function isInsideMapCall(ancestors) {
-			return ancestors.some((node) => {
+		function isInsideMapCall(ancestors: TSESTree.Node[]) {
+			for (const node of ancestors) {
 				if (
 					node.type === "CallExpression" &&
-					node.callee &&
 					node.callee.type === "MemberExpression"
 				) {
 					const property = node.callee.property;
-					return (
-						(property.type === "Identifier" &&
-							property.name === "map") ||
-						(property.type === "Literal" &&
-							property.value === "map")
-					);
+					if (
+						property.type === "Identifier" &&
+						property.name === "map"
+					) {
+						return true;
+					}
+					if (
+						property.type === "Literal" &&
+						property.value === "map"
+					) {
+						return true;
+					}
 				}
-				return false;
-			});
+			}
+			return false;
 		}
 
 		/**
@@ -74,9 +85,13 @@ export default {
 		 * @param {ASTNode[]} ancestors - The array of ancestor nodes.
 		 * @returns {boolean} True if the element is inside a helper render function.
 		 */
-		function isReturnedFromFunction(ancestors) {
-			// Look for a ReturnStatement in the ancestry.
-			return ancestors.some((node) => node.type === "ReturnStatement");
+		function isReturnedFromFunction(ancestors: TSESTree.Node[]) {
+			for (const node of ancestors) {
+				if (node.type === "ReturnStatement") {
+					return true;
+				}
+			}
+			return false;
 		}
 
 		/**
@@ -85,12 +100,12 @@ export default {
 		 *
 		 * @param {ASTNode} node - The JSXOpeningElement node.
 		 */
-		function checkJSXOpeningElement(node) {
+		function checkJSXOpeningElement(node: TSESTree.JSXOpeningElement) {
 			// Find a key attribute.
 			const keyAttribute = node.attributes.find(
 				(attr) =>
 					attr.type === "JSXAttribute" &&
-					attr.name &&
+					attr.name.type === "JSXIdentifier" &&
 					attr.name.name === "key"
 			);
 
@@ -99,10 +114,12 @@ export default {
 			}
 
 			// Retrieve ancestors (using context.getAncestors if available).
-			const ancestors =
-				typeof context.getAncestors === "function"
-					? context.getAncestors()
-					: getAncestors(node);
+			let ancestors: TSESTree.Node[];
+			if (typeof context.getAncestors === "function") {
+				ancestors = context.getAncestors();
+			} else {
+				ancestors = getAncestors(node);
+			}
 
 			// If the element is (directly or indirectly) part of a map call, allow it.
 			if (isInsideMapCall(ancestors)) {

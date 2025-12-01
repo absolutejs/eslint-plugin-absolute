@@ -1,10 +1,14 @@
-export default {
+import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+
+type Options = [number];
+type MessageIds = "tooDeeplyNested";
+
+export const maxJSXNesting: TSESLint.RuleModule<MessageIds, Options> = {
 	meta: {
 		type: "suggestion",
 		docs: {
 			description:
-				"Warn when JSX elements are nested too deeply, suggesting refactoring into a separate component.",
-			recommended: false
+				"Warn when JSX elements are nested too deeply, suggesting refactoring into a separate component."
 		},
 		// The rule accepts a single numeric option (minimum 1)
 		schema: [
@@ -18,9 +22,12 @@ export default {
 				"JSX element is nested too deeply ({{level}} levels, allowed is {{maxAllowed}} levels). Consider refactoring into a separate component."
 		}
 	},
+
+	defaultOptions: [1],
+
 	create(context) {
-		// At this point, the provided option is guaranteed to be a number >= 1.
-		const maxAllowed = context.options[0];
+		const option = context.options[0];
+		const maxAllowed = typeof option === "number" ? option : 1;
 
 		/**
 		 * Calculates the JSX nesting level for the given node by traversing the node.parent chain.
@@ -29,9 +36,9 @@ export default {
 		 * @param {ASTNode} node The JSX element node.
 		 * @returns {number} The nesting level.
 		 */
-		function getJSXNestingLevel(node) {
+		function getJSXNestingLevel(node: TSESTree.Node): number {
 			let level = 1; // count the current node as level 1
-			let current = node.parent;
+			let current: TSESTree.Node | null | undefined = node.parent;
 			while (current) {
 				if (
 					current.type === "JSXElement" ||
@@ -45,7 +52,7 @@ export default {
 		}
 
 		return {
-			JSXElement(node) {
+			JSXElement(node: TSESTree.JSXElement) {
 				const level = getJSXNestingLevel(node);
 				if (level > maxAllowed) {
 					context.report({

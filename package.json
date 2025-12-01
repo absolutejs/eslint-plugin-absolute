@@ -12,20 +12,20 @@
 	"author": "Alex Kahn",
 	"scripts": {
 		"test": "echo \"Error: no test specified\" && exit 1",
-		"build": "rm -rf dist && bun build src/index.js --outdir dist --splitting --target=bun",
+		"build": "rm -rf dist && bun build src/index.ts --outdir dist --splitting --target=bun",
 		"format": "prettier --write \"./**/*.{js,jsx,ts,tsx,css,json,mjs}\"",
-		"dev": "bun run --watch example/server.ts",
 		"release": "bun run format && bun run build && bun publish",
 		"prune": "ts-prune --error",
 		"typecheck": "bun run tsc --noEmit"
 	},
 	"devDependencies": {
+		"@types/bun": "latest",
+		"@types/react": "19.2.7",
+		"@typescript-eslint/utils": "8.48.0",
 		"eslint": "9.39.1",
 		"prettier": "3.7.3",
 		"ts-prune": "0.10.3",
 		"typescript": "5.9.3",
-		"@types/react": "19.2.7",
-		"@types/bun": "latest",
 		"typescript-eslint": "8.48.0"
 	}
 }

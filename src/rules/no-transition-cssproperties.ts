@@ -8,25 +8,35 @@
  * This is intended to help avoid conflicts with react-spring.
  */
 
-export default {
+import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+
+type Options = [];
+type MessageIds = "forbiddenTransition";
+
+export const noTransitionCSSProperties: TSESLint.RuleModule<
+	MessageIds,
+	Options
+> = {
 	meta: {
 		type: "problem",
 		docs: {
 			description:
-				"Objects typed as CSSProperties must not include a 'transition' property as it conflicts with react-spring.",
-			recommended: false
+				"Objects typed as CSSProperties must not include a 'transition' property as it conflicts with react-spring."
 		},
-		schema: [],
+		schema: [], // no options
 		messages: {
 			forbiddenTransition:
 				"Objects typed as CSSProperties must not include a 'transition' property as it conflicts with react-spring."
 		}
 	},
 
+	defaultOptions: [],
+
 	create(context) {
 		const sourceCode = context.getSourceCode();
+
 		return {
-			VariableDeclarator(node) {
+			VariableDeclarator(node: TSESTree.VariableDeclarator) {
 				// Ensure the variable identifier exists, is an Identifier, and has a type annotation.
 				if (
 					!node.id ||
@@ -35,6 +45,7 @@ export default {
 				) {
 					return;
 				}
+
 				let isStyleType = false;
 				const typeAnnotation = node.id.typeAnnotation.typeAnnotation;
 
@@ -43,7 +54,8 @@ export default {
 					typeAnnotation &&
 					typeAnnotation.type === "TSTypeReference"
 				) {
-					const { typeName } = typeAnnotation;
+					const typeName = typeAnnotation.typeName;
+
 					if (
 						typeName.type === "Identifier" &&
 						typeName.name === "CSSProperties"
@@ -52,6 +64,7 @@ export default {
 					} else if (
 						typeName.type === "TSQualifiedName" &&
 						typeName.right &&
+						typeName.right.type === "Identifier" &&
 						typeName.right.name === "CSSProperties"
 					) {
 						isStyleType = true;
@@ -73,28 +86,38 @@ export default {
 				}
 
 				// Check that the initializer is an object literal.
-				if (node.init && node.init.type === "ObjectExpression") {
-					node.init.properties.forEach((prop) => {
-						// Only consider regular properties.
-						if (prop.type !== "Property") {
-							return;
-						}
-						if (prop.computed) {
-							return;
-						}
-						let keyName = null;
-						if (prop.key.type === "Identifier") {
-							keyName = prop.key.name;
-						} else if (prop.key.type === "Literal") {
+				const init = node.init;
+				if (!init || init.type !== "ObjectExpression") {
+					return;
+				}
+
+				for (const prop of init.properties) {
+					// Only consider regular properties.
+					if (prop.type !== "Property") {
+						continue;
+					}
+					if (prop.computed) {
+						continue;
+					}
+
+					let keyName: string | null = null;
+
+					if (prop.key.type === "Identifier") {
+						keyName = prop.key.name;
+					} else if (prop.key.type === "Literal") {
+						if (typeof prop.key.value === "string") {
+							keyName = prop.key.value;
+						} else {
 							keyName = String(prop.key.value);
 						}
-						if (keyName === "transition") {
-							context.report({
-								node: prop,
-								messageId: "forbiddenTransition"
-							});
-						}
-					});
+					}
+
+					if (keyName === "transition") {
+						context.report({
+							node: prop,
+							messageId: "forbiddenTransition"
+						});
+					}
 				}
 			}
 		};
