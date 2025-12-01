@@ -8,7 +8,8 @@
 		"moduleResolution": "bundler",
 		"skipLibCheck": true,
 		"strict": true,
-		"target": "ESNext", // "noUncheckedIndexedAccess": true,
+		"target": "ESNext",
+		"noUncheckedIndexedAccess": true,
 		"types": ["bun-types"]
 	}
 }
