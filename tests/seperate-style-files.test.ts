@@ -67,6 +67,16 @@ ruleTester.run("seperate-style-files", seperateStyleFiles, {
 			code: `const style: CSSProperties = { color: "red" };`,
 			filename: "helper.ts",
 			name: "CSSProperties in a non-jsx file is ignored"
+		},
+		{
+			code: `const x: string = "test";`,
+			filename: "Component.tsx",
+			name: "primitive type annotation in tsx file"
+		},
+		{
+			code: `const [a, b]: [number, number] = [1, 2];`,
+			filename: "Component.tsx",
+			name: "array destructuring with type annotation"
 		}
 	]
 });

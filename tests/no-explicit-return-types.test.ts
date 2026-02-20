@@ -21,6 +21,16 @@ ruleTester.run("no-explicit-return-types", noExplicitReturnTypes, {
 			code: `const fn = (): string => "hello";`,
 			errors: [{ messageId: "noExplicitReturnType" }],
 			name: "arrow function with explicit return type"
+		},
+		{
+			code: `const fn = function(): number { return 1; }`,
+			errors: [{ messageId: "noExplicitReturnType" }],
+			name: "function expression with explicit return type"
+		},
+		{
+			code: `function foo(): void { return; }`,
+			errors: [{ messageId: "noExplicitReturnType" }],
+			name: "return with no argument and explicit void return type"
 		}
 	],
 	valid: [
@@ -39,6 +49,14 @@ ruleTester.run("no-explicit-return-types", noExplicitReturnTypes, {
 		{
 			code: `function getStyle(): { color: string } { return { color: "red" }; }`,
 			name: "function with single return of object literal"
+		},
+		{
+			code: `const fn = (): Obj => { return { a: 1 }; }`,
+			name: "arrow with block body returning single object literal"
+		},
+		{
+			code: `function foo(): Obj { if (x) return { a: 1 }; return { b: 2 }; }`,
+			name: "multiple returns but only one direct return in block body (allowed)"
 		}
 	]
 });

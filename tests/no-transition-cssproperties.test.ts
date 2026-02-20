@@ -39,4 +39,20 @@ ruleTester.run("no-transition-cssproperties", noTransitionCSSProperties, {
 	]
 });
 
+ruleTester.run("no-transition-cssproperties (additional cases)", noTransitionCSSProperties, {
+	invalid: [
+		{
+			code: `const s: CSSProperties = { ...base, transition: "all" };`,
+			errors: [{ messageId: "forbiddenTransition" }],
+			name: "spread element in object with transition property"
+		},
+		{
+			code: `const s: CSSProperties = { transition: "all 0.3s", transitionDelay: "0s" };`,
+			errors: [{ messageId: "forbiddenTransition" }],
+			name: "multiple transition properties in one object (only transition flagged)"
+		}
+	],
+	valid: []
+});
+
 console.log("no-transition-cssproperties: All tests passed!");

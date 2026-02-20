@@ -30,6 +30,26 @@ ruleTester.run("no-button-navigation", noButtonNavigation, {
 			code: `const C = () => <button onClick={() => { window.history.replaceState({}, "", "/new-path"); }}>Go</button>;`,
 			errors: [{ messageId: "noButtonNavigation" }],
 			name: "button onClick with replaceState but no location read"
+		},
+		{
+			code: `const C = () => <button onClick={function() { window.location = "/new"; }}>Go</button>;`,
+			errors: [{ messageId: "noButtonNavigation" }],
+			name: "FunctionExpression handler assigning window.location"
+		},
+		{
+			code: `const C = () => <button onClick={() => { window.location.href = "/other"; }}>Go</button>;`,
+			errors: [{ messageId: "noButtonNavigation" }],
+			name: "button onClick assigning window.location.href"
+		},
+		{
+			code: `const C = () => <button onClick={() => { window.history.pushState({}, "", "/new-path"); }}>Go</button>;`,
+			errors: [{ messageId: "noButtonNavigation" }],
+			name: "button onClick with pushState but no location read"
+		},
+		{
+			code: `const C = () => <button onClick={() => { window.location = "/a"; window.location.href = "/b"; }}>Go</button>;`,
+			errors: [{ messageId: "noButtonNavigation" }],
+			name: "multiple navigation calls in one handler"
 		}
 	],
 	valid: [

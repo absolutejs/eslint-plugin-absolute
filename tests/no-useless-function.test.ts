@@ -32,8 +32,23 @@ ruleTester.run("no-useless-function", noUselessFunction, {
 		{
 			code: `const fn = () => { return { a: 1 }; };`,
 			name: "arrow function with block body"
+		},
+		{
+			code: `someFunc(x, () => ({ a: 1 }));`,
+			name: "arrow as second argument (callback)"
 		}
 	]
+});
+
+ruleTester.run("no-useless-function (standalone arrow)", noUselessFunction, {
+	invalid: [
+		{
+			code: `const fn = () => ({ a: 1 });`,
+			errors: [{ messageId: "uselessFunction" }],
+			name: "arrow as non-argument (standalone) is invalid"
+		}
+	],
+	valid: []
 });
 
 console.log("no-useless-function: All tests passed!");

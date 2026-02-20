@@ -22,6 +22,11 @@ ruleTester.run("no-inline-prop-types", noInlinePropTypes, {
 			code: `const Comp = ({ x }: { x: number }) => null;`,
 			errors: [{ messageId: "noInlinePropTypes" }],
 			name: "arrow function with inline object type"
+		},
+		{
+			code: `const Comp = function({ x }: { x: number }) { return null; }`,
+			errors: [{ messageId: "noInlinePropTypes" }],
+			name: "function expression with inline object type"
 		}
 	],
 	valid: [
@@ -36,6 +41,14 @@ ruleTester.run("no-inline-prop-types", noInlinePropTypes, {
 		{
 			code: `type Props = { x: number }; const Comp = ({ x }: Props) => null;`,
 			name: "arrow function with named type"
+		},
+		{
+			code: `function Comp(props: { x: number }) { return null; }`,
+			name: "non-destructured param with inline type is not flagged"
+		},
+		{
+			code: `function Comp({ x }: Props, extra: { y: number }) { return null; }`,
+			name: "only first param is checked, second param inline type is not flagged"
 		}
 	]
 });

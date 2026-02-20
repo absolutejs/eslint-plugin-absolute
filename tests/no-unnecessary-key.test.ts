@@ -29,8 +29,27 @@ ruleTester.run("no-unnecessary-key", noUnnecessaryKey, {
 		{
 			code: `function renderItem() { return <div key="a">Hello</div>; }`,
 			name: "key inside function return statement"
+		},
+		{
+			code: `const C = () => items.map(function(item) { return <div key={item.id} /> });`,
+			name: "key inside .map() with FunctionExpression callback"
+		},
+		{
+			code: `const C = () => items.map(item => <ul>{item.children.map(child => <li key={child.id}>{child.name}</li>)}</ul>);`,
+			name: "key in nested map calls"
 		}
 	]
+});
+
+ruleTester.run("no-unnecessary-key (additional invalid)", noUnnecessaryKey, {
+	invalid: [
+		{
+			code: `const C = () => { const el = <div key="a" />; return el; };`,
+			errors: [{ messageId: "unnecessaryKey" }],
+			name: "key outside map and outside return statement"
+		}
+	],
+	valid: []
 });
 
 console.log("no-unnecessary-key: All tests passed!");

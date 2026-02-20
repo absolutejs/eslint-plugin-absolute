@@ -29,6 +29,21 @@ ruleTester.run("spring-naming-convention", springNamingConvention, {
 			code: `const [Springs, api] = useSpring(() => ({}));`,
 			errors: [{ messageId: "firstMustHaveBase" }],
 			name: "useSpring empty base name (just 'Springs')"
+		},
+		{
+			code: `const [fade, fadeApi] = useSprings(3, () => ({}));`,
+			errors: [{ messageId: "firstMustEndWithSprings" }],
+			name: "useSprings first var doesn't end with Springs"
+		},
+		{
+			code: `const [Springs, api] = useSprings(3, () => ({}));`,
+			errors: [{ messageId: "firstMustHaveBase" }],
+			name: "useSprings empty base name (just 'Springs')"
+		},
+		{
+			code: `const [itemsSprings, wrongName] = useSprings(3, () => ({}));`,
+			errors: [{ messageId: "secondMustMatch" }],
+			name: "useSprings second var doesn't match expected pattern"
 		}
 	],
 	valid: [
@@ -47,6 +62,10 @@ ruleTester.run("spring-naming-convention", springNamingConvention, {
 		{
 			code: `const springs = useSpring(() => ({}));`,
 			name: "useSpring without array destructuring (ignored)"
+		},
+		{
+			code: `const [fadeSprings] = useSpring(() => ({}));`,
+			name: "single element array destructuring (ignored, less than 2 elements)"
 		}
 	]
 });

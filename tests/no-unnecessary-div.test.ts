@@ -44,8 +44,31 @@ ruleTester.run("no-unnecessary-div", noUnnecessaryDiv, {
 		{
 			code: `const C = () => <div>{value}</div>;`,
 			name: "div with single expression child (not JSX element)"
+		},
+		{
+			code: `const C = () => <div><></></div>;`,
+			name: "div wrapping fragment (child is fragment not element)"
 		}
 	]
+});
+
+ruleTester.run("no-unnecessary-div (additional cases)", noUnnecessaryDiv, {
+	invalid: [
+		{
+			code: `const C = () => <div className="wrapper"><span /></div>;`,
+			errors: [{ messageId: "unnecessaryDivWrapper" }],
+			name: "div with attributes wrapping single JSX element"
+		},
+		{
+			code: `const C = () => <div><div><span /></div></div>;`,
+			errors: [
+				{ messageId: "unnecessaryDivWrapper" },
+				{ messageId: "unnecessaryDivWrapper" }
+			],
+			name: "multiple nested unnecessary divs"
+		}
+	],
+	valid: []
 });
 
 console.log("no-unnecessary-div: All tests passed!");

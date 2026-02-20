@@ -137,6 +137,25 @@ function Parent() {
 }
 `,
 			name: "useState where only state is passed but setter is used in parent"
+		},
+		{
+			code: `
+function Parent() {
+	const [count, setCount] = React.useState(0);
+	console.log(count);
+	return <Counter count={count} setCount={setCount} />;
+}
+`,
+			name: "React.useState member expression form with outside usage"
+		},
+		{
+			code: `
+function Parent() {
+	const [value] = useState(0);
+	return <Child value={value} />;
+}
+`,
+			name: "useState with single element destructuring does not report"
 		}
 	]
 });

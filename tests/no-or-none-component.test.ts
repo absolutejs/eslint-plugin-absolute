@@ -38,6 +38,14 @@ ruleTester.run("no-or-none-component", noOrNoneComponent, {
 		{
 			code: `const x = flag ? <A /> : null;`,
 			name: "ternary with null outside JSX"
+		},
+		{
+			code: `const C = () => <div>{flag ? <A /> : false}</div>;`,
+			name: "ternary with false alternate (not null/undefined)"
+		},
+		{
+			code: `const C = () => <div>{flag ? <A /> : 0}</div>;`,
+			name: "ternary with 0 alternate (not null/undefined)"
 		}
 	]
 });
