@@ -77,7 +77,7 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 	defaultOptions: [{}],
 
 	create(context) {
-		const sourceCode = context.getSourceCode();
+		const sourceCode = context.sourceCode;
 		const option = context.options[0];
 
 		const order: "asc" | "desc" =
@@ -156,20 +156,127 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 		}
 
 		/**
-		 * Build the sorted text from the fixable properties while preserving comments.
+		 * Get leading comments for a property, excluding any comments that
+		 * are on the same line as the previous property (those are trailing
+		 * comments of the previous property).
 		 */
-		function buildSortedText(fixableProps: TSESTree.Property[]) {
-			const sorted = fixableProps.slice().sort((a, b) => {
+		function getLeadingComments(
+			prop: TSESTree.Property,
+			prevProp: TSESTree.Property | null
+		): TSESTree.Comment[] {
+			const comments = sourceCode.getCommentsBefore(prop);
+			if (!prevProp || comments.length === 0) {
+				return comments;
+			}
+			// Filter out comments on the same line as the previous property
+			return comments.filter(
+				(c) => c.loc.start.line !== prevProp.loc.end.line
+			);
+		}
+
+		/**
+		 * Get trailing comments for a property that are on the same line.
+		 * This includes both getCommentsAfter AND any getCommentsBefore of the
+		 * next property that are on the same line as this property.
+		 */
+		function getTrailingComments(
+			prop: TSESTree.Property,
+			nextProp: TSESTree.Property | null
+		): TSESTree.Comment[] {
+			const after = sourceCode
+				.getCommentsAfter(prop)
+				.filter((c) => c.loc.start.line === prop.loc.end.line);
+			if (nextProp) {
+				const beforeNext = sourceCode.getCommentsBefore(nextProp);
+				const trailingOfPrev = beforeNext.filter(
+					(c) => c.loc.start.line === prop.loc.end.line
+				);
+				// Merge, avoiding duplicates
+				for (const c of trailingOfPrev) {
+					if (!after.some((a) => a.range[0] === c.range[0])) {
+						after.push(c);
+					}
+				}
+			}
+			return after;
+		}
+
+		/**
+		 * Build the sorted text from the fixable properties while preserving
+		 * comments and formatting.
+		 */
+		function buildSortedText(
+			fixableProps: TSESTree.Property[],
+			rangeStart: number
+		) {
+			// For each property, capture its "chunk": the property text plus
+			// its associated comments (leading comments on separate lines,
+			// trailing comments on the same line).
+			const chunks: {
+				prop: TSESTree.Property;
+				text: string;
+			}[] = [];
+
+			for (let i = 0; i < fixableProps.length; i++) {
+				const prop = fixableProps[i]!;
+				const prevProp = i > 0 ? fixableProps[i - 1]! : null;
+				const nextProp =
+					i < fixableProps.length - 1 ? fixableProps[i + 1]! : null;
+
+				const leading = getLeadingComments(prop, prevProp);
+				const trailing = getTrailingComments(prop, nextProp);
+
+				const fullStart =
+					leading.length > 0 ? leading[0]!.range[0] : prop.range[0];
+				const fullEnd =
+					trailing.length > 0
+						? trailing[trailing.length - 1]!.range[1]
+						: prop.range[1];
+
+				// Find the chunk start (after previous property's separator)
+				let chunkStart: number;
+				if (i === 0) {
+					chunkStart = rangeStart;
+				} else {
+					const prevTrailing = getTrailingComments(prevProp!, prop);
+					const prevEnd =
+						prevTrailing.length > 0
+							? prevTrailing[prevTrailing.length - 1]!.range[1]
+							: prevProp!.range[1];
+					// Find the comma after the previous property/comments
+					const tokenAfterPrev = sourceCode.getTokenAfter(
+						{
+							range: [prevEnd, prevEnd]
+						} as TSESTree.Node,
+						{ includeComments: false }
+					);
+					if (
+						tokenAfterPrev &&
+						tokenAfterPrev.value === "," &&
+						tokenAfterPrev.range[1] <= fullStart
+					) {
+						chunkStart = tokenAfterPrev.range[1];
+					} else {
+						chunkStart = prevEnd;
+					}
+				}
+
+				const text = sourceCode.text.slice(chunkStart, fullEnd);
+				chunks.push({ prop, text });
+			}
+
+			// Sort the chunks
+			const sorted = chunks.slice().sort((a, b) => {
 				if (variablesBeforeFunctions) {
-					const aIsFunc = isFunctionProperty(a);
-					const bIsFunc = isFunctionProperty(b);
+					const aIsFunc = isFunctionProperty(a.prop);
+					const bIsFunc = isFunctionProperty(b.prop);
 					if (aIsFunc !== bIsFunc) {
 						return aIsFunc ? 1 : -1;
 					}
 				}
 
-				const aKey = getPropertyKeyName(a);
-				const bKey = getPropertyKeyName(b);
+				const aKey = getPropertyKeyName(a.prop);
+				const bKey = getPropertyKeyName(b.prop);
 
 				let res = compareKeys(aKey, bKey);
 				if (order === "desc") {
@@ -178,35 +285,41 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 				return res;
 			});
 
+			// Detect separator: check if the object is multiline by comparing
+			// the first and last property lines. If multiline, use the
+			// indentation of the first property.
+			const firstPropLine = fixableProps[0]!.loc.start.line;
+			const lastPropLine =
+				fixableProps[fixableProps.length - 1]!.loc.start.line;
+			const isMultiline = firstPropLine !== lastPropLine;
+			let separator: string;
+			if (isMultiline) {
+				// Detect indentation from the first property's column
+				const col = fixableProps[0]!.loc.start.column;
+				const indent = sourceCode.text.slice(
+					fixableProps[0]!.range[0] - col,
+					fixableProps[0]!.range[0]
+				);
+				separator = ",\n" + indent;
+			} else {
+				separator = ", ";
+			}
+
+			// Rebuild: first chunk keeps original leading whitespace,
+			// subsequent chunks use the detected separator
 			return sorted
-				.map((prop) => {
-					const leadingComments = sourceCode.getCommentsBefore(prop);
-					const trailingComments = sourceCode.getCommentsAfter(prop);
-
-					const leadingText =
-						leadingComments.length > 0
-							? leadingComments
-									.map((comment) =>
-										sourceCode.getText(comment)
-									)
-									.join("\n") + "\n"
-							: "";
-
-					const trailingText =
-						trailingComments.length > 0
-							? "\n" +
-								trailingComments
-									.map((comment) =>
-										sourceCode.getText(comment)
-									)
-									.join("\n")
-							: "";
-
-					return (
-						leadingText + sourceCode.getText(prop) + trailingText
-					);
+				.map((chunk, i) => {
+					if (i === 0) {
+						const originalFirstChunk = chunks[0]!;
+						const originalLeadingWs =
+							originalFirstChunk.text.match(/^(\s*)/)?.[1] ?? "";
+						const stripped = chunk.text.replace(/^\s*/, "");
+						return originalLeadingWs + stripped;
+					}
+					const stripped = chunk.text.replace(/^\s*/, "");
+					return separator + stripped;
 				})
-				.join(", ");
+				.join("");
 		}
 
 		/**
@@ -315,11 +428,31 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 										return null;
 									}
 
-									const sortedText =
-										buildSortedText(fixableProps);
+									const firstLeading = getLeadingComments(
+										firstProp,
+										null
+									);
+									const rangeStart =
+										firstLeading.length > 0
+											? firstLeading[0]!.range[0]
+											: firstProp.range[0];
+									const lastTrailing = getTrailingComments(
+										lastProp,
+										null
+									);
+									const rangeEnd =
+										lastTrailing.length > 0
+											? lastTrailing[
+													lastTrailing.length - 1
+												]!.range[1]
+											: lastProp.range[1];
+									const sortedText = buildSortedText(
+										fixableProps,
+										rangeStart
+									);
 
 									return fixer.replaceTextRange(
-										[firstProp.range[0], lastProp.range[1]],
+										[rangeStart, rangeEnd],
 										sortedText
 									);
 								}

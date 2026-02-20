@@ -22,7 +22,7 @@ export const seperateStyleFiles: TSESLint.RuleModule<MessageIds, Options> = {
 
 	create(context) {
 		// Only run this rule on .tsx or .jsx files.
-		const filename = context.getFilename();
+		const filename = context.filename;
 		if (!filename.endsWith(".tsx") && !filename.endsWith(".jsx")) {
 			return {};
 		}

@@ -33,7 +33,7 @@ export const noTransitionCSSProperties: TSESLint.RuleModule<
 	defaultOptions: [],
 
 	create(context) {
-		const sourceCode = context.getSourceCode();
+		const sourceCode = context.sourceCode;
 
 		return {
 			VariableDeclarator(node: TSESTree.VariableDeclarator) {

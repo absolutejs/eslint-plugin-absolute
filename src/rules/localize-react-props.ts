@@ -225,7 +225,8 @@ export const localizeReactProps: TSESLint.RuleModule<MessageIds, Options> = {
 		function findVariableForIdentifier(
 			id: TSESTree.Identifier
 		): TSESLint.Scope.Variable | null {
-			let scope: TSESLint.Scope.Scope | null = context.getScope();
+			let scope: TSESLint.Scope.Scope | null =
+				context.sourceCode.getScope(id);
 			while (scope) {
 				for (const variable of scope.variables) {
 					for (const def of variable.defs) {
@@ -303,7 +304,8 @@ export const localizeReactProps: TSESLint.RuleModule<MessageIds, Options> = {
 			const nodeStart = nodeRange[0];
 			const nodeEnd = nodeRange[1];
 
-			let scope: TSESLint.Scope.Scope | null = context.getScope();
+			let scope: TSESLint.Scope.Scope | null =
+				context.sourceCode.getScope(node);
 
 			while (scope) {
 				for (const variable of scope.variables) {

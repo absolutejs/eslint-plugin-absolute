@@ -45,7 +45,7 @@ export const minVarLength: TSESLint.RuleModule<MessageIds, Options> = {
 	defaultOptions: [{}],
 
 	create(context) {
-		const sourceCode = context.getSourceCode();
+		const sourceCode = context.sourceCode;
 		const options = context.options[0];
 		const configuredMinLength =
 			options && typeof options.minLength === "number"
