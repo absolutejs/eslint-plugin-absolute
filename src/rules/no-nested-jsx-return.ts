@@ -19,19 +19,17 @@ type AnyFunctionNode =
 export const noNestedJSXReturn: TSESLint.RuleModule<MessageIds, Options> = {
 	create(context) {
 		// Returns true if the node is a JSX element or fragment.
-		function isJSX(
+		const isJSX = (
 			node: TSESTree.Node | null | undefined
-		): node is TSESTree.JSXElement | TSESTree.JSXFragment {
-			return (
-				Boolean(node) &&
-				(node.type === AST_NODE_TYPES.JSXElement ||
-					node.type === AST_NODE_TYPES.JSXFragment)
-			);
-		}
+		): node is TSESTree.JSXElement | TSESTree.JSXFragment =>
+			node !== null &&
+			node !== undefined &&
+			(node.type === AST_NODE_TYPES.JSXElement ||
+				node.type === AST_NODE_TYPES.JSXFragment);
 
-		function getLeftmostJSXIdentifier(
+		const getLeftmostJSXIdentifier = (
 			name: TSESTree.JSXTagNameExpression
-		): TSESTree.JSXIdentifier | null {
+		) => {
 			let current: TSESTree.JSXTagNameExpression = name;
 			while (current.type === AST_NODE_TYPES.JSXMemberExpression) {
 				current = current.object;
@@ -40,10 +38,12 @@ export const noNestedJSXReturn: TSESLint.RuleModule<MessageIds, Options> = {
 				return current;
 			}
 			return null;
-		}
+		};
 
 		// Returns true if the JSX element is a component (its tag name starts with an uppercase letter).
-		function isJSXComponentElement(node: TSESTree.Node | null | undefined) {
+		const isJSXComponentElement = (
+			node: TSESTree.Node | null | undefined
+		) => {
 			if (!node || node.type !== AST_NODE_TYPES.JSXElement) {
 				return false;
 			}
@@ -59,13 +59,23 @@ export const noNestedJSXReturn: TSESLint.RuleModule<MessageIds, Options> = {
 				return false;
 			}
 			return /^[A-Z]/.test(leftmost.name);
-		}
+		};
+
+		const hasNoMeaningfulChildren = (children: TSESTree.JSXChild[]) => {
+			const filtered = children.filter((child) => {
+				if (child.type === AST_NODE_TYPES.JSXText) {
+					return child.value.trim() !== "";
+				}
+				return true;
+			});
+			return filtered.length === 0;
+		};
 
 		// Returns true if the returned JSX is singular.
 		// For both JSXElement and JSXFragment, singular means 0 or 1 non-whitespace child.
-		function isSingularJSXReturn(
+		const isSingularJSXReturn = (
 			node: TSESTree.JSXElement | TSESTree.JSXFragment
-		) {
+		) => {
 			if (!isJSX(node)) return false;
 
 			const children = node.children.filter((child) => {
@@ -81,44 +91,35 @@ export const noNestedJSXReturn: TSESLint.RuleModule<MessageIds, Options> = {
 			}
 
 			// Check if the returned element has exactly one child.
-			if (children.length === 1) {
-				const child = children[0];
-				if (!child) {
-					return false;
-				}
-
-				// If the singular child is also a JSX element or fragment,
-				// ensure that it doesn't have any meaningful children.
-				if (
-					child.type === AST_NODE_TYPES.JSXElement ||
-					child.type === AST_NODE_TYPES.JSXFragment
-				) {
-					const innerChildren = child.children.filter(
-						(innerChild) => {
-							if (innerChild.type === AST_NODE_TYPES.JSXText) {
-								return innerChild.value.trim() !== "";
-							}
-							return true;
-						}
-					);
-					return innerChildren.length === 0;
-				}
-				// If it’s not a JSX element (maybe a simple expression), it's acceptable.
-				return true;
+			if (children.length !== 1) {
+				return false;
 			}
 
-			// If there is more than one meaningful child, it's not singular.
-			return false;
-		}
+			const [child] = children;
+			if (!child) {
+				return false;
+			}
+
+			// If the singular child is also a JSX element or fragment,
+			// ensure that it doesn't have any meaningful children.
+			if (
+				child.type === AST_NODE_TYPES.JSXElement ||
+				child.type === AST_NODE_TYPES.JSXFragment
+			) {
+				return hasNoMeaningfulChildren(child.children);
+			}
+			// If it's not a JSX element (maybe a simple expression), it's acceptable.
+			return true;
+		};
 
 		// Stack to track nested function nodes.
 		const functionStack: AnyFunctionNode[] = [];
-		function pushFunction(node: AnyFunctionNode) {
+		const pushFunction = (node: AnyFunctionNode) => {
 			functionStack.push(node);
-		}
-		function popFunction() {
+		};
+		const popFunction = () => {
 			functionStack.pop();
-		}
+		};
 
 		return {
 			// For implicit returns in arrow functions, use the same checks.
@@ -149,9 +150,7 @@ export const noNestedJSXReturn: TSESLint.RuleModule<MessageIds, Options> = {
 					});
 				}
 			},
-			"ArrowFunctionExpression:exit"(
-				_node: TSESTree.ArrowFunctionExpression
-			) {
+			"ArrowFunctionExpression:exit"() {
 				popFunction();
 			},
 			"FunctionDeclaration, FunctionExpression, ArrowFunctionExpression"(
@@ -159,10 +158,10 @@ export const noNestedJSXReturn: TSESLint.RuleModule<MessageIds, Options> = {
 			) {
 				pushFunction(node);
 			},
-			"FunctionDeclaration:exit"(_node: TSESTree.FunctionDeclaration) {
+			"FunctionDeclaration:exit"() {
 				popFunction();
 			},
-			"FunctionExpression:exit"(_node: TSESTree.FunctionExpression) {
+			"FunctionExpression:exit"() {
 				popFunction();
 			},
 			// For explicit return statements, report if the returned JSX is not a component and not singular.

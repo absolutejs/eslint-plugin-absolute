@@ -30,10 +30,94 @@ type ExportItem = {
 	text: string;
 };
 
+const SORT_BEFORE: -1 = -1;
+
+const getVariableDeclaratorName = (
+	declaration: TSESTree.VariableDeclaration
+) => {
+	if (declaration.declarations.length !== 1) {
+		return null;
+	}
+	const [firstDeclarator] = declaration.declarations;
+	if (firstDeclarator && firstDeclarator.id.type === "Identifier") {
+		return firstDeclarator.id.name;
+	}
+	return null;
+};
+
+const getDeclarationName = (
+	declaration: TSESTree.ExportNamedDeclaration["declaration"]
+) => {
+	if (!declaration) {
+		return null;
+	}
+
+	if (declaration.type === "VariableDeclaration") {
+		return getVariableDeclaratorName(declaration);
+	}
+
+	if (
+		(declaration.type === "FunctionDeclaration" ||
+			declaration.type === "ClassDeclaration") &&
+		declaration.id &&
+		declaration.id.type === "Identifier"
+	) {
+		return declaration.id.name;
+	}
+
+	return null;
+};
+
+const getSpecifierName = (node: TSESTree.ExportNamedDeclaration) => {
+	if (node.specifiers.length !== 1) {
+		return null;
+	}
+	const [spec] = node.specifiers;
+	if (!spec) {
+		return null;
+	}
+	if (spec.exported.type === "Identifier") {
+		return spec.exported.name;
+	}
+	if (
+		spec.exported.type === "Literal" &&
+		typeof spec.exported.value === "string"
+	) {
+		return spec.exported.value;
+	}
+	return null;
+};
+
+const getExportName = (node: TSESTree.ExportNamedDeclaration) =>
+	getDeclarationName(node.declaration) ?? getSpecifierName(node);
+
+const isFixableExport = (exportNode: TSESTree.ExportNamedDeclaration) => {
+	const { declaration } = exportNode;
+
+	if (!declaration) {
+		return exportNode.specifiers.length === 1;
+	}
+
+	if (
+		declaration.type === "VariableDeclaration" &&
+		declaration.declarations.length === 1
+	) {
+		const [firstDecl] = declaration.declarations;
+		return firstDecl !== undefined && firstDecl.id.type === "Identifier";
+	}
+
+	return (
+		(declaration.type === "FunctionDeclaration" ||
+			declaration.type === "ClassDeclaration") &&
+		declaration.id !== null &&
+		declaration.id.type === "Identifier"
+	);
+};
+
 export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
 	create(context) {
 		const { sourceCode } = context;
-		const option = context.options[0];
+		const [option] = context.options;
 
 		const order: "asc" | "desc" =
 			option && option.order ? option.order : "asc";
@@ -56,95 +140,32 @@ export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
 				? option.variablesBeforeFunctions
 				: false;
 
-		function generateExportText(node: TSESTree.ExportNamedDeclaration) {
-			return sourceCode
+		const generateExportText = (node: TSESTree.ExportNamedDeclaration) =>
+			sourceCode
 				.getText(node)
 				.trim()
 				.replace(/\s*;?\s*$/, ";");
-		}
 
-		function compareStrings(a: string, b: string) {
-			let strA = a;
-			let strB = b;
+		const compareStrings = (strLeft: string, strRight: string) => {
+			let left = strLeft;
+			let right = strRight;
 
 			if (!caseSensitive) {
-				strA = strA.toLowerCase();
-				strB = strB.toLowerCase();
+				left = left.toLowerCase();
+				right = right.toLowerCase();
 			}
 
 			const cmp = natural
-				? strA.localeCompare(strB, undefined, { numeric: true })
-				: strA.localeCompare(strB);
+				? left.localeCompare(right, undefined, { numeric: true })
+				: left.localeCompare(right);
 
 			return order === "asc" ? cmp : -cmp;
-		}
+		};
 
-		function getExportName(
-			node: TSESTree.ExportNamedDeclaration
-		): string | null {
-			const { declaration } = node;
-
-			if (declaration) {
-				if (declaration.type === "VariableDeclaration") {
-					if (declaration.declarations.length === 1) {
-						const firstDeclarator = declaration.declarations[0];
-						if (
-							firstDeclarator &&
-							firstDeclarator.id.type === "Identifier"
-						) {
-							return firstDeclarator.id.name;
-						}
-					}
-				} else if (
-					declaration.type === "FunctionDeclaration" ||
-					declaration.type === "ClassDeclaration"
-				) {
-					const { id } = declaration;
-					if (id && id.type === "Identifier") {
-						return id.name;
-					}
-				}
-			} else if (node.specifiers.length === 1) {
-				const spec = node.specifiers[0];
-				if (!spec) {
-					return null;
-				}
-				if (spec.exported.type === "Identifier") {
-					return spec.exported.name;
-				}
-				if (
-					spec.exported.type === "Literal" &&
-					typeof spec.exported.value === "string"
-				) {
-					return spec.exported.value;
-				}
-			}
-
-			return null;
-		}
-
-		function isFunctionExport(node: TSESTree.ExportNamedDeclaration) {
+		const isFunctionExport = (node: TSESTree.ExportNamedDeclaration) => {
 			const { declaration } = node;
 
 			if (!declaration) {
-				return false;
-			}
-
-			if (declaration.type === "VariableDeclaration") {
-				if (declaration.declarations.length === 1) {
-					const firstDeclarator = declaration.declarations[0];
-					if (!firstDeclarator) {
-						return false;
-					}
-					const { init } = firstDeclarator;
-					if (!init) {
-						return false;
-					}
-					return (
-						init.type === "FunctionExpression" ||
-						init.type === "ArrowFunctionExpression"
-					);
-				}
 				return false;
 			}
 
@@ -152,35 +173,54 @@ export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
 				return true;
 			}
 
-			return false;
-		}
+			if (declaration.type !== "VariableDeclaration") {
+				return false;
+			}
 
-		function sortComparator(a: ExportItem, b: ExportItem) {
-			const kindA = a.node.exportKind ?? "value";
-			const kindB = b.node.exportKind ?? "value";
+			if (declaration.declarations.length !== 1) {
+				return false;
+			}
+
+			const [firstDeclarator] = declaration.declarations;
+			if (!firstDeclarator) {
+				return false;
+			}
+			const { init } = firstDeclarator;
+			if (!init) {
+				return false;
+			}
+			return (
+				init.type === "FunctionExpression" ||
+				init.type === "ArrowFunctionExpression"
+			);
+		};
+
+		const sortComparator = (left: ExportItem, right: ExportItem) => {
+			const kindA = left.node.exportKind ?? "value";
+			const kindB = right.node.exportKind ?? "value";
 
 			if (kindA !== kindB) {
-				return kindA === "type" ? -1 : 1;
+				return kindA === "type" ? SORT_BEFORE : 1;
 			}
 
-			if (variablesBeforeFunctions) {
-				if (a.isFunction !== b.isFunction) {
-					return a.isFunction ? 1 : -1;
-				}
+			if (
+				variablesBeforeFunctions &&
+				left.isFunction !== right.isFunction
+			) {
+				return left.isFunction ? 1 : SORT_BEFORE;
 			}
 
-			return compareStrings(a.name, b.name);
-		}
+			return compareStrings(left.name, right.name);
+		};
 
 		/**
 		 * Very lightweight dependency check: look at the text of the node and see
-		 * if it references any of the later export names. This avoids reordering
-		 * when there might be a forward dependency.
+		 * if it references any of the later export names.
 		 */
-		function hasForwardDependency(
+		const hasForwardDependency = (
 			node: TSESTree.Node,
 			laterNames: Set<string>
-		) {
+		) => {
 			const text = sourceCode.getText(node);
 			for (const name of laterNames) {
 				if (text.includes(name)) {
@@ -188,85 +228,91 @@ export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
 				}
 			}
 			return false;
-		}
+		};
 
-		function processExportBlock(block: TSESTree.ExportNamedDeclaration[]) {
+		const buildItems = (block: TSESTree.ExportNamedDeclaration[]) =>
+			block
+				.map((node) => {
+					const name = getExportName(node);
+					if (!name) {
+						return null;
+					}
+					const item: ExportItem = {
+						isFunction: isFunctionExport(node),
+						name,
+						node,
+						text: sourceCode.getText(node)
+					};
+					return item;
+				})
+				.filter((item): item is ExportItem => item !== null);
+
+		const findFirstUnsorted = (items: ExportItem[]) => {
+			let messageId: MessageIds = "alphabetical";
+
+			const unsorted = items.some((current, idx) => {
+				if (idx === 0) {
+					return false;
+				}
+				const prev = items[idx - 1];
+				if (!prev) {
+					return false;
+				}
+				if (sortComparator(prev, current) <= 0) {
+					return false;
+				}
+				if (
+					variablesBeforeFunctions &&
+					prev.isFunction &&
+					!current.isFunction
+				) {
+					messageId = "variablesBeforeFunctions";
+				}
+				return true;
+			});
+
+			return unsorted ? messageId : null;
+		};
+
+		const checkForwardDependencies = (items: ExportItem[]) => {
+			const exportNames = items.map((item) => item.name);
+			return items.some((item, idx) => {
+				const laterNames = new Set(exportNames.slice(idx + 1));
+				const nodeToCheck: TSESTree.Node =
+					item.node.declaration ?? item.node;
+				return hasForwardDependency(nodeToCheck, laterNames);
+			});
+		};
+
+		const processExportBlock = (
+			block: TSESTree.ExportNamedDeclaration[]
+		) => {
 			if (block.length < minKeys) {
 				return;
 			}
 
-			const items: ExportItem[] = [];
-
-			for (const node of block) {
-				const name = getExportName(node);
-				if (!name) {
-					continue;
-				}
-
-				items.push({
-					isFunction: isFunctionExport(node),
-					name,
-					node,
-					text: sourceCode.getText(node)
-				});
-			}
+			const items = buildItems(block);
 
 			if (items.length < minKeys) {
 				return;
 			}
 
-			const sortedItems = items.slice().sort(sortComparator);
-
-			let reportNeeded = false;
-			let messageId: MessageIds = "alphabetical";
-
-			for (let i = 1; i < items.length; i++) {
-				const prev = items[i - 1];
-				const current = items[i];
-
-				if (!prev || !current) {
-					continue;
-				}
-
-				if (sortComparator(prev, current) > 0) {
-					reportNeeded = true;
-
-					if (
-						variablesBeforeFunctions &&
-						prev.isFunction &&
-						!current.isFunction
-					) {
-						messageId = "variablesBeforeFunctions";
-					}
-					break;
-				}
-			}
-
-			if (!reportNeeded) {
+			const messageId = findFirstUnsorted(items);
+			if (!messageId) {
 				return;
 			}
 
-			const exportNames = items.map((item) => item.name);
-
-			for (let i = 0; i < items.length; i++) {
-				const item = items[i];
-				if (!item) {
-					continue;
-				}
-				const laterNames = new Set(exportNames.slice(i + 1));
-				const nodeToCheck: TSESTree.Node =
-					item.node.declaration ?? item.node;
-
-				if (hasForwardDependency(nodeToCheck, laterNames)) {
-					return;
-				}
+			if (checkForwardDependencies(items)) {
+				return;
 			}
+
+			const sortedItems = items.slice().sort(sortComparator);
 
 			const expectedOrder = sortedItems
 				.map((item) => item.name)
 				.join(", ");
 
-			const firstNode = block[0];
+			const [firstNode] = block;
 			const lastNode = block[block.length - 1];
 
 			if (!firstNode || !lastNode) {
@@ -278,43 +324,7 @@ export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
 					expectedOrder
 				},
 				fix(fixer) {
-					const fixableNodes: TSESTree.ExportNamedDeclaration[] = [];
-
-					for (const n of block) {
-						const { declaration } = n;
-
-						if (declaration) {
-							if (
-								declaration.type === "VariableDeclaration" &&
-								declaration.declarations.length === 1
-							) {
-								const firstDecl = declaration.declarations[0];
-								if (
-									firstDecl &&
-									firstDecl.id.type === "Identifier"
-								) {
-									fixableNodes.push(n);
-									continue;
-								}
-							}
-
-							if (
-								(declaration.type === "FunctionDeclaration" ||
-									declaration.type === "ClassDeclaration") &&
-								declaration.id &&
-								declaration.id.type === "Identifier"
-							) {
-								fixableNodes.push(n);
-								continue;
-							}
-
-							continue;
-						}
-
-						if (n.specifiers.length === 1) {
-							fixableNodes.push(n);
-						}
-					}
+					const fixableNodes = block.filter(isFixableExport);
 
 					if (fixableNodes.length < minKeys) {
 						return null;
@@ -324,8 +334,8 @@ export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
 						.map((item) => generateExportText(item.node))
 						.join("\n");
 
-					const rangeStart = firstNode.range[0];
-					const rangeEnd = lastNode.range[1];
+					const [rangeStart] = firstNode.range;
+					const [, rangeEnd] = lastNode.range;
 
 					const fullText = sourceCode.getText();
 					const originalText = fullText.slice(rangeStart, rangeEnd);
@@ -342,32 +352,28 @@ export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
 				messageId,
 				node: firstNode
 			});
-		}
+		};
 
 		return {
 			"Program:exit"(node: TSESTree.Program) {
 				const { body } = node;
 				const block: TSESTree.ExportNamedDeclaration[] = [];
 
-				for (let i = 0; i < body.length; i++) {
-					const stmt = body[i];
-					if (!stmt) {
-						continue;
-					}
-
+				body.forEach((stmt) => {
 					if (
 						stmt.type === "ExportNamedDeclaration" &&
 						!stmt.source &&
 						getExportName(stmt) !== null
 					) {
 						block.push(stmt);
-					} else {
-						if (block.length > 0) {
-							processExportBlock(block);
-							block.length = 0;
-						}
+						return;
 					}
-				}
+
+					if (block.length > 0) {
+						processExportBlock(block);
+						block.length = 0;
+					}
+				});
 
 				if (block.length > 0) {
 					processExportBlock(block);

@@ -9,11 +9,12 @@ export const explicitObjectTypes: TSESLint.RuleModule<MessageIds, Options> = {
 		 * Returns true if the node is an object literal.
 		 * @param {ASTNode} node The AST node to check.
 		 */
-		function isObjectLiteral(
+		const isObjectLiteral = (
 			node: TSESTree.Node | null | undefined
-		): node is TSESTree.ObjectExpression {
-			return Boolean(node) && node.type === "ObjectExpression";
-		}
+		): node is TSESTree.ObjectExpression =>
+			node !== null &&
+			node !== undefined &&
+			node.type === "ObjectExpression";
 
 		return {
 			VariableDeclarator(node: TSESTree.VariableDeclarator) {
@@ -25,32 +26,33 @@ export const explicitObjectTypes: TSESLint.RuleModule<MessageIds, Options> = {
 					return;
 
 				// Check if the initializer is an object literal.
-				if (isObjectLiteral(node.init)) {
-					if (node.id.type === "Identifier") {
-						context.report({
-							messageId: "objectLiteralNeedsType",
-							node: node.id
-						});
-					}
+				if (
+					isObjectLiteral(node.init) &&
+					node.id.type === "Identifier"
+				) {
+					context.report({
+						messageId: "objectLiteralNeedsType",
+						node: node.id
+					});
 					return;
 				}
 
 				// Check if the initializer is an array literal containing any object literals.
-				if (node.init.type === "ArrayExpression") {
-					const hasObjectLiteral = node.init.elements.some(
-						(element) => {
-							if (!element || element.type === "SpreadElement")
-								return false;
-							return isObjectLiteral(element);
-						}
-					);
+				if (node.init.type !== "ArrayExpression") {
+					return;
+				}
 
-					if (hasObjectLiteral && node.id.type === "Identifier") {
-						context.report({
-							messageId: "arrayOfObjectLiteralsNeedsType",
-							node: node.id
-						});
-					}
+				const hasObjectLiteral = node.init.elements.some((element) => {
+					if (!element || element.type === "SpreadElement")
+						return false;
+					return isObjectLiteral(element);
+				});
+
+				if (hasObjectLiteral && node.id.type === "Identifier") {
+					context.report({
+						messageId: "arrayOfObjectLiteralsNeedsType",
+						node: node.id
+					});
 				}
 			}
 		};

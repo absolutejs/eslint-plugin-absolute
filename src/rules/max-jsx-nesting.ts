@@ -3,32 +3,26 @@ import { TSESLint, TSESTree } from "@typescript-eslint/utils";
 type Options = [number];
 type MessageIds = "tooDeeplyNested";
 
+const isJSXAncestor = (node: TSESTree.Node) =>
+	node.type === "JSXElement" || node.type === "JSXFragment";
+
 export const maxJSXNesting: TSESLint.RuleModule<MessageIds, Options> = {
 	create(context) {
-		const option = context.options[0];
+		const [option] = context.options;
 		const maxAllowed = typeof option === "number" ? option : 1;
 
 		/**
 		 * Calculates the JSX nesting level for the given node by traversing the node.parent chain.
-		 * The level is computed by counting the current node (level 1) plus each ancestor
-		 * that is a JSXElement or JSXFragment.
-		 * @param {ASTNode} node The JSX element node.
-		 * @returns {number} The nesting level.
 		 */
-		function getJSXNestingLevel(node: TSESTree.Node): number {
+		const getJSXNestingLevel = (node: TSESTree.Node) => {
 			let level = 1; // count the current node as level 1
 			let current: TSESTree.Node | null | undefined = node.parent;
 			while (current) {
-				if (
-					current.type === "JSXElement" ||
-					current.type === "JSXFragment"
-				) {
-					level++;
-				}
+				level += isJSXAncestor(current) ? 1 : 0;
 				current = current.parent;
 			}
 			return level;
-		}
+		};
 
 		return {
 			JSXElement(node: TSESTree.JSXElement) {

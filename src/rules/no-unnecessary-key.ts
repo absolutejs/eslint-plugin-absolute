@@ -4,11 +4,6 @@
  * on a JSX element when it is not part of a mapping, except when the element is
  * returned from a helper render function.
  *
- * The rule walks up the ancestors of the JSX element to check if one of them
- * is a CallExpression where the callee is a MemberExpression with the property "map".
- * If not—and if the JSX element is not directly returned from a helper function—
- * then a key prop is considered unnecessary and an error is reported.
- *
  * Note: This rule does not auto-fix.
  */
 
@@ -17,10 +12,25 @@ import { TSESLint, TSESTree } from "@typescript-eslint/utils";
 type Options = [];
 type MessageIds = "unnecessaryKey";
 
+const isMapCallExpression = (node: TSESTree.Node) => {
+	if (
+		node.type !== "CallExpression" ||
+		node.callee.type !== "MemberExpression"
+	) {
+		return false;
+	}
+
+	const { property } = node.callee;
+	return (
+		(property.type === "Identifier" && property.name === "map") ||
+		(property.type === "Literal" && property.value === "map")
+	);
+};
+
 export const noUnnecessaryKey: TSESLint.RuleModule<MessageIds, Options> = {
 	create(context) {
 		// Polyfill for context.getAncestors if it's not available.
-		function getAncestors(node: TSESTree.Node) {
+		const getAncestors = (node: TSESTree.Node) => {
 			const ancestors: TSESTree.Node[] = [];
 			let current: TSESTree.Node | null | undefined = node.parent;
 			while (current) {
@@ -28,64 +38,27 @@ export const noUnnecessaryKey: TSESLint.RuleModule<MessageIds, Options> = {
 				current = current.parent;
 			}
 			return ancestors;
-		}
+		};
 
 		/**
 		 * Checks if any of the ancestors is a CallExpression
-		 * representing an array mapping (i.e. its callee is a MemberExpression
-		 * whose property is an identifier or literal named "map").
-		 *
-		 * @param {ASTNode[]} ancestors - The array of ancestor nodes.
-		 * @returns {boolean} True if a mapping is detected; otherwise, false.
+		 * representing an array mapping.
 		 */
-		function isInsideMapCall(ancestors: TSESTree.Node[]) {
-			for (const node of ancestors) {
-				if (
-					node.type === "CallExpression" &&
-					node.callee.type === "MemberExpression"
-				) {
-					const { property } = node.callee;
-					if (
-						property.type === "Identifier" &&
-						property.name === "map"
-					) {
-						return true;
-					}
-					if (
-						property.type === "Literal" &&
-						property.value === "map"
-					) {
-						return true;
-					}
-				}
-			}
-			return false;
-		}
+		const isInsideMapCall = (ancestors: TSESTree.Node[]) =>
+			ancestors.some(isMapCallExpression);
 
 		/**
 		 * Checks whether the JSX element is being returned from a helper render
-		 * function. If so, we assume the key prop might be needed when the function
-		 * is eventually invoked from a mapping.
-		 *
-		 * @param {ASTNode[]} ancestors - The array of ancestor nodes.
-		 * @returns {boolean} True if the element is inside a helper render function.
+		 * function.
 		 */
-		function isReturnedFromFunction(ancestors: TSESTree.Node[]) {
-			for (const node of ancestors) {
-				if (node.type === "ReturnStatement") {
-					return true;
-				}
-			}
-			return false;
-		}
+		const isReturnedFromFunction = (ancestors: TSESTree.Node[]) =>
+			ancestors.some((ancestor) => ancestor.type === "ReturnStatement");
 
 		/**
 		 * Reports a JSX element if it has a key prop and is not rendered as part
 		 * of an inline mapping (and not simply returned from a render helper function).
-		 *
-		 * @param {ASTNode} node - The JSXOpeningElement node.
 		 */
-		function checkJSXOpeningElement(node: TSESTree.JSXOpeningElement) {
+		const checkJSXOpeningElement = (node: TSESTree.JSXOpeningElement) => {
 			// Find a key attribute.
 			const keyAttribute = node.attributes.find(
 				(attr) =>
@@ -98,13 +71,8 @@ export const noUnnecessaryKey: TSESLint.RuleModule<MessageIds, Options> = {
 				return;
 			}
 
-			// Retrieve ancestors (using context.getAncestors if available).
-			let ancestors: TSESTree.Node[];
-			if (typeof context.getAncestors === "function") {
-				ancestors = context.getAncestors();
-			} else {
-				ancestors = getAncestors(node);
-			}
+			// Retrieve ancestors.
+			const ancestors = getAncestors(node);
 
 			// If the element is (directly or indirectly) part of a map call, allow it.
 			if (isInsideMapCall(ancestors)) {
@@ -121,7 +89,7 @@ export const noUnnecessaryKey: TSESLint.RuleModule<MessageIds, Options> = {
 				messageId: "unnecessaryKey",
 				node: keyAttribute
 			});
-		}
+		};
 
 		return {
 			JSXOpeningElement: checkJSXOpeningElement

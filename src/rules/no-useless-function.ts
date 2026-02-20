@@ -5,7 +5,7 @@ type MessageIds = "uselessFunction";
 
 export const noUselessFunction: TSESLint.RuleModule<MessageIds, Options> = {
 	create(context) {
-		function isCallbackFunction(node: TSESTree.ArrowFunctionExpression) {
+		const isCallbackFunction = (node: TSESTree.ArrowFunctionExpression) => {
 			const { parent } = node;
 			if (!parent || parent.type !== "CallExpression") {
 				return false;
@@ -18,7 +18,7 @@ export const noUselessFunction: TSESLint.RuleModule<MessageIds, Options> = {
 			}
 
 			return false;
-		}
+		};
 
 		return {
 			ArrowFunctionExpression(node: TSESTree.ArrowFunctionExpression) {

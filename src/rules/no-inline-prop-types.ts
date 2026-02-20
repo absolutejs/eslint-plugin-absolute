@@ -9,24 +9,26 @@ export const noInlinePropTypes: TSESLint.RuleModule<MessageIds, Options> = {
 		 * Checks the node representing a parameter to determine if it is an ObjectPattern with an inline type literal.
 		 * @param {ASTNode} param The parameter node from the function declaration/expression.
 		 */
-		function checkParameter(param: TSESTree.Parameter) {
+		const checkParameter = (param: TSESTree.Parameter) => {
 			// Ensure we are dealing with a destructured object pattern with a type annotation.
 			if (
-				param.type === "ObjectPattern" &&
-				param.typeAnnotation &&
-				param.typeAnnotation.type === "TSTypeAnnotation"
+				param.type !== "ObjectPattern" ||
+				!param.typeAnnotation ||
+				param.typeAnnotation.type !== "TSTypeAnnotation"
 			) {
-				// The actual type annotation node (for example, { mode: string } yields a TSTypeLiteral).
-				const annotation = param.typeAnnotation.typeAnnotation;
-				// If the type is an inline object (TSTypeLiteral), we want to report it.
-				if (annotation.type === "TSTypeLiteral") {
-					context.report({
-						messageId: "noInlinePropTypes",
-						node: param
-					});
-				}
+				return;
 			}
-		}
+
+			// The actual type annotation node (for example, { mode: string } yields a TSTypeLiteral).
+			const annotation = param.typeAnnotation.typeAnnotation;
+			// If the type is an inline object (TSTypeLiteral), we want to report it.
+			if (annotation.type === "TSTypeLiteral") {
+				context.report({
+					messageId: "noInlinePropTypes",
+					node: param
+				});
+			}
+		};
 
 		return {
 			// Applies to FunctionDeclaration, ArrowFunctionExpression, and FunctionExpression nodes.
@@ -41,7 +43,7 @@ export const noInlinePropTypes: TSESLint.RuleModule<MessageIds, Options> = {
 					return;
 				}
 
-				const firstParam = node.params[0];
+				const [firstParam] = node.params;
 				if (!firstParam) {
 					return;
 				}

@@ -22,6 +22,10 @@ export default defineConfig([
 			}
 		},
 		rules: {
+			"@typescript-eslint/consistent-type-assertions": [
+				"error",
+				{ assertionStyle: "never" }
+			],
 			"@typescript-eslint/no-unnecessary-type-assertion": "error"
 		}
 	},

@@ -1,6 +1,6 @@
 {
 	"name": "eslint-plugin-absolute",
-	"version": "0.2.0",
+	"version": "0.2.1",
 	"description": "ESLint plugin for AbsoluteJS",
 	"repository": {
 		"type": "git",
@@ -16,7 +16,7 @@
 		"format": "absolutejs prettier --write",
 		"release": "bun run format && bun run build && bun publish",
 		"prune": "ts-prune --error",
-		"lint": "bun run build && absolutejs eslint",
+		"lint": "bun run build && bun run absolutejs eslint",
 		"typecheck": "bun run tsc --noEmit"
 	},
 	"devDependencies": {

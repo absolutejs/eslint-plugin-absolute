@@ -1,16 +1,18 @@
 import { TSESLint, TSESTree } from "@typescript-eslint/utils";
 
+const DEFAULT_MAX_KEYS = 3;
+
 type Options = [number | { maxKeys?: number }];
 type MessageIds = "extractStyle";
 
 export const inlineStyleLimit: TSESLint.RuleModule<MessageIds, Options> = {
 	create(context) {
-		const option = context.options[0];
+		const [option] = context.options;
 		// If a number is passed directly, use it as maxKeys; otherwise, extract maxKeys from the object (default to 3)
 		const maxKeys =
 			typeof option === "number"
 				? option
-				: (option && option.maxKeys) || 3;
+				: (option && option.maxKeys) || DEFAULT_MAX_KEYS;
 
 		return {
 			JSXAttribute(node: TSESTree.JSXAttribute) {
@@ -24,32 +26,34 @@ export const inlineStyleLimit: TSESLint.RuleModule<MessageIds, Options> = {
 
 				// Ensure the value is a JSX expression container with an object literal
 				if (
-					node.value &&
-					node.value.type === "JSXExpressionContainer" &&
-					node.value.expression &&
-					node.value.expression.type === "ObjectExpression"
+					!node.value ||
+					node.value.type !== "JSXExpressionContainer" ||
+					!node.value.expression ||
+					node.value.expression.type !== "ObjectExpression"
 				) {
-					const styleObject = node.value.expression;
+					return;
+				}
 
-					// Count only "Property" nodes (ignoring spread elements or others)
-					const keyCount = styleObject.properties.filter(
-						(prop): prop is TSESTree.Property =>
-							prop.type === "Property"
-					).length;
+				const styleObject = node.value.expression;
 
-					// Report only if the number of keys exceeds the allowed maximum
-					if (keyCount > maxKeys) {
-						context.report({
-							data: { max: maxKeys },
-							messageId: "extractStyle",
-							node
-						});
-					}
+				// Count only "Property" nodes (ignoring spread elements or others)
+				const keyCount = styleObject.properties.filter(
+					(prop): prop is TSESTree.Property =>
+						prop.type === "Property"
+				).length;
+
+				// Report only if the number of keys exceeds the allowed maximum
+				if (keyCount > maxKeys) {
+					context.report({
+						data: { max: maxKeys },
+						messageId: "extractStyle",
+						node
+					});
 				}
 			}
 		};
 	},
-	defaultOptions: [3],
+	defaultOptions: [DEFAULT_MAX_KEYS],
 	meta: {
 		docs: {
 			description:

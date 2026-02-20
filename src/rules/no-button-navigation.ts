@@ -14,17 +14,17 @@ export const noButtonNavigation: TSESLint.RuleModule<MessageIds, Options> = {
 	create(context) {
 		const handlerStack: HandlerState[] = [];
 
-		function getCurrentHandler(): HandlerState | null {
+		const getCurrentHandler = () => {
 			const state = handlerStack[handlerStack.length - 1];
 			if (!state) {
 				return null;
 			}
 			return state;
-		}
+		};
 
-		function isOnClickButtonHandler(
+		const isOnClickButtonHandler = (
 			node: TSESTree.ArrowFunctionExpression | TSESTree.FunctionExpression
-		): TSESTree.JSXAttribute | null {
+		) => {
 			const { parent } = node;
 			if (!parent || parent.type !== "JSXExpressionContainer") {
 				return null;
@@ -51,8 +51,7 @@ export const noButtonNavigation: TSESLint.RuleModule<MessageIds, Options> = {
 			) {
 				return null;
 			}
-			const openingElement = openingElementCandidate;
-			const tagNameNode = openingElement.name;
+			const tagNameNode = openingElementCandidate.name;
 			if (
 				tagNameNode.type !== "JSXIdentifier" ||
 				tagNameNode.name !== "button"
@@ -60,47 +59,60 @@ export const noButtonNavigation: TSESLint.RuleModule<MessageIds, Options> = {
 				return null;
 			}
 			return attr;
-		}
+		};
 
-		function isWindowLocationMember(
-			member: TSESTree.MemberExpression
-		): boolean {
+		const isWindowLocationMember = (member: TSESTree.MemberExpression) => {
 			const { object } = member;
 			if (object.type !== "MemberExpression") {
 				return false;
 			}
 			const outerObject = object.object;
 			const outerProperty = object.property;
-			if (
+			return (
 				outerObject.type === "Identifier" &&
 				outerObject.name === "window" &&
 				outerProperty.type === "Identifier" &&
 				outerProperty.name === "location"
-			) {
-				return true;
-			}
-			return false;
-		}
+			);
+		};
 
-		function isWindowHistoryMember(
-			member: TSESTree.MemberExpression
-		): boolean {
+		const isWindowHistoryMember = (member: TSESTree.MemberExpression) => {
 			const { object } = member;
 			if (object.type !== "MemberExpression") {
 				return false;
 			}
 			const outerObject = object.object;
 			const outerProperty = object.property;
-			if (
+			return (
 				outerObject.type === "Identifier" &&
 				outerObject.name === "window" &&
 				outerProperty.type === "Identifier" &&
 				outerProperty.name === "history"
-			) {
-				return true;
+			);
+		};
+
+		const reportHandlerExit = (state: HandlerState) => {
+			const { reason, sawReplaceCall, sawAllowedLocationRead } = state;
+
+			if (reason) {
+				context.report({
+					data: { reason },
+					messageId: "noButtonNavigation",
+					node: state.attribute
+				});
+				return;
 			}
-			return false;
-		}
+
+			if (sawReplaceCall && !sawAllowedLocationRead) {
+				context.report({
+					data: {
+						reason: "history.replaceState/pushState without reading window.location"
+					},
+					messageId: "noButtonNavigation",
+					node: state.attribute
+				});
+			}
+		};
 
 		return {
 			ArrowFunctionExpression(node: TSESTree.ArrowFunctionExpression) {
@@ -127,28 +139,7 @@ export const noButtonNavigation: TSESLint.RuleModule<MessageIds, Options> = {
 					return;
 				}
 
-				const { reason } = state;
-				const { sawReplaceCall } = state;
-				const { sawAllowedLocationRead } = state;
-
-				if (reason) {
-					context.report({
-						data: { reason },
-						messageId: "noButtonNavigation",
-						node: state.attribute
-					});
-					return;
-				}
-
-				if (sawReplaceCall && !sawAllowedLocationRead) {
-					context.report({
-						data: {
-							reason: "history.replaceState/pushState without reading window.location"
-						},
-						messageId: "noButtonNavigation",
-						node: state.attribute
-					});
-				}
+				reportHandlerExit(state);
 			},
 			AssignmentExpression(node: TSESTree.AssignmentExpression) {
 				const state = getCurrentHandler();
@@ -165,20 +156,16 @@ export const noButtonNavigation: TSESLint.RuleModule<MessageIds, Options> = {
 					left.object.type === "Identifier" &&
 					left.object.name === "window" &&
 					left.property.type === "Identifier" &&
-					left.property.name === "location"
+					left.property.name === "location" &&
+					!state.reason
 				) {
-					if (!state.reason) {
-						state.reason = "assignment to window.location";
-					}
+					state.reason = "assignment to window.location";
 					return;
 				}
 
 				// window.location.href = ... OR window.location.pathname = ...
-				if (isWindowLocationMember(left)) {
-					if (!state.reason) {
-						state.reason =
-							"assignment to window.location sub-property";
-					}
+				if (isWindowLocationMember(left) && !state.reason) {
+					state.reason = "assignment to window.location sub-property";
 				}
 			},
 			CallExpression(node: TSESTree.CallExpression) {
@@ -196,11 +183,10 @@ export const noButtonNavigation: TSESLint.RuleModule<MessageIds, Options> = {
 				if (
 					isWindowLocationMember(callee) &&
 					callee.property.type === "Identifier" &&
-					callee.property.name === "replace"
+					callee.property.name === "replace" &&
+					!state.reason
 				) {
-					if (!state.reason) {
-						state.reason = "window.location.replace";
-					}
+					state.reason = "window.location.replace";
 					return;
 				}
 
@@ -236,28 +222,7 @@ export const noButtonNavigation: TSESLint.RuleModule<MessageIds, Options> = {
 					return;
 				}
 
-				const { reason } = state;
-				const { sawReplaceCall } = state;
-				const { sawAllowedLocationRead } = state;
-
-				if (reason) {
-					context.report({
-						data: { reason },
-						messageId: "noButtonNavigation",
-						node: state.attribute
-					});
-					return;
-				}
-
-				if (sawReplaceCall && !sawAllowedLocationRead) {
-					context.report({
-						data: {
-							reason: "history.replaceState/pushState without reading window.location"
-						},
-						messageId: "noButtonNavigation",
-						node: state.attribute
-					});
-				}
+				reportHandlerExit(state);
 			},
 			MemberExpression(node: TSESTree.MemberExpression) {
 				const state = getCurrentHandler();
@@ -270,11 +235,10 @@ export const noButtonNavigation: TSESLint.RuleModule<MessageIds, Options> = {
 					node.object.type === "Identifier" &&
 					node.object.name === "window" &&
 					node.property.type === "Identifier" &&
-					node.property.name === "open"
+					node.property.name === "open" &&
+					!state.reason
 				) {
-					if (!state.reason) {
-						state.reason = "window.open";
-					}
+					state.reason = "window.open";
 				}
 
 				// 5) Reading window.location.search, .pathname, or .hash

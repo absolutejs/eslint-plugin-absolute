@@ -9,40 +9,35 @@ import { TSESLint, TSESTree } from "@typescript-eslint/utils";
 type Options = [];
 type MessageIds = "noMultiStyleObjects";
 
+const getPropertyName = (prop: TSESTree.Property) => {
+	const { key } = prop;
+	if (key.type === "Identifier") {
+		return key.name;
+	}
+	if (key.type === "Literal" && typeof key.value === "string") {
+		return key.value;
+	}
+	return null;
+};
+
 export const noMultiStyleObjects: TSESLint.RuleModule<MessageIds, Options> = {
 	create(context) {
 		/**
 		 * Checks if the given ObjectExpression node contains multiple properties
 		 * that look like CSS style objects (i.e. property keys ending with "Style").
 		 */
-		function checkObjectExpression(node: TSESTree.ObjectExpression) {
+		const checkObjectExpression = (node: TSESTree.ObjectExpression) => {
 			if (!node.properties.length) {
 				return;
 			}
 
-			const cssStyleProperties: TSESTree.Property[] = [];
-
-			for (const prop of node.properties) {
+			const cssStyleProperties = node.properties.filter((prop) => {
 				if (prop.type !== "Property") {
-					continue;
+					return false;
 				}
-
-				const { key } = prop;
-				let name: string | null = null;
-
-				if (key.type === "Identifier") {
-					name = key.name;
-				} else if (
-					key.type === "Literal" &&
-					typeof key.value === "string"
-				) {
-					name = key.value;
-				}
-
-				if (name && name.endsWith("Style")) {
-					cssStyleProperties.push(prop);
-				}
-			}
+				const name = getPropertyName(prop);
+				return name !== null && name.endsWith("Style");
+			});
 
 			if (cssStyleProperties.length > 1) {
 				context.report({
@@ -50,7 +45,7 @@ export const noMultiStyleObjects: TSESLint.RuleModule<MessageIds, Options> = {
 					node
 				});
 			}
-		}
+		};
 
 		return {
 			// Check default exports that are object literals.

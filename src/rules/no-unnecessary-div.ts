@@ -5,29 +5,23 @@ type MessageIds = "unnecessaryDivWrapper";
 
 export const noUnnecessaryDiv: TSESLint.RuleModule<MessageIds, Options> = {
 	create(context) {
-		function isDivElement(node: TSESTree.JSXElement) {
+		const isDivElement = (node: TSESTree.JSXElement) => {
 			const nameNode = node.openingElement.name;
 			return (
 				nameNode.type === AST_NODE_TYPES.JSXIdentifier &&
 				nameNode.name === "div"
 			);
-		}
+		};
 
-		function getMeaningfulChildren(
-			node: TSESTree.JSXElement
-		): TSESTree.JSXChild[] {
-			const result: TSESTree.JSXChild[] = [];
-			for (const child of node.children) {
-				if (child.type === AST_NODE_TYPES.JSXText) {
-					if (child.value.trim() !== "") {
-						result.push(child);
-					}
-				} else {
-					result.push(child);
-				}
+		const isMeaningfulChild = (child: TSESTree.JSXChild) => {
+			if (child.type === AST_NODE_TYPES.JSXText) {
+				return child.value.trim() !== "";
 			}
-			return result;
-		}
+			return true;
+		};
+
+		const getMeaningfulChildren = (node: TSESTree.JSXElement) =>
+			node.children.filter(isMeaningfulChild);
 
 		return {
 			JSXElement(node: TSESTree.JSXElement) {
@@ -41,7 +35,7 @@ export const noUnnecessaryDiv: TSESLint.RuleModule<MessageIds, Options> = {
 					return;
 				}
 
-				const onlyChild = meaningfulChildren[0];
+				const [onlyChild] = meaningfulChildren;
 				if (!onlyChild) {
 					return;
 				}

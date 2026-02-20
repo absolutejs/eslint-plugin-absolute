@@ -5,12 +5,12 @@ type MessageIds = "tooDeep";
 
 export const maxDepthExtended: TSESLint.RuleModule<MessageIds, Options> = {
 	create(context) {
-		const option = context.options[0];
+		const [option] = context.options;
 		const maxDepth = typeof option === "number" ? option : 1;
 		const functionStack: number[] = [];
 
 		// Helper to get ancestors of a node by walking its parent chain.
-		function getAncestors(node: TSESTree.Node) {
+		const getAncestors = (node: TSESTree.Node) => {
 			const ancestors: TSESTree.Node[] = [];
 			let current: TSESTree.Node | null | undefined = node.parent;
 			while (current) {
@@ -18,14 +18,14 @@ export const maxDepthExtended: TSESLint.RuleModule<MessageIds, Options> = {
 				current = current.parent;
 			}
 			return ancestors;
-		}
+		};
 
 		// Check if a block only contains a single early exit: return or throw.
-		function isEarlyExitBlock(node: TSESTree.BlockStatement) {
+		const isEarlyExitBlock = (node: TSESTree.BlockStatement) => {
 			if (node.body.length !== 1) {
 				return false;
 			}
-			const first = node.body[0];
+			const [first] = node.body;
 			if (!first) {
 				return false;
 			}
@@ -33,9 +33,21 @@ export const maxDepthExtended: TSESLint.RuleModule<MessageIds, Options> = {
 				first.type === "ReturnStatement" ||
 				first.type === "ThrowStatement"
 			);
-		}
+		};
 
-		function incrementCurrentDepth(): number | null {
+		const isFunctionBody = (node: TSESTree.BlockStatement) => {
+			const ancestors = getAncestors(node);
+			const [parent] = ancestors;
+			return (
+				parent &&
+				(parent.type === "FunctionDeclaration" ||
+					parent.type === "FunctionExpression" ||
+					parent.type === "ArrowFunctionExpression") &&
+				node === parent.body
+			);
+		};
+
+		const incrementCurrentDepth = () => {
 			if (functionStack.length === 0) {
 				return null;
 			}
@@ -47,9 +59,9 @@ export const maxDepthExtended: TSESLint.RuleModule<MessageIds, Options> = {
 			const nextDepth = currentDepth + 1;
 			functionStack[index] = nextDepth;
 			return nextDepth;
-		}
+		};
 
-		function decrementCurrentDepth(): void {
+		const decrementCurrentDepth = () => {
 			if (functionStack.length === 0) {
 				return;
 			}
@@ -59,10 +71,10 @@ export const maxDepthExtended: TSESLint.RuleModule<MessageIds, Options> = {
 				return;
 			}
 			functionStack[index] = currentDepth - 1;
-		}
+		};
 
 		// Report if the current depth exceeds the allowed maximum.
-		function checkDepth(node: TSESTree.BlockStatement, depth: number) {
+		const checkDepth = (node: TSESTree.BlockStatement, depth: number) => {
 			if (depth > maxDepth) {
 				context.report({
 					data: { depth, maxDepth },
@@ -70,7 +82,7 @@ export const maxDepthExtended: TSESLint.RuleModule<MessageIds, Options> = {
 					node
 				});
 			}
-		}
+		};
 
 		return {
 			ArrowFunctionExpression() {
@@ -80,17 +92,8 @@ export const maxDepthExtended: TSESLint.RuleModule<MessageIds, Options> = {
 				functionStack.pop();
 			},
 			BlockStatement(node: TSESTree.BlockStatement) {
-				const ancestors = getAncestors(node);
-				const parent = ancestors.length > 0 ? ancestors[0] : undefined;
-
 				// Do not count if this block is the body of a function.
-				if (
-					parent &&
-					(parent.type === "FunctionDeclaration" ||
-						parent.type === "FunctionExpression" ||
-						parent.type === "ArrowFunctionExpression") &&
-					node === parent.body
-				) {
+				if (isFunctionBody(node)) {
 					return;
 				}
 
@@ -105,16 +108,7 @@ export const maxDepthExtended: TSESLint.RuleModule<MessageIds, Options> = {
 				}
 			},
 			"BlockStatement:exit"(node: TSESTree.BlockStatement) {
-				const ancestors = getAncestors(node);
-				const parent = ancestors.length > 0 ? ancestors[0] : undefined;
-
-				if (
-					parent &&
-					(parent.type === "FunctionDeclaration" ||
-						parent.type === "FunctionExpression" ||
-						parent.type === "ArrowFunctionExpression") &&
-					node === parent.body
-				) {
+				if (isFunctionBody(node)) {
 					return;
 				}
 

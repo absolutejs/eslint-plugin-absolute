@@ -10,22 +10,18 @@ type AnyFunctionNode =
 
 export const noExplicitReturnTypes: TSESLint.RuleModule<MessageIds, Options> = {
 	create(context) {
-		function hasSingleObjectReturn(body: TSESTree.BlockStatement) {
-			let returnCount = 0;
-			let returnedObject: TSESTree.ObjectExpression | null = null;
+		const hasSingleObjectReturn = (body: TSESTree.BlockStatement) => {
+			const returnStatements = body.body.filter(
+				(stmt) => stmt.type === "ReturnStatement"
+			);
 
-			for (const stmt of body.body) {
-				if (stmt.type === "ReturnStatement") {
-					returnCount++;
-					const arg = stmt.argument;
-					if (arg && arg.type === "ObjectExpression") {
-						returnedObject = arg;
-					}
-				}
+			if (returnStatements.length !== 1) {
+				return false;
 			}
 
-			return returnCount === 1 && returnedObject !== null;
-		}
+			const [returnStmt] = returnStatements;
+			return returnStmt?.argument?.type === "ObjectExpression";
+		};
 
 		return {
 			"FunctionDeclaration, FunctionExpression, ArrowFunctionExpression"(
@@ -55,10 +51,12 @@ export const noExplicitReturnTypes: TSESLint.RuleModule<MessageIds, Options> = {
 				}
 
 				// Allow if the function has a block body with a single return statement that returns an object literal.
-				if (node.body && node.body.type === "BlockStatement") {
-					if (hasSingleObjectReturn(node.body)) {
-						return;
-					}
+				if (
+					node.body &&
+					node.body.type === "BlockStatement" &&
+					hasSingleObjectReturn(node.body)
+				) {
+					return;
 				}
 
 				// Otherwise, report an error.
