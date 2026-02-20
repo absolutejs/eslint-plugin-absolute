@@ -10,6 +10,8 @@
 		"strict": true,
 		"target": "ESNext",
 		"noUncheckedIndexedAccess": true,
+		"incremental": true,
+		"tsBuildInfoFile": ".absolutejs/tsconfig.tsbuildinfo",
 		"types": ["bun-types"]
 	}
 }
