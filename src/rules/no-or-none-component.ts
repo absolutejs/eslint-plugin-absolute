@@ -4,25 +4,10 @@ type Options = [];
 type MessageIds = "useLogicalAnd";
 
 export const noOrNoneComponent: TSESLint.RuleModule<MessageIds, Options> = {
-	meta: {
-		type: "suggestion",
-		docs: {
-			description:
-				"Prefer using logical && operator over ternary with null/undefined for conditional JSX rendering."
-		},
-		schema: [],
-		messages: {
-			useLogicalAnd:
-				"Prefer using the logical '&&' operator instead of a ternary with null/undefined for conditional rendering."
-		}
-	},
-
-	defaultOptions: [],
-
 	create(context) {
 		return {
 			ConditionalExpression(node: TSESTree.ConditionalExpression) {
-				const alternate = node.alternate;
+				const { alternate } = node;
 
 				// Check if alternate is explicitly null or undefined
 				const isNullAlternate =
@@ -40,7 +25,7 @@ export const noOrNoneComponent: TSESLint.RuleModule<MessageIds, Options> = {
 				}
 
 				// Check if the node is within a JSX expression container.
-				const parent = node.parent;
+				const { parent } = node;
 				if (!parent || parent.type !== "JSXExpressionContainer") {
 					return;
 				}
@@ -53,12 +38,25 @@ export const noOrNoneComponent: TSESLint.RuleModule<MessageIds, Options> = {
 					containerParent.type !== "JSXAttribute"
 				) {
 					context.report({
-						node,
-						messageId: "useLogicalAnd"
+						messageId: "useLogicalAnd",
+						node
 					});
 				}
 			}
 		};
+	},
+	defaultOptions: [],
+	meta: {
+		docs: {
+			description:
+				"Prefer using logical && operator over ternary with null/undefined for conditional JSX rendering."
+		},
+		messages: {
+			useLogicalAnd:
+				"Prefer using the logical '&&' operator instead of a ternary with null/undefined for conditional rendering."
+		},
+		schema: [],
+		type: "suggestion"
 	}
 };
 

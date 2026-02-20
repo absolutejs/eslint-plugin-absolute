@@ -4,21 +4,6 @@ type Options = [];
 type MessageIds = "noInlinePropTypes";
 
 export const noInlinePropTypes: TSESLint.RuleModule<MessageIds, Options> = {
-	meta: {
-		type: "suggestion",
-		docs: {
-			description:
-				"Enforce that component prop types are not defined inline (using an object literal) but rather use a named type or interface."
-		},
-		schema: [],
-		messages: {
-			noInlinePropTypes:
-				"Inline prop type definitions are not allowed. Use a named type alias or interface instead of an inline object type."
-		}
-	},
-
-	defaultOptions: [],
-
 	create(context) {
 		/**
 		 * Checks the node representing a parameter to determine if it is an ObjectPattern with an inline type literal.
@@ -36,8 +21,8 @@ export const noInlinePropTypes: TSESLint.RuleModule<MessageIds, Options> = {
 				// If the type is an inline object (TSTypeLiteral), we want to report it.
 				if (annotation.type === "TSTypeLiteral") {
 					context.report({
-						node: param,
-						messageId: "noInlinePropTypes"
+						messageId: "noInlinePropTypes",
+						node: param
 					});
 				}
 			}
@@ -64,5 +49,18 @@ export const noInlinePropTypes: TSESLint.RuleModule<MessageIds, Options> = {
 				checkParameter(firstParam);
 			}
 		};
+	},
+	defaultOptions: [],
+	meta: {
+		docs: {
+			description:
+				"Enforce that component prop types are not defined inline (using an object literal) but rather use a named type or interface."
+		},
+		messages: {
+			noInlinePropTypes:
+				"Inline prop type definitions are not allowed. Use a named type alias or interface instead of an inline object type."
+		},
+		schema: [],
+		type: "suggestion"
 	}
 };

@@ -9,21 +9,6 @@ type AnyFunctionNode =
 	| TSESTree.ArrowFunctionExpression;
 
 export const noExplicitReturnTypes: TSESLint.RuleModule<MessageIds, Options> = {
-	meta: {
-		type: "suggestion",
-		docs: {
-			description:
-				"Disallow explicit return type annotations on functions, except when using type predicates for type guards or inline object literal returns (e.g., style objects)."
-		},
-		schema: [],
-		messages: {
-			noExplicitReturnType:
-				"Explicit return types are disallowed; rely on TypeScript's inference instead."
-		}
-	},
-
-	defaultOptions: [],
-
 	create(context) {
 		function hasSingleObjectReturn(body: TSESTree.BlockStatement) {
 			let returnCount = 0;
@@ -46,13 +31,13 @@ export const noExplicitReturnTypes: TSESLint.RuleModule<MessageIds, Options> = {
 			"FunctionDeclaration, FunctionExpression, ArrowFunctionExpression"(
 				node: AnyFunctionNode
 			) {
-				const returnType = node.returnType;
+				const { returnType } = node;
 				if (!returnType) {
 					return;
 				}
 
 				// Allow type predicate annotations for type guards.
-				const typeAnnotation = returnType.typeAnnotation;
+				const { typeAnnotation } = returnType;
 				if (
 					typeAnnotation &&
 					typeAnnotation.type === "TSTypePredicate"
@@ -78,10 +63,23 @@ export const noExplicitReturnTypes: TSESLint.RuleModule<MessageIds, Options> = {
 
 				// Otherwise, report an error.
 				context.report({
-					node: returnType,
-					messageId: "noExplicitReturnType"
+					messageId: "noExplicitReturnType",
+					node: returnType
 				});
 			}
 		};
+	},
+	defaultOptions: [],
+	meta: {
+		docs: {
+			description:
+				"Disallow explicit return type annotations on functions, except when using type predicates for type guards or inline object literal returns (e.g., style objects)."
+		},
+		messages: {
+			noExplicitReturnType:
+				"Explicit return types are disallowed; rely on TypeScript's inference instead."
+		},
+		schema: [],
+		type: "suggestion"
 	}
 };

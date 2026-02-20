@@ -11,21 +11,6 @@ type HandlerState = {
 };
 
 export const noButtonNavigation: TSESLint.RuleModule<MessageIds, Options> = {
-	meta: {
-		type: "suggestion",
-		docs: {
-			description:
-				"Enforce using anchor tags for navigation instead of buttons whose onClick handlers change the path. Allow only query/hash updates via window.location.search or history.replaceState(window.location.pathname + …)."
-		},
-		schema: [],
-		messages: {
-			noButtonNavigation:
-				"Use an anchor tag for navigation instead of a button whose onClick handler changes the path. Detected: {{reason}}. Only query/hash updates (reading window.location.search, .pathname, or .hash) are allowed."
-		}
-	},
-
-	defaultOptions: [],
-
 	create(context) {
 		const handlerStack: HandlerState[] = [];
 
@@ -40,7 +25,7 @@ export const noButtonNavigation: TSESLint.RuleModule<MessageIds, Options> = {
 		function isOnClickButtonHandler(
 			node: TSESTree.ArrowFunctionExpression | TSESTree.FunctionExpression
 		): TSESTree.JSXAttribute | null {
-			const parent = node.parent;
+			const { parent } = node;
 			if (!parent || parent.type !== "JSXExpressionContainer") {
 				return null;
 			}
@@ -80,7 +65,7 @@ export const noButtonNavigation: TSESLint.RuleModule<MessageIds, Options> = {
 		function isWindowLocationMember(
 			member: TSESTree.MemberExpression
 		): boolean {
-			const object = member.object;
+			const { object } = member;
 			if (object.type !== "MemberExpression") {
 				return false;
 			}
@@ -100,7 +85,7 @@ export const noButtonNavigation: TSESLint.RuleModule<MessageIds, Options> = {
 		function isWindowHistoryMember(
 			member: TSESTree.MemberExpression
 		): boolean {
-			const object = member.object;
+			const { object } = member;
 			if (object.type !== "MemberExpression") {
 				return false;
 			}
@@ -126,8 +111,8 @@ export const noButtonNavigation: TSESLint.RuleModule<MessageIds, Options> = {
 				handlerStack.push({
 					attribute: attr,
 					reason: null,
-					sawReplaceCall: false,
-					sawAllowedLocationRead: false
+					sawAllowedLocationRead: false,
+					sawReplaceCall: false
 				});
 			},
 			"ArrowFunctionExpression:exit"(
@@ -142,30 +127,93 @@ export const noButtonNavigation: TSESLint.RuleModule<MessageIds, Options> = {
 					return;
 				}
 
-				const reason = state.reason;
-				const sawReplaceCall = state.sawReplaceCall;
-				const sawAllowedLocationRead = state.sawAllowedLocationRead;
+				const { reason } = state;
+				const { sawReplaceCall } = state;
+				const { sawAllowedLocationRead } = state;
 
 				if (reason) {
 					context.report({
-						node: state.attribute,
+						data: { reason },
 						messageId: "noButtonNavigation",
-						data: { reason }
+						node: state.attribute
 					});
 					return;
 				}
 
 				if (sawReplaceCall && !sawAllowedLocationRead) {
 					context.report({
-						node: state.attribute,
-						messageId: "noButtonNavigation",
 						data: {
 							reason: "history.replaceState/pushState without reading window.location"
-						}
+						},
+						messageId: "noButtonNavigation",
+						node: state.attribute
 					});
 				}
 			},
+			AssignmentExpression(node: TSESTree.AssignmentExpression) {
+				const state = getCurrentHandler();
+				if (!state) {
+					return;
+				}
+				if (node.left.type !== "MemberExpression") {
+					return;
+				}
+				const { left } = node;
 
+				// window.location = ...
+				if (
+					left.object.type === "Identifier" &&
+					left.object.name === "window" &&
+					left.property.type === "Identifier" &&
+					left.property.name === "location"
+				) {
+					if (!state.reason) {
+						state.reason = "assignment to window.location";
+					}
+					return;
+				}
+
+				// window.location.href = ... OR window.location.pathname = ...
+				if (isWindowLocationMember(left)) {
+					if (!state.reason) {
+						state.reason =
+							"assignment to window.location sub-property";
+					}
+				}
+			},
+			CallExpression(node: TSESTree.CallExpression) {
+				const state = getCurrentHandler();
+				if (!state) {
+					return;
+				}
+				const { callee } = node;
+
+				if (callee.type !== "MemberExpression") {
+					return;
+				}
+
+				// 3) window.location.replace(...)
+				if (
+					isWindowLocationMember(callee) &&
+					callee.property.type === "Identifier" &&
+					callee.property.name === "replace"
+				) {
+					if (!state.reason) {
+						state.reason = "window.location.replace";
+					}
+					return;
+				}
+
+				// 4) window.history.pushState(...) or replaceState(...)
+				if (
+					isWindowHistoryMember(callee) &&
+					callee.property.type === "Identifier" &&
+					(callee.property.name === "pushState" ||
+						callee.property.name === "replaceState")
+				) {
+					state.sawReplaceCall = true;
+				}
+			},
 			FunctionExpression(node: TSESTree.FunctionExpression) {
 				const attr = isOnClickButtonHandler(node);
 				if (!attr) {
@@ -174,8 +222,8 @@ export const noButtonNavigation: TSESLint.RuleModule<MessageIds, Options> = {
 				handlerStack.push({
 					attribute: attr,
 					reason: null,
-					sawReplaceCall: false,
-					sawAllowedLocationRead: false
+					sawAllowedLocationRead: false,
+					sawReplaceCall: false
 				});
 			},
 			"FunctionExpression:exit"(node: TSESTree.FunctionExpression) {
@@ -188,30 +236,29 @@ export const noButtonNavigation: TSESLint.RuleModule<MessageIds, Options> = {
 					return;
 				}
 
-				const reason = state.reason;
-				const sawReplaceCall = state.sawReplaceCall;
-				const sawAllowedLocationRead = state.sawAllowedLocationRead;
+				const { reason } = state;
+				const { sawReplaceCall } = state;
+				const { sawAllowedLocationRead } = state;
 
 				if (reason) {
 					context.report({
-						node: state.attribute,
+						data: { reason },
 						messageId: "noButtonNavigation",
-						data: { reason }
+						node: state.attribute
 					});
 					return;
 				}
 
 				if (sawReplaceCall && !sawAllowedLocationRead) {
 					context.report({
-						node: state.attribute,
-						messageId: "noButtonNavigation",
 						data: {
 							reason: "history.replaceState/pushState without reading window.location"
-						}
+						},
+						messageId: "noButtonNavigation",
+						node: state.attribute
 					});
 				}
 			},
-
 			MemberExpression(node: TSESTree.MemberExpression) {
 				const state = getCurrentHandler();
 				if (!state) {
@@ -240,73 +287,20 @@ export const noButtonNavigation: TSESLint.RuleModule<MessageIds, Options> = {
 				) {
 					state.sawAllowedLocationRead = true;
 				}
-			},
-
-			AssignmentExpression(node: TSESTree.AssignmentExpression) {
-				const state = getCurrentHandler();
-				if (!state) {
-					return;
-				}
-				if (node.left.type !== "MemberExpression") {
-					return;
-				}
-				const left = node.left;
-
-				// window.location = ...
-				if (
-					left.object.type === "Identifier" &&
-					left.object.name === "window" &&
-					left.property.type === "Identifier" &&
-					left.property.name === "location"
-				) {
-					if (!state.reason) {
-						state.reason = "assignment to window.location";
-					}
-					return;
-				}
-
-				// window.location.href = ... OR window.location.pathname = ...
-				if (isWindowLocationMember(left)) {
-					if (!state.reason) {
-						state.reason =
-							"assignment to window.location sub-property";
-					}
-				}
-			},
-
-			CallExpression(node: TSESTree.CallExpression) {
-				const state = getCurrentHandler();
-				if (!state) {
-					return;
-				}
-				const callee = node.callee;
-
-				if (callee.type !== "MemberExpression") {
-					return;
-				}
-
-				// 3) window.location.replace(...)
-				if (
-					isWindowLocationMember(callee) &&
-					callee.property.type === "Identifier" &&
-					callee.property.name === "replace"
-				) {
-					if (!state.reason) {
-						state.reason = "window.location.replace";
-					}
-					return;
-				}
-
-				// 4) window.history.pushState(...) or replaceState(...)
-				if (
-					isWindowHistoryMember(callee) &&
-					callee.property.type === "Identifier" &&
-					(callee.property.name === "pushState" ||
-						callee.property.name === "replaceState")
-				) {
-					state.sawReplaceCall = true;
-				}
 			}
 		};
+	},
+	defaultOptions: [],
+	meta: {
+		docs: {
+			description:
+				"Enforce using anchor tags for navigation instead of buttons whose onClick handlers change the path. Allow only query/hash updates via window.location.search or history.replaceState(window.location.pathname + …)."
+		},
+		messages: {
+			noButtonNavigation:
+				"Use an anchor tag for navigation instead of a button whose onClick handler changes the path. Detected: {{reason}}. Only query/hash updates (reading window.location.search, .pathname, or .hash) are allowed."
+		},
+		schema: [],
+		type: "suggestion"
 	}
 };

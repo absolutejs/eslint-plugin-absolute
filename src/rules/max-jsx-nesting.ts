@@ -4,27 +4,6 @@ type Options = [number];
 type MessageIds = "tooDeeplyNested";
 
 export const maxJSXNesting: TSESLint.RuleModule<MessageIds, Options> = {
-	meta: {
-		type: "suggestion",
-		docs: {
-			description:
-				"Warn when JSX elements are nested too deeply, suggesting refactoring into a separate component."
-		},
-		// The rule accepts a single numeric option (minimum 1)
-		schema: [
-			{
-				type: "number",
-				minimum: 1
-			}
-		],
-		messages: {
-			tooDeeplyNested:
-				"JSX element is nested too deeply ({{level}} levels, allowed is {{maxAllowed}} levels). Consider refactoring into a separate component."
-		}
-	},
-
-	defaultOptions: [1],
-
 	create(context) {
 		const option = context.options[0];
 		const maxAllowed = typeof option === "number" ? option : 1;
@@ -56,12 +35,31 @@ export const maxJSXNesting: TSESLint.RuleModule<MessageIds, Options> = {
 				const level = getJSXNestingLevel(node);
 				if (level > maxAllowed) {
 					context.report({
-						node,
+						data: { level, maxAllowed },
 						messageId: "tooDeeplyNested",
-						data: { level, maxAllowed }
+						node
 					});
 				}
 			}
 		};
+	},
+	defaultOptions: [1],
+	meta: {
+		docs: {
+			description:
+				"Warn when JSX elements are nested too deeply, suggesting refactoring into a separate component."
+		},
+		messages: {
+			tooDeeplyNested:
+				"JSX element is nested too deeply ({{level}} levels, allowed is {{maxAllowed}} levels). Consider refactoring into a separate component."
+		},
+		// The rule accepts a single numeric option (minimum 1)
+		schema: [
+			{
+				minimum: 1,
+				type: "number"
+			}
+		],
+		type: "suggestion"
 	}
 };

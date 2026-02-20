@@ -35,49 +35,8 @@ type KeyInfo = {
 };
 
 export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
-	meta: {
-		type: "suggestion",
-		docs: {
-			description:
-				"enforce sorted keys in object literals with auto-fix (limited to simple cases, preserving comments)"
-		},
-		fixable: "code",
-		// The schema supports the same options as the built-in sort-keys rule plus:
-		//   variablesBeforeFunctions: boolean (when true, non-function properties come before function properties)
-		schema: [
-			{
-				type: "object",
-				properties: {
-					order: {
-						type: "string",
-						enum: ["asc", "desc"]
-					},
-					caseSensitive: {
-						type: "boolean"
-					},
-					natural: {
-						type: "boolean"
-					},
-					minKeys: {
-						type: "integer",
-						minimum: 2
-					},
-					variablesBeforeFunctions: {
-						type: "boolean"
-					}
-				},
-				additionalProperties: false
-			}
-		],
-		messages: {
-			unsorted: "Object keys are not sorted."
-		}
-	},
-
-	defaultOptions: [{}],
-
 	create(context) {
-		const sourceCode = context.sourceCode;
+		const { sourceCode } = context;
 		const option = context.options[0];
 
 		const order: "asc" | "desc" =
@@ -127,9 +86,9 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 		 * Determines if a property is a function property.
 		 */
 		function isFunctionProperty(prop: TSESTree.Property) {
-			const value = prop.value;
+			const { value } = prop;
 			return (
-				!!value &&
+				Boolean(value) &&
 				(value.type === "FunctionExpression" ||
 					value.type === "ArrowFunctionExpression" ||
 					prop.method === true)
@@ -141,12 +100,12 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 		 * only uses Identifier or Literal keys in the fixer.
 		 */
 		function getPropertyKeyName(prop: TSESTree.Property) {
-			const key = prop.key;
+			const { key } = prop;
 			if (key.type === "Identifier") {
 				return key.name;
 			}
 			if (key.type === "Literal") {
-				const value = key.value;
+				const { value } = key;
 				if (typeof value === "string") {
 					return value;
 				}
@@ -300,7 +259,7 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 					fixableProps[0]!.range[0] - col,
 					fixableProps[0]!.range[0]
 				);
-				separator = ",\n" + indent;
+				separator = `,\n${indent}`;
 			} else {
 				separator = ", ";
 			}
@@ -348,7 +307,7 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 					if (prop.key.type === "Identifier") {
 						keyName = prop.key.name;
 					} else if (prop.key.type === "Literal") {
-						const value = prop.key.value;
+						const { value } = prop.key;
 						keyName =
 							typeof value === "string" ? value : String(value);
 					} else {
@@ -364,9 +323,9 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 				}
 
 				return {
+					isFunction: isFunc,
 					keyName,
-					node: prop,
-					isFunction: isFunc
+					node: prop
 				};
 			});
 
@@ -408,11 +367,6 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 
 				const reportWithFix = () => {
 					context.report({
-						node:
-							curr.node.type === "Property"
-								? curr.node.key
-								: curr.node,
-						messageId: "unsorted",
 						fix: shouldFix
 							? (fixer) => {
 									const fixableProps = getFixableProps();
@@ -456,7 +410,12 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 										sortedText
 									);
 								}
-							: null
+							: null,
+						messageId: "unsorted",
+						node:
+							curr.node.type === "Property"
+								? curr.node.key
+								: curr.node
 					});
 					fixProvided = true;
 				};
@@ -483,7 +442,7 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 
 		// Also check object literals inside JSX prop expressions
 		function checkJSXAttributeObject(attr: TSESTree.JSXAttribute) {
-			const value = attr.value;
+			const { value } = attr;
 			if (value && value.type === "JSXExpressionContainer") {
 				const expr = value.expression;
 				if (expr && expr.type === "ObjectExpression") {
@@ -562,11 +521,11 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 				);
 				if (between.includes("{")) {
 					context.report({
+						messageId: "unsorted",
 						node:
 							currAttr.type === "JSXAttribute"
 								? currAttr.name
-								: currAttr,
-						messageId: "unsorted"
+								: currAttr
 					});
 					return;
 				}
@@ -596,26 +555,65 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 				.join(" ");
 
 			context.report({
-				node:
-					firstAttr.type === "JSXAttribute"
-						? firstAttr.name
-						: firstAttr,
-				messageId: "unsorted",
 				fix(fixer) {
 					return fixer.replaceTextRange(
 						[firstAttr.range[0], lastAttr.range[1]],
 						replacement
 					);
-				}
+				},
+				messageId: "unsorted",
+				node:
+					firstAttr.type === "JSXAttribute"
+						? firstAttr.name
+						: firstAttr
 			});
 		}
 
 		return {
-			ObjectExpression: checkObjectExpression,
 			JSXAttribute(node: TSESTree.JSXAttribute) {
 				checkJSXAttributeObject(node);
 			},
-			JSXOpeningElement: checkJSXOpeningElement
+			JSXOpeningElement: checkJSXOpeningElement,
+			ObjectExpression: checkObjectExpression
 		};
+	},
+	defaultOptions: [{}],
+	meta: {
+		docs: {
+			description:
+				"enforce sorted keys in object literals with auto-fix (limited to simple cases, preserving comments)"
+		},
+		fixable: "code",
+		messages: {
+			unsorted: "Object keys are not sorted."
+		},
+		// The schema supports the same options as the built-in sort-keys rule plus:
+		//   variablesBeforeFunctions: boolean (when true, non-function properties come before function properties)
+		schema: [
+			{
+				additionalProperties: false,
+				properties: {
+					caseSensitive: {
+						type: "boolean"
+					},
+					minKeys: {
+						minimum: 2,
+						type: "integer"
+					},
+					natural: {
+						type: "boolean"
+					},
+					order: {
+						enum: ["asc", "desc"],
+						type: "string"
+					},
+					variablesBeforeFunctions: {
+						type: "boolean"
+					}
+				},
+				type: "object"
+			}
+		],
+		type: "suggestion"
 	}
 };

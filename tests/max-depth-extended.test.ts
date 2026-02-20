@@ -9,33 +9,33 @@ const ruleTester = new RuleTester({
 });
 
 ruleTester.run("max-depth-extended", maxDepthExtended, {
-	valid: [
-		{
-			name: "single if block within allowed depth",
-			code: `function foo() { if (true) { doSomething(); } }`,
-			options: [1]
-		},
-		{
-			name: "early exit block (return) is not counted",
-			code: `function foo() { if (true) { if (!valid) { return; } doSomething(); } }`,
-			options: [1]
-		},
-		{
-			name: "early exit block (throw) is not counted",
-			code: `function foo() { if (true) { if (!valid) { throw new Error(); } } }`,
-			options: [1]
-		},
-		{
-			name: "no nesting at all",
-			code: `function foo() { doSomething(); }`
-		}
-	],
 	invalid: [
 		{
-			name: "nested blocks exceed depth of 1",
 			code: `function foo() { if (true) { if (true) { doSomething(); } } }`,
-			options: [1],
-			errors: [{ messageId: "tooDeep" }]
+			errors: [{ messageId: "tooDeep" }],
+			name: "nested blocks exceed depth of 1",
+			options: [1]
+		}
+	],
+	valid: [
+		{
+			code: `function foo() { if (true) { doSomething(); } }`,
+			name: "single if block within allowed depth",
+			options: [1]
+		},
+		{
+			code: `function foo() { if (true) { if (!valid) { return; } doSomething(); } }`,
+			name: "early exit block (return) is not counted",
+			options: [1]
+		},
+		{
+			code: `function foo() { if (true) { if (!valid) { throw new Error(); } } }`,
+			name: "early exit block (throw) is not counted",
+			options: [1]
+		},
+		{
+			code: `function foo() { doSomething(); }`,
+			name: "no nesting at all"
 		}
 	]
 });

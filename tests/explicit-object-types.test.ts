@@ -5,40 +5,40 @@ import parser from "typescript-eslint";
 const ruleTester = new RuleTester({
 	languageOptions: {
 		ecmaVersion: 2020,
-		sourceType: "module",
-		parser: parser.parser
+		parser: parser.parser,
+		sourceType: "module"
 	}
 });
 
 ruleTester.run("explicit-object-types", explicitObjectTypes, {
-	valid: [
-		{
-			name: "object literal with type annotation",
-			code: `type Foo = { a: number }; const obj: Foo = { a: 1 };`
-		},
-		{
-			name: "non-object initializer",
-			code: `const x = 42;`
-		},
-		{
-			name: "array of primitives",
-			code: `const arr = [1, 2, 3];`
-		},
-		{
-			name: "array of objects with type annotation",
-			code: `type Item = { a: number }; const arr: Item[] = [{ a: 1 }];`
-		}
-	],
 	invalid: [
 		{
-			name: "object literal without type annotation",
 			code: `const obj = { a: 1 };`,
-			errors: [{ messageId: "objectLiteralNeedsType" }]
+			errors: [{ messageId: "objectLiteralNeedsType" }],
+			name: "object literal without type annotation"
 		},
 		{
-			name: "array of object literals without type annotation",
 			code: `const arr = [{ a: 1 }, { b: 2 }];`,
-			errors: [{ messageId: "arrayOfObjectLiteralsNeedsType" }]
+			errors: [{ messageId: "arrayOfObjectLiteralsNeedsType" }],
+			name: "array of object literals without type annotation"
+		}
+	],
+	valid: [
+		{
+			code: `type Foo = { a: number }; const obj: Foo = { a: 1 };`,
+			name: "object literal with type annotation"
+		},
+		{
+			code: `const x = 42;`,
+			name: "non-object initializer"
+		},
+		{
+			code: `const arr = [1, 2, 3];`,
+			name: "array of primitives"
+		},
+		{
+			code: `type Item = { a: number }; const arr: Item[] = [{ a: 1 }];`,
+			name: "array of objects with type annotation"
 		}
 	]
 });

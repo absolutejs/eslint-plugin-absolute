@@ -31,50 +31,8 @@ type ExportItem = {
 };
 
 export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
-	meta: {
-		type: "suggestion",
-		docs: {
-			description:
-				"Enforce that top-level export declarations are sorted by exported name and, optionally, that variable exports come before function exports"
-		},
-		fixable: "code",
-		schema: [
-			{
-				type: "object",
-				properties: {
-					order: {
-						type: "string",
-						enum: ["asc", "desc"]
-					},
-					caseSensitive: {
-						type: "boolean"
-					},
-					natural: {
-						type: "boolean"
-					},
-					minKeys: {
-						type: "integer",
-						minimum: 2
-					},
-					variablesBeforeFunctions: {
-						type: "boolean"
-					}
-				},
-				additionalProperties: false
-			}
-		],
-		messages: {
-			alphabetical:
-				"Export declarations are not sorted alphabetically. Expected order: {{expectedOrder}}.",
-			variablesBeforeFunctions:
-				"Non-function exports should come before function exports."
-		}
-	},
-
-	defaultOptions: [{}],
-
 	create(context) {
-		const sourceCode = context.sourceCode;
+		const { sourceCode } = context;
 		const option = context.options[0];
 
 		const order: "asc" | "desc" =
@@ -124,7 +82,7 @@ export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
 		function getExportName(
 			node: TSESTree.ExportNamedDeclaration
 		): string | null {
-			const declaration = node.declaration;
+			const { declaration } = node;
 
 			if (declaration) {
 				if (declaration.type === "VariableDeclaration") {
@@ -141,7 +99,7 @@ export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
 					declaration.type === "FunctionDeclaration" ||
 					declaration.type === "ClassDeclaration"
 				) {
-					const id = declaration.id;
+					const { id } = declaration;
 					if (id && id.type === "Identifier") {
 						return id.name;
 					}
@@ -166,7 +124,7 @@ export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
 		}
 
 		function isFunctionExport(node: TSESTree.ExportNamedDeclaration) {
-			const declaration = node.declaration;
+			const { declaration } = node;
 
 			if (!declaration) {
 				return false;
@@ -178,7 +136,7 @@ export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
 					if (!firstDeclarator) {
 						return false;
 					}
-					const init = firstDeclarator.init;
+					const { init } = firstDeclarator;
 					if (!init) {
 						return false;
 					}
@@ -246,9 +204,9 @@ export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
 				}
 
 				items.push({
+					isFunction: isFunctionExport(node),
 					name,
 					node,
-					isFunction: isFunctionExport(node),
 					text: sourceCode.getText(node)
 				});
 			}
@@ -316,8 +274,6 @@ export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
 			}
 
 			context.report({
-				node: firstNode,
-				messageId,
 				data: {
 					expectedOrder
 				},
@@ -325,7 +281,7 @@ export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
 					const fixableNodes: TSESTree.ExportNamedDeclaration[] = [];
 
 					for (const n of block) {
-						const declaration = n.declaration;
+						const { declaration } = n;
 
 						if (declaration) {
 							if (
@@ -382,13 +338,15 @@ export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
 						[rangeStart, rangeEnd],
 						sortedText
 					);
-				}
+				},
+				messageId,
+				node: firstNode
 			});
 		}
 
 		return {
 			"Program:exit"(node: TSESTree.Program) {
-				const body = node.body;
+				const { body } = node;
 				const block: TSESTree.ExportNamedDeclaration[] = [];
 
 				for (let i = 0; i < body.length; i++) {
@@ -416,5 +374,45 @@ export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
 				}
 			}
 		};
+	},
+	defaultOptions: [{}],
+	meta: {
+		docs: {
+			description:
+				"Enforce that top-level export declarations are sorted by exported name and, optionally, that variable exports come before function exports"
+		},
+		fixable: "code",
+		messages: {
+			alphabetical:
+				"Export declarations are not sorted alphabetically. Expected order: {{expectedOrder}}.",
+			variablesBeforeFunctions:
+				"Non-function exports should come before function exports."
+		},
+		schema: [
+			{
+				additionalProperties: false,
+				properties: {
+					caseSensitive: {
+						type: "boolean"
+					},
+					minKeys: {
+						minimum: 2,
+						type: "integer"
+					},
+					natural: {
+						type: "boolean"
+					},
+					order: {
+						enum: ["asc", "desc"],
+						type: "string"
+					},
+					variablesBeforeFunctions: {
+						type: "boolean"
+					}
+				},
+				type: "object"
+			}
+		],
+		type: "suggestion"
 	}
 };

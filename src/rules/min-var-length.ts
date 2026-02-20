@@ -9,43 +9,8 @@ type Options = [MinVarLengthOption?];
 type MessageIds = "variableNameTooShort";
 
 export const minVarLength: TSESLint.RuleModule<MessageIds, Options> = {
-	meta: {
-		type: "problem",
-		docs: {
-			description:
-				"Disallow variable names shorter than the configured minimum length unless an outer variable with a longer name starting with the same characters exists. You can exempt specific variable names using the allowedVars option."
-		},
-		schema: [
-			{
-				type: "object",
-				properties: {
-					minLength: {
-						type: "number",
-						default: 1
-					},
-					allowedVars: {
-						type: "array",
-						items: {
-							type: "string",
-							minLength: 1
-							// Note: The maxLength for each string should be at most the configured minLength.
-						},
-						default: []
-					}
-				},
-				additionalProperties: false
-			}
-		],
-		messages: {
-			variableNameTooShort:
-				"Variable '{{name}}' is too short. Minimum allowed length is {{minLength}} characters unless an outer variable with a longer name starting with '{{name}}' exists."
-		}
-	},
-
-	defaultOptions: [{}],
-
 	create(context) {
-		const sourceCode = context.sourceCode;
+		const { sourceCode } = context;
 		const options = context.options[0];
 		const configuredMinLength =
 			options && typeof options.minLength === "number"
@@ -72,7 +37,7 @@ export const minVarLength: TSESLint.RuleModule<MessageIds, Options> = {
 
 		// Helper: retrieve the scope for a given node using the scopeManager.
 		function getScope(node: TSESTree.Node): TSESLint.Scope.Scope | null {
-			const scopeManager = sourceCode.scopeManager;
+			const { scopeManager } = sourceCode;
 			if (!scopeManager) {
 				return null;
 			}
@@ -254,7 +219,7 @@ export const minVarLength: TSESLint.RuleModule<MessageIds, Options> = {
 		 * @param {ASTNode} node The Identifier node.
 		 */
 		function checkIdentifier(node: TSESTree.Identifier) {
-			const name = node.name;
+			const { name } = node;
 			if (name.length < minLength) {
 				// If the name is in the allowed list, skip.
 				if (allowedVars.includes(name)) {
@@ -262,9 +227,9 @@ export const minVarLength: TSESLint.RuleModule<MessageIds, Options> = {
 				}
 				if (!hasOuterCorrespondingIdentifier(name, node)) {
 					context.report({
-						node,
+						data: { minLength, name },
 						messageId: "variableNameTooShort",
-						data: { name, minLength }
+						node
 					});
 				}
 			}
@@ -305,9 +270,9 @@ export const minVarLength: TSESLint.RuleModule<MessageIds, Options> = {
 		}
 
 		return {
-			VariableDeclarator(node: TSESTree.VariableDeclarator) {
-				if (node.id) {
-					checkPattern(node.id);
+			CatchClause(node: TSESTree.CatchClause) {
+				if (node.param) {
+					checkPattern(node.param);
 				}
 			},
 			"FunctionDeclaration, FunctionExpression, ArrowFunctionExpression"(
@@ -320,11 +285,44 @@ export const minVarLength: TSESLint.RuleModule<MessageIds, Options> = {
 					checkPattern(param);
 				}
 			},
-			CatchClause(node: TSESTree.CatchClause) {
-				if (node.param) {
-					checkPattern(node.param);
+			VariableDeclarator(node: TSESTree.VariableDeclarator) {
+				if (node.id) {
+					checkPattern(node.id);
 				}
 			}
 		};
+	},
+	defaultOptions: [{}],
+	meta: {
+		docs: {
+			description:
+				"Disallow variable names shorter than the configured minimum length unless an outer variable with a longer name starting with the same characters exists. You can exempt specific variable names using the allowedVars option."
+		},
+		messages: {
+			variableNameTooShort:
+				"Variable '{{name}}' is too short. Minimum allowed length is {{minLength}} characters unless an outer variable with a longer name starting with '{{name}}' exists."
+		},
+		schema: [
+			{
+				additionalProperties: false,
+				properties: {
+					allowedVars: {
+						default: [],
+						items: {
+							minLength: 1,
+							type: "string"
+							// Note: The maxLength for each string should be at most the configured minLength.
+						},
+						type: "array"
+					},
+					minLength: {
+						default: 1,
+						type: "number"
+					}
+				},
+				type: "object"
+			}
+		],
+		type: "problem"
 	}
 };

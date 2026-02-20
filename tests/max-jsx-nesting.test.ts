@@ -4,36 +4,36 @@ import { maxJSXNesting } from "../src/rules/max-jsx-nesting";
 const ruleTester = new RuleTester({
 	languageOptions: {
 		ecmaVersion: 2020,
-		sourceType: "module",
-		parserOptions: { ecmaFeatures: { jsx: true } }
+		parserOptions: { ecmaFeatures: { jsx: true } },
+		sourceType: "module"
 	}
 });
 
 ruleTester.run("max-jsx-nesting", maxJSXNesting, {
-	valid: [
+	invalid: [
 		{
-			name: "single level JSX (maxAllowed=2)",
-			code: `const C = () => <div><span /></div>;`,
+			code: `const C = () => <div><section><span /></section></div>;`,
+			errors: [{ messageId: "tooDeeplyNested" }],
+			name: "nesting exceeds limit of 2",
 			options: [2]
 		},
 		{
-			name: "exactly at limit (maxAllowed=3)",
-			code: `const C = () => <div><section><span /></section></div>;`,
-			options: [3]
+			code: `const C = () => <div><span /></div>;`,
+			errors: [{ messageId: "tooDeeplyNested" }],
+			name: "deeply nested exceeds limit of 1",
+			options: [1]
 		}
 	],
-	invalid: [
+	valid: [
 		{
-			name: "nesting exceeds limit of 2",
-			code: `const C = () => <div><section><span /></section></div>;`,
-			options: [2],
-			errors: [{ messageId: "tooDeeplyNested" }]
+			code: `const C = () => <div><span /></div>;`,
+			name: "single level JSX (maxAllowed=2)",
+			options: [2]
 		},
 		{
-			name: "deeply nested exceeds limit of 1",
-			code: `const C = () => <div><span /></div>;`,
-			options: [1],
-			errors: [{ messageId: "tooDeeplyNested" }]
+			code: `const C = () => <div><section><span /></section></div>;`,
+			name: "exactly at limit (maxAllowed=3)",
+			options: [3]
 		}
 	]
 });

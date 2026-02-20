@@ -21,25 +21,25 @@ import { noUnnecessaryDiv } from "./rules/no-unnecessary-div";
 
 export default {
 	rules: {
-		"no-nested-jsx-return": noNestedJSXReturn,
 		"explicit-object-types": explicitObjectTypes,
-		"sort-keys-fixable": sortKeysFixable,
-		"no-transition-cssproperties": noTransitionCSSProperties,
-		"no-explicit-return-type": noExplicitReturnTypes,
-		"max-jsxnesting": maxJSXNesting,
-		"seperate-style-files": seperateStyleFiles,
-		"no-unnecessary-key": noUnnecessaryKey,
-		"sort-exports": sortExports,
-		"localize-react-props": localizeReactProps,
-		"no-or-none-component": noOrNoneComponent,
-		"no-button-navigation": noButtonNavigation,
-		"no-multi-style-objects": noMultiStyleObjects,
-		"no-useless-function": noUselessFunction,
-		"min-var-length": minVarLength,
-		"max-depth-extended": maxDepthExtended,
-		"spring-naming-convention": springNamingConvention,
 		"inline-style-limit": inlineStyleLimit,
+		"localize-react-props": localizeReactProps,
+		"max-depth-extended": maxDepthExtended,
+		"max-jsxnesting": maxJSXNesting,
+		"min-var-length": minVarLength,
+		"no-button-navigation": noButtonNavigation,
+		"no-explicit-return-type": noExplicitReturnTypes,
 		"no-inline-prop-types": noInlinePropTypes,
-		"no-unnecessary-div": noUnnecessaryDiv
+		"no-multi-style-objects": noMultiStyleObjects,
+		"no-nested-jsx-return": noNestedJSXReturn,
+		"no-or-none-component": noOrNoneComponent,
+		"no-transition-cssproperties": noTransitionCSSProperties,
+		"no-unnecessary-div": noUnnecessaryDiv,
+		"no-unnecessary-key": noUnnecessaryKey,
+		"no-useless-function": noUselessFunction,
+		"seperate-style-files": seperateStyleFiles,
+		"sort-exports": sortExports,
+		"sort-keys-fixable": sortKeysFixable,
+		"spring-naming-convention": springNamingConvention
 	}
 };

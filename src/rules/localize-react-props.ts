@@ -20,23 +20,6 @@ type CandidateVariable = {
 };
 
 export const localizeReactProps: TSESLint.RuleModule<MessageIds, Options> = {
-	meta: {
-		type: "suggestion",
-		docs: {
-			description:
-				"Disallow variables that are only passed to a single custom child component. For useState, only report if both the state and its setter are exclusively passed to a single custom child. For general variables, only report if a given child receives exactly one such candidate – if two or more are passed to the same component type, they’re assumed to be settings that belong on the parent."
-		},
-		schema: [],
-		messages: {
-			stateAndSetterToChild:
-				"State variable '{{stateVarName}}' and its setter '{{setterVarName}}' are only passed to a single custom child component. Consider moving the state into that component.",
-			variableToChild:
-				"Variable '{{varName}}' is only passed to a single custom child component. Consider moving it to that component."
-		}
-	},
-
-	defaultOptions: [],
-
 	create(context) {
 		// A list of candidate variables for reporting (for general variables only).
 		const candidateVariables: CandidateVariable[] = [];
@@ -248,8 +231,8 @@ export const localizeReactProps: TSESLint.RuleModule<MessageIds, Options> = {
 			const variable = findVariableForIdentifier(declarationId);
 			if (!variable) {
 				return {
-					jsxUsageSet: new Set<TSESTree.JSXElement>(),
-					hasOutsideUsage: false
+					hasOutsideUsage: false,
+					jsxUsageSet: new Set<TSESTree.JSXElement>()
 				};
 			}
 
@@ -257,7 +240,7 @@ export const localizeReactProps: TSESLint.RuleModule<MessageIds, Options> = {
 			let hasOutsideUsage = false;
 
 			for (const reference of variable.references) {
-				const identifier = reference.identifier;
+				const { identifier } = reference;
 
 				if (identifier === declarationId) {
 					continue;
@@ -277,8 +260,8 @@ export const localizeReactProps: TSESLint.RuleModule<MessageIds, Options> = {
 			}
 
 			return {
-				jsxUsageSet,
-				hasOutsideUsage
+				hasOutsideUsage,
+				jsxUsageSet
 			};
 		}
 
@@ -313,7 +296,7 @@ export const localizeReactProps: TSESLint.RuleModule<MessageIds, Options> = {
 						continue;
 					}
 					for (const reference of variable.references) {
-						const identifier = reference.identifier;
+						const { identifier } = reference;
 						if (!identifier.range) {
 							continue;
 						}
@@ -332,6 +315,33 @@ export const localizeReactProps: TSESLint.RuleModule<MessageIds, Options> = {
 		}
 
 		return {
+			// At the end of the traversal, group candidate variables by the target component name.
+			"Program:exit"() {
+				const groups = new Map<string, CandidateVariable[]>();
+				for (const candidate of candidateVariables) {
+					const key = candidate.componentName;
+					const existing = groups.get(key);
+					if (existing) {
+						existing.push(candidate);
+					} else {
+						groups.set(key, [candidate]);
+					}
+				}
+				// Only report candidates for a given component type if there is exactly one candidate.
+				for (const candidates of groups.values()) {
+					if (candidates.length === 1) {
+						const candidate = candidates[0];
+						if (!candidate) {
+							continue;
+						}
+						context.report({
+							data: { varName: candidate.varName },
+							messageId: "variableToChild",
+							node: candidate.node
+						});
+					}
+				}
+			},
 			VariableDeclarator(node: TSESTree.VariableDeclarator) {
 				const componentFunction = getComponentFunction(node);
 				if (!componentFunction || !componentFunction.body) return;
@@ -391,9 +401,9 @@ export const localizeReactProps: TSESLint.RuleModule<MessageIds, Options> = {
 						);
 						if (stateTarget && stateTarget === setterTarget) {
 							context.report({
-								node: node,
+								data: { setterVarName, stateVarName },
 								messageId: "stateAndSetterToChild",
-								data: { stateVarName, setterVarName }
+								node: node
 							});
 						}
 					}
@@ -420,40 +430,28 @@ export const localizeReactProps: TSESLint.RuleModule<MessageIds, Options> = {
 						const target = getSingleSetElement(usage.jsxUsageSet);
 						const componentName = getJSXElementName(target);
 						candidateVariables.push({
+							componentName,
 							node,
-							varName,
-							componentName
-						});
-					}
-				}
-			},
-			// At the end of the traversal, group candidate variables by the target component name.
-			"Program:exit"() {
-				const groups = new Map<string, CandidateVariable[]>();
-				for (const candidate of candidateVariables) {
-					const key = candidate.componentName;
-					const existing = groups.get(key);
-					if (existing) {
-						existing.push(candidate);
-					} else {
-						groups.set(key, [candidate]);
-					}
-				}
-				// Only report candidates for a given component type if there is exactly one candidate.
-				for (const candidates of groups.values()) {
-					if (candidates.length === 1) {
-						const candidate = candidates[0];
-						if (!candidate) {
-							continue;
-						}
-						context.report({
-							node: candidate.node,
-							messageId: "variableToChild",
-							data: { varName: candidate.varName }
+							varName
 						});
 					}
 				}
 			}
 		};
+	},
+	defaultOptions: [],
+	meta: {
+		docs: {
+			description:
+				"Disallow variables that are only passed to a single custom child component. For useState, only report if both the state and its setter are exclusively passed to a single custom child. For general variables, only report if a given child receives exactly one such candidate – if two or more are passed to the same component type, they’re assumed to be settings that belong on the parent."
+		},
+		messages: {
+			stateAndSetterToChild:
+				"State variable '{{stateVarName}}' and its setter '{{setterVarName}}' are only passed to a single custom child component. Consider moving the state into that component.",
+			variableToChild:
+				"Variable '{{varName}}' is only passed to a single custom child component. Consider moving it to that component."
+		},
+		schema: [],
+		type: "suggestion"
 	}
 };

@@ -4,26 +4,6 @@ type Options = [number?];
 type MessageIds = "tooDeep";
 
 export const maxDepthExtended: TSESLint.RuleModule<MessageIds, Options> = {
-	meta: {
-		type: "suggestion",
-		docs: {
-			description:
-				"disallow too many nested blocks except when the block only contains an early exit (return or throw)"
-		},
-		schema: [
-			{
-				// Accepts a single number as the maximum allowed depth.
-				type: "number"
-			}
-		],
-		messages: {
-			tooDeep:
-				"Blocks are nested too deeply ({{depth}}). Maximum allowed is {{maxDepth}} or an early exit."
-		}
-	},
-
-	defaultOptions: [1],
-
 	create(context) {
 		const option = context.options[0];
 		const maxDepth = typeof option === "number" ? option : 1;
@@ -85,24 +65,20 @@ export const maxDepthExtended: TSESLint.RuleModule<MessageIds, Options> = {
 		function checkDepth(node: TSESTree.BlockStatement, depth: number) {
 			if (depth > maxDepth) {
 				context.report({
-					node,
+					data: { depth, maxDepth },
 					messageId: "tooDeep",
-					data: { depth, maxDepth }
+					node
 				});
 			}
 		}
 
 		return {
-			FunctionDeclaration() {
-				functionStack.push(0);
-			},
-			FunctionExpression() {
-				functionStack.push(0);
-			},
 			ArrowFunctionExpression() {
 				functionStack.push(0);
 			},
-
+			"ArrowFunctionExpression:exit"() {
+				functionStack.pop();
+			},
 			BlockStatement(node: TSESTree.BlockStatement) {
 				const ancestors = getAncestors(node);
 				const parent = ancestors.length > 0 ? ancestors[0] : undefined;
@@ -128,7 +104,6 @@ export const maxDepthExtended: TSESLint.RuleModule<MessageIds, Options> = {
 					checkDepth(node, depth);
 				}
 			},
-
 			"BlockStatement:exit"(node: TSESTree.BlockStatement) {
 				const ancestors = getAncestors(node);
 				const parent = ancestors.length > 0 ? ancestors[0] : undefined;
@@ -149,16 +124,36 @@ export const maxDepthExtended: TSESLint.RuleModule<MessageIds, Options> = {
 
 				decrementCurrentDepth();
 			},
-
+			FunctionDeclaration() {
+				functionStack.push(0);
+			},
 			"FunctionDeclaration:exit"() {
 				functionStack.pop();
 			},
-			"FunctionExpression:exit"() {
-				functionStack.pop();
+			FunctionExpression() {
+				functionStack.push(0);
 			},
-			"ArrowFunctionExpression:exit"() {
+			"FunctionExpression:exit"() {
 				functionStack.pop();
 			}
 		};
+	},
+	defaultOptions: [1],
+	meta: {
+		docs: {
+			description:
+				"disallow too many nested blocks except when the block only contains an early exit (return or throw)"
+		},
+		messages: {
+			tooDeep:
+				"Blocks are nested too deeply ({{depth}}). Maximum allowed is {{maxDepth}} or an early exit."
+		},
+		schema: [
+			{
+				// Accepts a single number as the maximum allowed depth.
+				type: "number"
+			}
+		],
+		type: "suggestion"
 	}
 };

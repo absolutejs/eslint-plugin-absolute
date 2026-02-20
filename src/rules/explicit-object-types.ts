@@ -4,21 +4,6 @@ type Options = [];
 type MessageIds = "objectLiteralNeedsType" | "arrayOfObjectLiteralsNeedsType";
 
 export const explicitObjectTypes: TSESLint.RuleModule<MessageIds, Options> = {
-	meta: {
-		type: "problem",
-		docs: {
-			description:
-				"Require explicit type annotations for object literals and arrays of object literals"
-		},
-		schema: [],
-		messages: {
-			objectLiteralNeedsType:
-				"Object literal must have an explicit type annotation.",
-			arrayOfObjectLiteralsNeedsType:
-				"Array of object literals must have an explicit type annotation."
-		}
-	},
-	defaultOptions: [],
 	create(context) {
 		/**
 		 * Returns true if the node is an object literal.
@@ -27,7 +12,7 @@ export const explicitObjectTypes: TSESLint.RuleModule<MessageIds, Options> = {
 		function isObjectLiteral(
 			node: TSESTree.Node | null | undefined
 		): node is TSESTree.ObjectExpression {
-			return !!node && node.type === "ObjectExpression";
+			return Boolean(node) && node.type === "ObjectExpression";
 		}
 
 		return {
@@ -43,8 +28,8 @@ export const explicitObjectTypes: TSESLint.RuleModule<MessageIds, Options> = {
 				if (isObjectLiteral(node.init)) {
 					if (node.id.type === "Identifier") {
 						context.report({
-							node: node.id,
-							messageId: "objectLiteralNeedsType"
+							messageId: "objectLiteralNeedsType",
+							node: node.id
 						});
 					}
 					return;
@@ -62,12 +47,27 @@ export const explicitObjectTypes: TSESLint.RuleModule<MessageIds, Options> = {
 
 					if (hasObjectLiteral && node.id.type === "Identifier") {
 						context.report({
-							node: node.id,
-							messageId: "arrayOfObjectLiteralsNeedsType"
+							messageId: "arrayOfObjectLiteralsNeedsType",
+							node: node.id
 						});
 					}
 				}
 			}
 		};
+	},
+	defaultOptions: [],
+	meta: {
+		docs: {
+			description:
+				"Require explicit type annotations for object literals and arrays of object literals"
+		},
+		messages: {
+			arrayOfObjectLiteralsNeedsType:
+				"Array of object literals must have an explicit type annotation.",
+			objectLiteralNeedsType:
+				"Object literal must have an explicit type annotation."
+		},
+		schema: [],
+		type: "problem"
 	}
 };

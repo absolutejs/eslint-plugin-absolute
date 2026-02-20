@@ -9,31 +9,10 @@ type MessageIds =
 
 export const springNamingConvention: TSESLint.RuleModule<MessageIds, Options> =
 	{
-		meta: {
-			type: "problem",
-			docs: {
-				description:
-					"Enforce correct naming for useSpring and useSprings hook destructuring"
-			},
-			schema: [],
-			messages: {
-				firstMustEndWithSprings:
-					"The first variable must end with 'Springs'.",
-				firstMustHaveBase:
-					"The first variable must have a non-empty name before 'Springs'.",
-				secondMustMatch:
-					"The second variable must be named '{{expected}}'.",
-				pluralRequired:
-					"The first variable for useSprings should be plural (ending with 's') before 'Springs'."
-			}
-		},
-
-		defaultOptions: [],
-
 		create(context) {
 			return {
 				VariableDeclarator(node: TSESTree.VariableDeclarator) {
-					const init = node.init;
+					const { init } = node;
 
 					if (
 						!init ||
@@ -52,7 +31,7 @@ export const springNamingConvention: TSESLint.RuleModule<MessageIds, Options> =
 						return;
 					}
 
-					const elements = node.id.elements;
+					const { elements } = node.id;
 					if (elements.length < 2) {
 						return;
 					}
@@ -75,8 +54,8 @@ export const springNamingConvention: TSESLint.RuleModule<MessageIds, Options> =
 					if (hookName === "useSpring") {
 						if (!firstName.endsWith("Springs")) {
 							context.report({
-								node: firstElem,
-								messageId: "firstMustEndWithSprings"
+								messageId: "firstMustEndWithSprings",
+								node: firstElem
 							});
 							return;
 						}
@@ -84,8 +63,8 @@ export const springNamingConvention: TSESLint.RuleModule<MessageIds, Options> =
 						const base = firstName.slice(0, -"Springs".length);
 						if (!base) {
 							context.report({
-								node: firstElem,
-								messageId: "firstMustHaveBase"
+								messageId: "firstMustHaveBase",
+								node: firstElem
 							});
 							return;
 						}
@@ -93,9 +72,9 @@ export const springNamingConvention: TSESLint.RuleModule<MessageIds, Options> =
 						const expectedSecond = `${base}Api`;
 						if (secondName !== expectedSecond) {
 							context.report({
-								node: secondElem,
+								data: { expected: expectedSecond },
 								messageId: "secondMustMatch",
-								data: { expected: expectedSecond }
+								node: secondElem
 							});
 						}
 						return;
@@ -104,8 +83,8 @@ export const springNamingConvention: TSESLint.RuleModule<MessageIds, Options> =
 					if (hookName === "useSprings") {
 						if (!firstName.endsWith("Springs")) {
 							context.report({
-								node: firstElem,
-								messageId: "firstMustEndWithSprings"
+								messageId: "firstMustEndWithSprings",
+								node: firstElem
 							});
 							return;
 						}
@@ -116,16 +95,16 @@ export const springNamingConvention: TSESLint.RuleModule<MessageIds, Options> =
 						);
 						if (!basePlural) {
 							context.report({
-								node: firstElem,
-								messageId: "firstMustHaveBase"
+								messageId: "firstMustHaveBase",
+								node: firstElem
 							});
 							return;
 						}
 
 						if (!basePlural.endsWith("s")) {
 							context.report({
-								node: firstElem,
-								messageId: "pluralRequired"
+								messageId: "pluralRequired",
+								node: firstElem
 							});
 							return;
 						}
@@ -133,13 +112,32 @@ export const springNamingConvention: TSESLint.RuleModule<MessageIds, Options> =
 						const expectedSecond = `${basePlural}Api`;
 						if (secondName !== expectedSecond) {
 							context.report({
-								node: secondElem,
+								data: { expected: expectedSecond },
 								messageId: "secondMustMatch",
-								data: { expected: expectedSecond }
+								node: secondElem
 							});
 						}
 					}
 				}
 			};
+		},
+		defaultOptions: [],
+		meta: {
+			docs: {
+				description:
+					"Enforce correct naming for useSpring and useSprings hook destructuring"
+			},
+			messages: {
+				firstMustEndWithSprings:
+					"The first variable must end with 'Springs'.",
+				firstMustHaveBase:
+					"The first variable must have a non-empty name before 'Springs'.",
+				pluralRequired:
+					"The first variable for useSprings should be plural (ending with 's') before 'Springs'.",
+				secondMustMatch:
+					"The second variable must be named '{{expected}}'."
+			},
+			schema: [],
+			type: "problem"
 		}
 	};

@@ -17,32 +17,13 @@ type AnyFunctionNode =
 	| TSESTree.ArrowFunctionExpression;
 
 export const noNestedJSXReturn: TSESLint.RuleModule<MessageIds, Options> = {
-	meta: {
-		type: "problem",
-		docs: {
-			description:
-				"Disallow nested functions that return non-component, non-singular JSX to enforce one component per file"
-		},
-		schema: [],
-		messages: {
-			nestedFunctionJSX:
-				"Nested function returning non-component, non-singular JSX detected. Extract it into its own component.",
-			nestedArrowJSX:
-				"Nested arrow function returning non-component, non-singular JSX detected. Extract it into its own component.",
-			nestedArrowFragment:
-				"Nested arrow function returning a non-singular JSX fragment detected. Extract it into its own component."
-		}
-	},
-
-	defaultOptions: [],
-
 	create(context) {
 		// Returns true if the node is a JSX element or fragment.
 		function isJSX(
 			node: TSESTree.Node | null | undefined
 		): node is TSESTree.JSXElement | TSESTree.JSXFragment {
 			return (
-				!!node &&
+				Boolean(node) &&
 				(node.type === AST_NODE_TYPES.JSXElement ||
 					node.type === AST_NODE_TYPES.JSXFragment)
 			);
@@ -140,43 +121,6 @@ export const noNestedJSXReturn: TSESLint.RuleModule<MessageIds, Options> = {
 		}
 
 		return {
-			"FunctionDeclaration, FunctionExpression, ArrowFunctionExpression"(
-				node: AnyFunctionNode
-			) {
-				pushFunction(node);
-			},
-			"FunctionDeclaration:exit"(_node: TSESTree.FunctionDeclaration) {
-				popFunction();
-			},
-			"FunctionExpression:exit"(_node: TSESTree.FunctionExpression) {
-				popFunction();
-			},
-			"ArrowFunctionExpression:exit"(
-				_node: TSESTree.ArrowFunctionExpression
-			) {
-				popFunction();
-			},
-
-			// For explicit return statements, report if the returned JSX is not a component and not singular.
-			ReturnStatement(node: TSESTree.ReturnStatement) {
-				if (functionStack.length <= 1) {
-					return;
-				}
-				const argument = node.argument;
-				if (!isJSX(argument)) {
-					return;
-				}
-				if (
-					!isJSXComponentElement(argument) &&
-					!isSingularJSXReturn(argument)
-				) {
-					context.report({
-						node,
-						messageId: "nestedFunctionJSX"
-					});
-				}
-			},
-
 			// For implicit returns in arrow functions, use the same checks.
 			"ArrowFunctionExpression > JSXElement"(node: TSESTree.JSXElement) {
 				if (functionStack.length <= 1) {
@@ -187,8 +131,8 @@ export const noNestedJSXReturn: TSESLint.RuleModule<MessageIds, Options> = {
 					!isSingularJSXReturn(node)
 				) {
 					context.report({
-						node,
-						messageId: "nestedArrowJSX"
+						messageId: "nestedArrowJSX",
+						node
 					});
 				}
 			},
@@ -200,11 +144,63 @@ export const noNestedJSXReturn: TSESLint.RuleModule<MessageIds, Options> = {
 				}
 				if (!isSingularJSXReturn(node)) {
 					context.report({
-						node,
-						messageId: "nestedArrowFragment"
+						messageId: "nestedArrowFragment",
+						node
+					});
+				}
+			},
+			"ArrowFunctionExpression:exit"(
+				_node: TSESTree.ArrowFunctionExpression
+			) {
+				popFunction();
+			},
+			"FunctionDeclaration, FunctionExpression, ArrowFunctionExpression"(
+				node: AnyFunctionNode
+			) {
+				pushFunction(node);
+			},
+			"FunctionDeclaration:exit"(_node: TSESTree.FunctionDeclaration) {
+				popFunction();
+			},
+			"FunctionExpression:exit"(_node: TSESTree.FunctionExpression) {
+				popFunction();
+			},
+			// For explicit return statements, report if the returned JSX is not a component and not singular.
+			ReturnStatement(node: TSESTree.ReturnStatement) {
+				if (functionStack.length <= 1) {
+					return;
+				}
+				const { argument } = node;
+				if (!isJSX(argument)) {
+					return;
+				}
+				if (
+					!isJSXComponentElement(argument) &&
+					!isSingularJSXReturn(argument)
+				) {
+					context.report({
+						messageId: "nestedFunctionJSX",
+						node
 					});
 				}
 			}
 		};
+	},
+	defaultOptions: [],
+	meta: {
+		docs: {
+			description:
+				"Disallow nested functions that return non-component, non-singular JSX to enforce one component per file"
+		},
+		messages: {
+			nestedArrowFragment:
+				"Nested arrow function returning a non-singular JSX fragment detected. Extract it into its own component.",
+			nestedArrowJSX:
+				"Nested arrow function returning non-component, non-singular JSX detected. Extract it into its own component.",
+			nestedFunctionJSX:
+				"Nested function returning non-component, non-singular JSX detected. Extract it into its own component."
+		},
+		schema: [],
+		type: "problem"
 	}
 };

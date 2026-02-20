@@ -9,39 +9,39 @@ const ruleTester = new RuleTester({
 });
 
 ruleTester.run("min-var-length", minVarLength, {
-	valid: [
+	invalid: [
 		{
-			name: "variable name meets minimum length",
-			code: `const foo = 1;`,
+			code: `const x = 1;`,
+			errors: [{ messageId: "variableNameTooShort" }],
+			name: "variable name too short",
 			options: [{ minLength: 3 }]
 		},
 		{
-			name: "short name allowed by allowedVars",
-			code: `const x = 1;`,
-			options: [{ minLength: 3, allowedVars: ["x"] }]
+			code: `function fn(x) { return x; }`,
+			errors: [{ messageId: "variableNameTooShort" }],
+			name: "function parameter too short",
+			options: [{ minLength: 3 }]
+		}
+	],
+	valid: [
+		{
+			code: `const foo = 1;`,
+			name: "variable name meets minimum length",
+			options: [{ minLength: 3 }]
 		},
 		{
-			name: "short name in catch clause",
+			code: `const x = 1;`,
+			name: "short name allowed by allowedVars",
+			options: [{ allowedVars: ["x"], minLength: 3 }]
+		},
+		{
 			code: `try {} catch (e) { console.log(e); }`,
+			name: "short name in catch clause",
 			options: [{ minLength: 1 }]
 		},
 		{
-			name: "default minLength of 1 allows single char",
-			code: `const x = 1;`
-		}
-	],
-	invalid: [
-		{
-			name: "variable name too short",
 			code: `const x = 1;`,
-			options: [{ minLength: 3 }],
-			errors: [{ messageId: "variableNameTooShort" }]
-		},
-		{
-			name: "function parameter too short",
-			code: `function fn(x) { return x; }`,
-			options: [{ minLength: 3 }],
-			errors: [{ messageId: "variableNameTooShort" }]
+			name: "default minLength of 1 allows single char"
 		}
 	]
 });

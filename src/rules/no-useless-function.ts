@@ -4,24 +4,9 @@ type Options = [];
 type MessageIds = "uselessFunction";
 
 export const noUselessFunction: TSESLint.RuleModule<MessageIds, Options> = {
-	meta: {
-		type: "suggestion",
-		docs: {
-			description:
-				"Disallow functions that have no parameters and just return an object literal; consider exporting the object directly, unless the function is used as a callback (e.g., in react-spring)."
-		},
-		schema: [],
-		messages: {
-			uselessFunction:
-				"This function has no parameters and simply returns an object. Consider exporting the object directly instead of wrapping it in a function."
-		}
-	},
-
-	defaultOptions: [],
-
 	create(context) {
 		function isCallbackFunction(node: TSESTree.ArrowFunctionExpression) {
-			const parent = node.parent;
+			const { parent } = node;
 			if (!parent || parent.type !== "CallExpression") {
 				return false;
 			}
@@ -48,11 +33,24 @@ export const noUselessFunction: TSESLint.RuleModule<MessageIds, Options> = {
 						return;
 					}
 					context.report({
-						node,
-						messageId: "uselessFunction"
+						messageId: "uselessFunction",
+						node
 					});
 				}
 			}
 		};
+	},
+	defaultOptions: [],
+	meta: {
+		docs: {
+			description:
+				"Disallow functions that have no parameters and just return an object literal; consider exporting the object directly, unless the function is used as a callback (e.g., in react-spring)."
+		},
+		messages: {
+			uselessFunction:
+				"This function has no parameters and simply returns an object. Consider exporting the object directly instead of wrapping it in a function."
+		},
+		schema: [],
+		type: "suggestion"
 	}
 };

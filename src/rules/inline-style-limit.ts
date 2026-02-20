@@ -4,40 +4,6 @@ type Options = [number | { maxKeys?: number }];
 type MessageIds = "extractStyle";
 
 export const inlineStyleLimit: TSESLint.RuleModule<MessageIds, Options> = {
-	meta: {
-		type: "suggestion",
-		docs: {
-			description:
-				"Disallow inline style objects with too many keys and encourage extracting them"
-		},
-		schema: [
-			{
-				anyOf: [
-					{
-						type: "number"
-					},
-					{
-						type: "object",
-						properties: {
-							maxKeys: {
-								type: "number",
-								description:
-									"Maximum number of keys allowed in an inline style object before it must be extracted."
-							}
-						},
-						additionalProperties: false
-					}
-				]
-			}
-		],
-		messages: {
-			extractStyle:
-				"Inline style objects should be extracted into a separate object or file when containing more than {{max}} keys."
-		}
-	},
-
-	defaultOptions: [3],
-
 	create(context) {
 		const option = context.options[0];
 		// If a number is passed directly, use it as maxKeys; otherwise, extract maxKeys from the object (default to 3)
@@ -74,13 +40,45 @@ export const inlineStyleLimit: TSESLint.RuleModule<MessageIds, Options> = {
 					// Report only if the number of keys exceeds the allowed maximum
 					if (keyCount > maxKeys) {
 						context.report({
-							node,
+							data: { max: maxKeys },
 							messageId: "extractStyle",
-							data: { max: maxKeys }
+							node
 						});
 					}
 				}
 			}
 		};
+	},
+	defaultOptions: [3],
+	meta: {
+		docs: {
+			description:
+				"Disallow inline style objects with too many keys and encourage extracting them"
+		},
+		messages: {
+			extractStyle:
+				"Inline style objects should be extracted into a separate object or file when containing more than {{max}} keys."
+		},
+		schema: [
+			{
+				anyOf: [
+					{
+						type: "number"
+					},
+					{
+						additionalProperties: false,
+						properties: {
+							maxKeys: {
+								description:
+									"Maximum number of keys allowed in an inline style object before it must be extracted.",
+								type: "number"
+							}
+						},
+						type: "object"
+					}
+				]
+			}
+		],
+		type: "suggestion"
 	}
 };

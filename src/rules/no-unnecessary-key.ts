@@ -18,21 +18,6 @@ type Options = [];
 type MessageIds = "unnecessaryKey";
 
 export const noUnnecessaryKey: TSESLint.RuleModule<MessageIds, Options> = {
-	meta: {
-		type: "problem",
-		docs: {
-			description:
-				"enforce that the key prop is only used on components rendered as part of a mapping"
-		},
-		schema: [],
-		messages: {
-			unnecessaryKey:
-				"The key prop should only be used on elements that are directly rendered as part of an array mapping."
-		}
-	},
-
-	defaultOptions: [],
-
 	create(context) {
 		// Polyfill for context.getAncestors if it's not available.
 		function getAncestors(node: TSESTree.Node) {
@@ -59,7 +44,7 @@ export const noUnnecessaryKey: TSESLint.RuleModule<MessageIds, Options> = {
 					node.type === "CallExpression" &&
 					node.callee.type === "MemberExpression"
 				) {
-					const property = node.callee.property;
+					const { property } = node.callee;
 					if (
 						property.type === "Identifier" &&
 						property.name === "map"
@@ -133,13 +118,26 @@ export const noUnnecessaryKey: TSESLint.RuleModule<MessageIds, Options> = {
 
 			// Otherwise, report the key prop as unnecessary.
 			context.report({
-				node: keyAttribute,
-				messageId: "unnecessaryKey"
+				messageId: "unnecessaryKey",
+				node: keyAttribute
 			});
 		}
 
 		return {
 			JSXOpeningElement: checkJSXOpeningElement
 		};
+	},
+	defaultOptions: [],
+	meta: {
+		docs: {
+			description:
+				"enforce that the key prop is only used on components rendered as part of a mapping"
+		},
+		messages: {
+			unnecessaryKey:
+				"The key prop should only be used on elements that are directly rendered as part of an array mapping."
+		},
+		schema: [],
+		type: "problem"
 	}
 };

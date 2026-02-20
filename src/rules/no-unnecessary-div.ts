@@ -4,21 +4,6 @@ type Options = [];
 type MessageIds = "unnecessaryDivWrapper";
 
 export const noUnnecessaryDiv: TSESLint.RuleModule<MessageIds, Options> = {
-	meta: {
-		type: "suggestion",
-		docs: {
-			description:
-				"Flag unnecessary <div> wrappers that enclose a single JSX element. Remove the wrapper if it doesn't add semantic or functional value, or replace it with a semantic element if wrapping is needed."
-		},
-		schema: [],
-		messages: {
-			unnecessaryDivWrapper:
-				"Unnecessary <div> wrapper detected. Remove it if not needed, or replace with a semantic element that reflects its purpose."
-		}
-	},
-
-	defaultOptions: [],
-
 	create(context) {
 		function isDivElement(node: TSESTree.JSXElement) {
 			const nameNode = node.openingElement.name;
@@ -63,11 +48,24 @@ export const noUnnecessaryDiv: TSESLint.RuleModule<MessageIds, Options> = {
 
 				if (onlyChild.type === AST_NODE_TYPES.JSXElement) {
 					context.report({
-						node,
-						messageId: "unnecessaryDivWrapper"
+						messageId: "unnecessaryDivWrapper",
+						node
 					});
 				}
 			}
 		};
+	},
+	defaultOptions: [],
+	meta: {
+		docs: {
+			description:
+				"Flag unnecessary <div> wrappers that enclose a single JSX element. Remove the wrapper if it doesn't add semantic or functional value, or replace it with a semantic element if wrapping is needed."
+		},
+		messages: {
+			unnecessaryDivWrapper:
+				"Unnecessary <div> wrapper detected. Remove it if not needed, or replace with a semantic element that reflects its purpose."
+		},
+		schema: [],
+		type: "suggestion"
 	}
 };

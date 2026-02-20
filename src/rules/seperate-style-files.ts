@@ -4,25 +4,9 @@ type Options = [];
 type MessageIds = "moveToFile";
 
 export const seperateStyleFiles: TSESLint.RuleModule<MessageIds, Options> = {
-	meta: {
-		type: "suggestion",
-		docs: {
-			description:
-				"Warn when a component file (.jsx or .tsx) contains a style object typed as CSSProperties. " +
-				"Style objects should be moved to their own file under the style folder."
-		},
-		schema: [],
-		messages: {
-			moveToFile:
-				'Style object "{{name}}" is typed as {{typeName}}. Move it to its own file under the style folder.'
-		}
-	},
-
-	defaultOptions: [],
-
 	create(context) {
 		// Only run this rule on .tsx or .jsx files.
-		const filename = context.filename;
+		const { filename } = context;
 		if (!filename.endsWith(".tsx") && !filename.endsWith(".jsx")) {
 			return {};
 		}
@@ -60,22 +44,36 @@ export const seperateStyleFiles: TSESLint.RuleModule<MessageIds, Options> = {
 				}
 				// When typeName is a TSQualifiedName, e.g., React.CSSProperties.
 				else if (typeNameNode.type === "TSQualifiedName") {
-					const right = typeNameNode.right;
+					const { right } = typeNameNode;
 					typeName = right.name;
 				}
 
 				// Report if the type name is CSSProperties.
 				if (typeName === "CSSProperties") {
 					context.report({
-						node,
-						messageId: "moveToFile",
 						data: {
 							name: identifier.name,
 							typeName
-						}
+						},
+						messageId: "moveToFile",
+						node
 					});
 				}
 			}
 		};
+	},
+	defaultOptions: [],
+	meta: {
+		docs: {
+			description:
+				"Warn when a component file (.jsx or .tsx) contains a style object typed as CSSProperties. " +
+				"Style objects should be moved to their own file under the style folder."
+		},
+		messages: {
+			moveToFile:
+				'Style object "{{name}}" is typed as {{typeName}}. Move it to its own file under the style folder.'
+		},
+		schema: [],
+		type: "suggestion"
 	}
 };

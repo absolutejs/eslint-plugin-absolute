@@ -18,34 +18,34 @@ export default defineConfig([
 		languageOptions: {
 			parser: tsParser,
 			parserOptions: {
-				project: "./tsconfig.json",
-			},
+				project: "./tsconfig.json"
+			}
 		},
 		rules: {
-			"@typescript-eslint/no-unnecessary-type-assertion": "error",
-		},
+			"@typescript-eslint/no-unnecessary-type-assertion": "error"
+		}
 	},
 	{
 		files: ["**/*.{ts,js,mjs}"],
 		plugins: {
-			absolute: absolutePlugin,
+			absolute: absolutePlugin
 		},
 		rules: {
 			"absolute/explicit-object-types": "error",
 			"absolute/max-depth-extended": ["error", 1],
 			"absolute/min-var-length": [
 				"error",
-				{ allowedVars: ["_", "id"], minLength: 3 },
+				{ allowedVars: ["_", "id"], minLength: 3 }
 			],
 			"absolute/no-explicit-return-type": "error",
 			"absolute/no-useless-function": "error",
 			"absolute/sort-exports": [
 				"error",
-				{ caseSensitive: true, natural: true, order: "asc" },
+				{ caseSensitive: true, natural: true, order: "asc" }
 			],
 			"absolute/sort-keys-fixable": [
 				"error",
-				{ caseSensitive: true, natural: true, order: "asc" },
+				{ caseSensitive: true, natural: true, order: "asc" }
 			],
 			"arrow-body-style": ["error", "as-needed"],
 			"consistent-return": "error",
@@ -53,7 +53,7 @@ export default defineConfig([
 			"func-style": [
 				"error",
 				"expression",
-				{ allowArrowFunctions: true },
+				{ allowArrowFunctions: true }
 			],
 			"no-await-in-loop": "error",
 			"no-duplicate-imports": "error",
@@ -65,7 +65,7 @@ export default defineConfig([
 			"no-loop-func": "error",
 			"no-magic-numbers": [
 				"warn",
-				{ detectObjects: false, enforceConst: true, ignore: [0, 1, 2] },
+				{ detectObjects: false, enforceConst: true, ignore: [0, 1, 2] }
 			],
 			"no-nested-ternary": "error",
 			"no-new-wrappers": "error",
@@ -82,22 +82,22 @@ export default defineConfig([
 			"prefer-destructuring": [
 				"error",
 				{ array: true, object: true },
-				{ enforceForRenamedProperties: false },
+				{ enforceForRenamedProperties: false }
 			],
-			"prefer-template": "error",
-		},
+			"prefer-template": "error"
+		}
 	},
 	{
 		files: ["eslint.config.mjs"],
 		rules: {
-			"@typescript-eslint/no-unused-expressions": "off",
-		},
+			"@typescript-eslint/no-unused-expressions": "off"
+		}
 	},
 	{
 		files: ["**/*.test.ts"],
 		rules: {
 			"absolute/min-var-length": "off",
-			"no-magic-numbers": "off",
-		},
-	},
+			"no-magic-numbers": "off"
+		}
+	}
 ]);

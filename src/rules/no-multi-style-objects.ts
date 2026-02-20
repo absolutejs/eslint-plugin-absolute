@@ -10,21 +10,6 @@ type Options = [];
 type MessageIds = "noMultiStyleObjects";
 
 export const noMultiStyleObjects: TSESLint.RuleModule<MessageIds, Options> = {
-	meta: {
-		type: "problem",
-		docs: {
-			description:
-				"Disallow grouping CSS style objects in a single export; export each style separately."
-		},
-		schema: [], // no options
-		messages: {
-			noMultiStyleObjects:
-				"Do not group CSS style objects in a single export; export each style separately."
-		}
-	},
-
-	defaultOptions: [],
-
 	create(context) {
 		/**
 		 * Checks if the given ObjectExpression node contains multiple properties
@@ -42,7 +27,7 @@ export const noMultiStyleObjects: TSESLint.RuleModule<MessageIds, Options> = {
 					continue;
 				}
 
-				const key = prop.key;
+				const { key } = prop;
 				let name: string | null = null;
 
 				if (key.type === "Identifier") {
@@ -61,8 +46,8 @@ export const noMultiStyleObjects: TSESLint.RuleModule<MessageIds, Options> = {
 
 			if (cssStyleProperties.length > 1) {
 				context.report({
-					node,
-					messageId: "noMultiStyleObjects"
+					messageId: "noMultiStyleObjects",
+					node
 				});
 			}
 		}
@@ -70,18 +55,31 @@ export const noMultiStyleObjects: TSESLint.RuleModule<MessageIds, Options> = {
 		return {
 			// Check default exports that are object literals.
 			ExportDefaultDeclaration(node: TSESTree.ExportDefaultDeclaration) {
-				const declaration = node.declaration;
+				const { declaration } = node;
 				if (declaration && declaration.type === "ObjectExpression") {
 					checkObjectExpression(declaration);
 				}
 			},
 			// Optionally, also check for object literals returned from exported functions.
 			ReturnStatement(node: TSESTree.ReturnStatement) {
-				const argument = node.argument;
+				const { argument } = node;
 				if (argument && argument.type === "ObjectExpression") {
 					checkObjectExpression(argument);
 				}
 			}
 		};
+	},
+	defaultOptions: [],
+	meta: {
+		docs: {
+			description:
+				"Disallow grouping CSS style objects in a single export; export each style separately."
+		},
+		messages: {
+			noMultiStyleObjects:
+				"Do not group CSS style objects in a single export; export each style separately."
+		},
+		schema: [], // no options,
+		type: "problem"
 	}
 };

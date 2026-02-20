@@ -17,23 +17,8 @@ export const noTransitionCSSProperties: TSESLint.RuleModule<
 	MessageIds,
 	Options
 > = {
-	meta: {
-		type: "problem",
-		docs: {
-			description:
-				"Objects typed as CSSProperties must not include a 'transition' property as it conflicts with react-spring."
-		},
-		schema: [], // no options
-		messages: {
-			forbiddenTransition:
-				"Objects typed as CSSProperties must not include a 'transition' property as it conflicts with react-spring."
-		}
-	},
-
-	defaultOptions: [],
-
 	create(context) {
-		const sourceCode = context.sourceCode;
+		const { sourceCode } = context;
 
 		return {
 			VariableDeclarator(node: TSESTree.VariableDeclarator) {
@@ -47,14 +32,14 @@ export const noTransitionCSSProperties: TSESLint.RuleModule<
 				}
 
 				let isStyleType = false;
-				const typeAnnotation = node.id.typeAnnotation.typeAnnotation;
+				const { typeAnnotation } = node.id.typeAnnotation;
 
 				// First try: check if it's a TSTypeReference with typeName "CSSProperties"
 				if (
 					typeAnnotation &&
 					typeAnnotation.type === "TSTypeReference"
 				) {
-					const typeName = typeAnnotation.typeName;
+					const { typeName } = typeAnnotation;
 
 					if (
 						typeName.type === "Identifier" &&
@@ -86,7 +71,7 @@ export const noTransitionCSSProperties: TSESLint.RuleModule<
 				}
 
 				// Check that the initializer is an object literal.
-				const init = node.init;
+				const { init } = node;
 				if (!init || init.type !== "ObjectExpression") {
 					return;
 				}
@@ -114,12 +99,25 @@ export const noTransitionCSSProperties: TSESLint.RuleModule<
 
 					if (keyName === "transition") {
 						context.report({
-							node: prop,
-							messageId: "forbiddenTransition"
+							messageId: "forbiddenTransition",
+							node: prop
 						});
 					}
 				}
 			}
 		};
+	},
+	defaultOptions: [],
+	meta: {
+		docs: {
+			description:
+				"Objects typed as CSSProperties must not include a 'transition' property as it conflicts with react-spring."
+		},
+		messages: {
+			forbiddenTransition:
+				"Objects typed as CSSProperties must not include a 'transition' property as it conflicts with react-spring."
+		},
+		schema: [], // no options,
+		type: "problem"
 	}
 };
