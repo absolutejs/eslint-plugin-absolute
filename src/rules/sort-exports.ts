@@ -30,7 +30,51 @@ type ExportItem = {
 	text: string;
 };
 
-const SORT_BEFORE: -1 = -1;
+const SORT_BEFORE = Number.parseInt("-1", 10);
+
+const hasStringTypeProperty = (value: object) => {
+	const maybeType = Reflect.get(value, "type");
+	return typeof maybeType === "string";
+};
+
+const isNodeLike = (value: unknown): value is TSESTree.Node =>
+	value !== null &&
+	value !== undefined &&
+	typeof value === "object" &&
+	"type" in value &&
+	hasStringTypeProperty(value);
+
+const shouldSkipNodeEntry = (key: string, value: unknown) =>
+	key === "parent" || value === null || value === undefined;
+
+const visitNodeArray = (
+	values: unknown[],
+	visit: (node: TSESTree.Node | null | undefined) => void
+) => values.filter(isNodeLike).forEach(visit);
+
+const visitNodeEntryValue = (
+	value: unknown,
+	visit: (node: TSESTree.Node | null | undefined) => void
+) => {
+	if (Array.isArray(value)) {
+		visitNodeArray(value, visit);
+		return;
+	}
+
+	if (isNodeLike(value)) {
+		visit(value);
+	}
+};
+
+const visitNodeEntries = (
+	current: TSESTree.Node,
+	visit: (node: TSESTree.Node | null | undefined) => void
+) =>
+	Object.entries(current)
+		.filter(([key, value]) => !shouldSkipNodeEntry(key, value))
+		.forEach(([, value]) => {
+			visitNodeEntryValue(value, visit);
+		});
 
 const getVariableDeclaratorName = (
 	declaration: TSESTree.VariableDeclaration
@@ -112,6 +156,93 @@ const isFixableExport = (exportNode: TSESTree.ExportNamedDeclaration) => {
 		declaration.id !== null &&
 		declaration.id.type === "Identifier"
 	);
+};
+
+const visitImmediateReferences = (
+	node: TSESTree.Node | null | undefined,
+	onReference: (name: string) => void
+) => {
+	if (!node) {
+		return;
+	}
+
+	const visit = (current: TSESTree.Node | null | undefined) => {
+		if (!current) {
+			return;
+		}
+
+		switch (current.type) {
+			case "Identifier":
+				onReference(current.name);
+				return;
+			case "FunctionDeclaration":
+			case "FunctionExpression":
+			case "ArrowFunctionExpression":
+				return;
+			case "MemberExpression":
+				visit(current.object);
+				if (current.computed) {
+					visit(current.property);
+				}
+				return;
+			case "Property":
+				if (current.computed) {
+					visit(current.key);
+				}
+				visit(current.value);
+				return;
+			case "PropertyDefinition":
+				if (current.computed) {
+					visit(current.key);
+				}
+				if (current.static) {
+					visit(current.value);
+				}
+				return;
+			case "MethodDefinition":
+				if (current.computed) {
+					visit(current.key);
+				}
+				return;
+			case "StaticBlock":
+				for (const statement of current.body) {
+					visit(statement);
+				}
+				return;
+		}
+
+		visitNodeEntries(current, visit);
+	};
+
+	visit(node);
+};
+
+const getImmediateDependencyNames = (node: TSESTree.ExportNamedDeclaration) => {
+	const names = new Set<string>();
+	const { declaration } = node;
+	const addName = names.add.bind(names);
+	const addDeclaratorDependencies = (
+		declarator: TSESTree.VariableDeclarator
+	) => visitImmediateReferences(declarator.init, addName);
+	const addClassElementDependencies = (
+		element: TSESTree.ClassElement | TSESTree.StaticBlock
+	) => visitImmediateReferences(element, addName);
+
+	if (!declaration) {
+		return names;
+	}
+
+	if (declaration.type === "VariableDeclaration") {
+		declaration.declarations.forEach(addDeclaratorDependencies);
+		return names;
+	}
+
+	if (declaration.type === "ClassDeclaration") {
+		visitImmediateReferences(declaration.superClass, addName);
+		declaration.body.body.forEach(addClassElementDependencies);
+	}
+
+	return names;
 };
 
 export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
@@ -213,23 +344,6 @@ export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
 			return compareStrings(left.name, right.name);
 		};
 
-		/**
-		 * Very lightweight dependency check: look at the text of the node and see
-		 * if it references any of the later export names.
-		 */
-		const hasForwardDependency = (
-			node: TSESTree.Node,
-			laterNames: Set<string>
-		) => {
-			const text = sourceCode.getText(node);
-			for (const name of laterNames) {
-				if (text.includes(name)) {
-					return true;
-				}
-			}
-			return false;
-		};
-
 		const buildItems = (block: TSESTree.ExportNamedDeclaration[]) =>
 			block
 				.map((node) => {
@@ -278,9 +392,17 @@ export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
 			const exportNames = items.map((item) => item.name);
 			return items.some((item, idx) => {
 				const laterNames = new Set(exportNames.slice(idx + 1));
-				const nodeToCheck: TSESTree.Node =
-					item.node.declaration ?? item.node;
-				return hasForwardDependency(nodeToCheck, laterNames);
+				if (laterNames.size === 0) {
+					return false;
+				}
+
+				const dependencies = getImmediateDependencyNames(item.node);
+				for (const dependency of dependencies) {
+					if (laterNames.has(dependency)) {
+						return true;
+					}
+				}
+				return false;
 			});
 		};
 

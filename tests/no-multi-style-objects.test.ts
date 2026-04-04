@@ -45,15 +45,19 @@ ruleTester.run("no-multi-style-objects", noMultiStyleObjects, {
 	]
 });
 
-ruleTester.run("no-multi-style-objects (string literal keys)", noMultiStyleObjects, {
-	invalid: [
-		{
-			code: `export default { "headerStyle": {}, "footerStyle": {} };`,
-			errors: [{ messageId: "noMultiStyleObjects" }],
-			name: "string literal keys with multiple style properties"
-		}
-	],
-	valid: []
-});
+ruleTester.run(
+	"no-multi-style-objects (string literal keys)",
+	noMultiStyleObjects,
+	{
+		invalid: [
+			{
+				code: `export default { "headerStyle": {}, "footerStyle": {} };`,
+				errors: [{ messageId: "noMultiStyleObjects" }],
+				name: "string literal keys with multiple style properties"
+			}
+		],
+		valid: []
+	}
+);
 
 console.log("no-multi-style-objects: All tests passed!");

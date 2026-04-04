@@ -62,15 +62,19 @@ ruleTester.run("inline-style-limit", inlineStyleLimit, {
 	]
 });
 
-ruleTester.run("inline-style-limit (default option invalid)", inlineStyleLimit, {
-	invalid: [
-		{
-			code: `const C = () => <div style={{ a: 1, b: 2, c: 3, d: 4 }} />;`,
-			errors: [{ messageId: "extractStyle" }],
-			name: "default option (no options): invalid with 4 keys"
-		}
-	],
-	valid: []
-});
+ruleTester.run(
+	"inline-style-limit (default option invalid)",
+	inlineStyleLimit,
+	{
+		invalid: [
+			{
+				code: `const C = () => <div style={{ a: 1, b: 2, c: 3, d: 4 }} />;`,
+				errors: [{ messageId: "extractStyle" }],
+				name: "default option (no options): invalid with 4 keys"
+			}
+		],
+		valid: []
+	}
+);
 
 console.log("inline-style-limit: All tests passed!");

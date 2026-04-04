@@ -186,6 +186,75 @@ var explicitObjectTypes = {
 
 // src/rules/sort-keys-fixable.ts
 var SORT_BEFORE = -1;
+var hasDuplicateNames = (names) => {
+  const seen = new Set;
+  const nonNullNames = names.flatMap((name) => name === null ? [] : [name]);
+  for (const name of nonNullNames) {
+    if (seen.has(name)) {
+      return true;
+    }
+    seen.add(name);
+  }
+  return false;
+};
+var isSafeStaticTemplate = (node) => node.expressions.length === 0;
+var isSafeArrayElement = (node) => {
+  if (!node || node.type === "SpreadElement") {
+    return false;
+  }
+  return isSafeToReorderExpression(node);
+};
+var isSafeObjectProperty = (property) => {
+  if (property.type !== "Property" || property.computed || property.kind !== "init") {
+    return false;
+  }
+  if (property.key.type !== "Identifier" && property.key.type !== "Literal") {
+    return false;
+  }
+  if (property.method) {
+    return true;
+  }
+  return isSafeToReorderExpression(property.value);
+};
+var isSafeToReorderExpression = (node) => {
+  if (!node || node.type === "PrivateIdentifier") {
+    return false;
+  }
+  switch (node.type) {
+    case "Identifier":
+    case "Literal":
+    case "ThisExpression":
+    case "FunctionExpression":
+    case "ArrowFunctionExpression":
+    case "ClassExpression":
+      return true;
+    case "TemplateLiteral":
+      return isSafeStaticTemplate(node);
+    case "UnaryExpression":
+      return isSafeToReorderExpression(node.argument);
+    case "ArrayExpression":
+      return node.elements.every(isSafeArrayElement);
+    case "ObjectExpression":
+      return node.properties.every(isSafeObjectProperty);
+    default:
+      return false;
+  }
+};
+var isSafeJSXAttributeValue = (value) => {
+  if (value === null) {
+    return true;
+  }
+  if (value.type === "Literal") {
+    return true;
+  }
+  if (value.type !== "JSXExpressionContainer") {
+    return false;
+  }
+  if (value.expression.type === "JSXEmptyExpression") {
+    return false;
+  }
+  return isSafeToReorderExpression(value.expression);
+};
 var sortKeysFixable = {
   create(context) {
     const { sourceCode } = context;
@@ -352,6 +421,12 @@ ${indent}`;
           node: prop
         };
       });
+      if (hasDuplicateNames(keys.map((key) => key.keyName))) {
+        autoFixable = false;
+      }
+      if (autoFixable && keys.some((key) => key.node.type === "Property" && !isSafeToReorderExpression(key.node.value))) {
+        autoFixable = false;
+      }
       let fixProvided = false;
       const createReportWithFix = (curr, shouldFix) => {
         context.report({
@@ -439,6 +514,20 @@ ${indent}`;
       }
       const names = attrs.map((attr) => getAttrName(attr));
       if (!isOutOfOrder(names)) {
+        return;
+      }
+      if (hasDuplicateNames(names)) {
+        context.report({
+          messageId: "unsorted",
+          node: attrs[0].type === "JSXAttribute" ? attrs[0].name : attrs[0]
+        });
+        return;
+      }
+      if (attrs.some((attr) => attr.type === "JSXAttribute" && !isSafeJSXAttributeValue(attr.value))) {
+        context.report({
+          messageId: "unsorted",
+          node: attrs[0].type === "JSXAttribute" ? attrs[0].name : attrs[0]
+        });
         return;
       }
       const braceConflict = attrs.find((currAttr, idx) => {
@@ -797,7 +886,26 @@ var noUnnecessaryKey = {
 };
 
 // src/rules/sort-exports.ts
-var SORT_BEFORE2 = -1;
+var SORT_BEFORE2 = Number.parseInt("-1", 10);
+var hasStringTypeProperty = (value) => {
+  const maybeType = Reflect.get(value, "type");
+  return typeof maybeType === "string";
+};
+var isNodeLike = (value) => value !== null && value !== undefined && typeof value === "object" && ("type" in value) && hasStringTypeProperty(value);
+var shouldSkipNodeEntry = (key, value) => key === "parent" || value === null || value === undefined;
+var visitNodeArray = (values, visit) => values.filter(isNodeLike).forEach(visit);
+var visitNodeEntryValue = (value, visit) => {
+  if (Array.isArray(value)) {
+    visitNodeArray(value, visit);
+    return;
+  }
+  if (isNodeLike(value)) {
+    visit(value);
+  }
+};
+var visitNodeEntries = (current, visit) => Object.entries(current).filter(([key, value]) => !shouldSkipNodeEntry(key, value)).forEach(([, value]) => {
+  visitNodeEntryValue(value, visit);
+});
 var getVariableDeclaratorName = (declaration) => {
   if (declaration.declarations.length !== 1) {
     return null;
@@ -847,6 +955,76 @@ var isFixableExport = (exportNode) => {
     return firstDecl !== undefined && firstDecl.id.type === "Identifier";
   }
   return (declaration.type === "FunctionDeclaration" || declaration.type === "ClassDeclaration") && declaration.id !== null && declaration.id.type === "Identifier";
+};
+var visitImmediateReferences = (node, onReference) => {
+  if (!node) {
+    return;
+  }
+  const visit = (current) => {
+    if (!current) {
+      return;
+    }
+    switch (current.type) {
+      case "Identifier":
+        onReference(current.name);
+        return;
+      case "FunctionDeclaration":
+      case "FunctionExpression":
+      case "ArrowFunctionExpression":
+        return;
+      case "MemberExpression":
+        visit(current.object);
+        if (current.computed) {
+          visit(current.property);
+        }
+        return;
+      case "Property":
+        if (current.computed) {
+          visit(current.key);
+        }
+        visit(current.value);
+        return;
+      case "PropertyDefinition":
+        if (current.computed) {
+          visit(current.key);
+        }
+        if (current.static) {
+          visit(current.value);
+        }
+        return;
+      case "MethodDefinition":
+        if (current.computed) {
+          visit(current.key);
+        }
+        return;
+      case "StaticBlock":
+        for (const statement of current.body) {
+          visit(statement);
+        }
+        return;
+    }
+    visitNodeEntries(current, visit);
+  };
+  visit(node);
+};
+var getImmediateDependencyNames = (node) => {
+  const names = new Set;
+  const { declaration } = node;
+  const addName = names.add.bind(names);
+  const addDeclaratorDependencies = (declarator) => visitImmediateReferences(declarator.init, addName);
+  const addClassElementDependencies = (element) => visitImmediateReferences(element, addName);
+  if (!declaration) {
+    return names;
+  }
+  if (declaration.type === "VariableDeclaration") {
+    declaration.declarations.forEach(addDeclaratorDependencies);
+    return names;
+  }
+  if (declaration.type === "ClassDeclaration") {
+    visitImmediateReferences(declaration.superClass, addName);
+    declaration.body.body.forEach(addClassElementDependencies);
+  }
+  return names;
 };
 var sortExports = {
   create(context) {
@@ -903,15 +1081,6 @@ var sortExports = {
       }
       return compareStrings(left.name, right.name);
     };
-    const hasForwardDependency = (node, laterNames) => {
-      const text = sourceCode.getText(node);
-      for (const name of laterNames) {
-        if (text.includes(name)) {
-          return true;
-        }
-      }
-      return false;
-    };
     const buildItems = (block) => block.map((node) => {
       const name = getExportName(node);
       if (!name) {
@@ -949,8 +1118,16 @@ var sortExports = {
       const exportNames = items.map((item) => item.name);
       return items.some((item, idx) => {
         const laterNames = new Set(exportNames.slice(idx + 1));
-        const nodeToCheck = item.node.declaration ?? item.node;
-        return hasForwardDependency(nodeToCheck, laterNames);
+        if (laterNames.size === 0) {
+          return false;
+        }
+        const dependencies = getImmediateDependencyNames(item.node);
+        for (const dependency of dependencies) {
+          if (laterNames.has(dependency)) {
+            return true;
+          }
+        }
+        return false;
       });
     };
     const processExportBlock = (block) => {

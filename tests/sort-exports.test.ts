@@ -92,6 +92,12 @@ ruleTester.run("sort-exports", sortExports, {
 			output: `export function alpha() {};\nexport function beta() {};`
 		},
 		{
+			code: `export const zebra = () => alpha;\nexport const alpha = 1;`,
+			errors: [{ messageId: "alphabetical" }],
+			name: "deferred function body reference does not block sorting",
+			output: `export const alpha = 1;\nexport const zebra = () => alpha;`
+		},
+		{
 			code: `export class Zebra {}\nexport class Alpha {}`,
 			errors: [{ messageId: "alphabetical" }],
 			name: "unsorted export class declarations",
@@ -211,6 +217,10 @@ ruleTester.run("sort-exports", sortExports, {
 		{
 			code: `export const second = first;\nexport const first = 42;`,
 			name: "forward dependency: second references first, skip sorting"
+		},
+		{
+			code: `export class Zebra {\n\tstatic value = alpha;\n}\nexport const alpha = 1;`,
+			name: "forward dependency: static class field references later export, skips sorting"
 		}
 	]
 });

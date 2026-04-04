@@ -67,6 +67,16 @@ ruleTester.run("sort-keys-fixable", sortKeysFixable, {
 			name: "spread element disables autofix"
 		},
 		{
+			code: `const obj = { b: 1, a: 2, a: 3 };`,
+			errors: [{ messageId: "unsorted" }],
+			name: "duplicate keys disable autofix"
+		},
+		{
+			code: `const obj = { b: sideEffect("b"), a: sideEffect("a") };`,
+			errors: [{ messageId: "unsorted" }],
+			name: "side-effectful property values disable autofix"
+		},
+		{
 			code: `const obj = {
 	b: 1,
 	a: 2
@@ -206,6 +216,16 @@ jsxRuleTester.run("sort-keys-fixable (JSX)", sortKeysFixable, {
 			errors: [{ messageId: "unsorted" }, { messageId: "unsorted" }],
 			name: "JSX attribute with unsorted object value",
 			output: `const C = () => <Comp style={{ a: 2, b: 1 }} />;`
+		},
+		{
+			code: `const C = () => <Comp z="1" a="2" a="3" />;`,
+			errors: [{ messageId: "unsorted" }],
+			name: "duplicate JSX attributes disable autofix"
+		},
+		{
+			code: `const C = () => <Comp z={sideEffect("z")} a={sideEffect("a")} />;`,
+			errors: [{ messageId: "unsorted" }],
+			name: "side-effectful JSX attribute values disable autofix"
 		}
 	],
 	valid: [

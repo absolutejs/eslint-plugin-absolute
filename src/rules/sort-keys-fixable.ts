@@ -36,6 +36,101 @@ type KeyInfo = {
 
 const SORT_BEFORE = -1;
 
+const hasDuplicateNames = (names: Array<string | null>) => {
+	const seen = new Set<string>();
+	const nonNullNames = names.flatMap((name) => (name === null ? [] : [name]));
+
+	for (const name of nonNullNames) {
+		if (seen.has(name)) {
+			return true;
+		}
+		seen.add(name);
+	}
+
+	return false;
+};
+
+const isSafeStaticTemplate = (node: TSESTree.TemplateLiteral) =>
+	node.expressions.length === 0;
+
+const isSafeArrayElement: (node: TSESTree.Node | null) => boolean = (node) => {
+	if (!node || node.type === "SpreadElement") {
+		return false;
+	}
+
+	return isSafeToReorderExpression(node);
+};
+
+const isSafeObjectProperty: (
+	property: TSESTree.ObjectExpression["properties"][number]
+) => boolean = (property) => {
+	if (
+		property.type !== "Property" ||
+		property.computed ||
+		property.kind !== "init"
+	) {
+		return false;
+	}
+
+	if (property.key.type !== "Identifier" && property.key.type !== "Literal") {
+		return false;
+	}
+
+	if (property.method) {
+		return true;
+	}
+
+	return isSafeToReorderExpression(property.value);
+};
+
+const isSafeToReorderExpression: (node: TSESTree.Node | null) => boolean = (
+	node
+) => {
+	if (!node || node.type === "PrivateIdentifier") {
+		return false;
+	}
+
+	switch (node.type) {
+		case "Identifier":
+		case "Literal":
+		case "ThisExpression":
+		case "FunctionExpression":
+		case "ArrowFunctionExpression":
+		case "ClassExpression":
+			return true;
+		case "TemplateLiteral":
+			return isSafeStaticTemplate(node);
+		case "UnaryExpression":
+			return isSafeToReorderExpression(node.argument);
+		case "ArrayExpression":
+			return node.elements.every(isSafeArrayElement);
+		case "ObjectExpression":
+			return node.properties.every(isSafeObjectProperty);
+		default:
+			return false;
+	}
+};
+
+const isSafeJSXAttributeValue = (value: TSESTree.JSXAttribute["value"]) => {
+	if (value === null) {
+		return true;
+	}
+
+	if (value.type === "Literal") {
+		return true;
+	}
+
+	if (value.type !== "JSXExpressionContainer") {
+		return false;
+	}
+
+	if (value.expression.type === "JSXEmptyExpression") {
+		return false;
+	}
+
+	return isSafeToReorderExpression(value.expression);
+};
+
 export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 	create(context) {
 		const { sourceCode } = context;
@@ -367,6 +462,21 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 				};
 			});
 
+			if (hasDuplicateNames(keys.map((key) => key.keyName))) {
+				autoFixable = false;
+			}
+
+			if (
+				autoFixable &&
+				keys.some(
+					(key) =>
+						key.node.type === "Property" &&
+						!isSafeToReorderExpression(key.node.value)
+				)
+			) {
+				autoFixable = false;
+			}
+
 			let fixProvided = false;
 
 			const createReportWithFix = (curr: KeyInfo, shouldFix: boolean) => {
@@ -535,6 +645,34 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 			const names = attrs.map((attr) => getAttrName(attr));
 
 			if (!isOutOfOrder(names)) {
+				return;
+			}
+
+			if (hasDuplicateNames(names)) {
+				context.report({
+					messageId: "unsorted",
+					node:
+						attrs[0]!.type === "JSXAttribute"
+							? attrs[0]!.name
+							: attrs[0]!
+				});
+				return;
+			}
+
+			if (
+				attrs.some(
+					(attr) =>
+						attr.type === "JSXAttribute" &&
+						!isSafeJSXAttributeValue(attr.value)
+				)
+			) {
+				context.report({
+					messageId: "unsorted",
+					node:
+						attrs[0]!.type === "JSXAttribute"
+							? attrs[0]!.name
+							: attrs[0]!
+				});
 				return;
 			}
 

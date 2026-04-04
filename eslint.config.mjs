@@ -30,7 +30,7 @@ export default defineConfig([
 		}
 	},
 	{
-		files: ["**/*.{ts,js,mjs}"],
+		files: ["**/*.{ts,js,mjs,json}"],
 		plugins: {
 			absolute: absolutePlugin
 		},
@@ -92,7 +92,7 @@ export default defineConfig([
 		}
 	},
 	{
-		files: ["eslint.config.mjs"],
+		files: ["eslint.config.mjs", "package.json", "tsconfig.json"],
 		rules: {
 			"@typescript-eslint/no-unused-expressions": "off"
 		}
