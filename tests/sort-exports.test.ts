@@ -221,6 +221,28 @@ ruleTester.run("sort-exports", sortExports, {
 		{
 			code: `export class Zebra {\n\tstatic value = alpha;\n}\nexport const alpha = 1;`,
 			name: "forward dependency: static class field references later export, skips sorting"
+		},
+		{
+			code: `export const errorLogs = createTable();\nexport const providerStatusEnum = createEnum();\nexport const providers = createTable(providerStatusEnum);\nexport const telemetryEvents = createTable();\nexport const users = createTable();\nexport const schema = {\n\terrorLogs,\n\tproviders,\n\ttelemetryEvents,\n\tusers\n};`,
+			name: "sorting skips when reordered exports would create forward dependencies",
+			options: [
+				{
+					caseSensitive: true,
+					natural: true,
+					variablesBeforeFunctions: true
+				}
+			]
+		},
+		{
+			code: `export const tdStyle = baseStyle;\nexport const labelCellStyle = {\n\t...tdStyle,\n\tfontWeight: 600\n};`,
+			name: "sorting skips when object spread depends on an earlier export",
+			options: [
+				{
+					caseSensitive: true,
+					natural: true,
+					variablesBeforeFunctions: true
+				}
+			]
 		}
 	]
 });

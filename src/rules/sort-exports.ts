@@ -388,7 +388,7 @@ export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
 			return unsorted ? messageId : null;
 		};
 
-		const checkForwardDependencies = (items: ExportItem[]) => {
+		const hasForwardDependenciesInOrder = (items: ExportItem[]) => {
 			const exportNames = items.map((item) => item.name);
 			return items.some((item, idx) => {
 				const laterNames = new Set(exportNames.slice(idx + 1));
@@ -402,6 +402,37 @@ export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
 						return true;
 					}
 				}
+				return false;
+			});
+		};
+
+		const wouldCreateForwardDependencies = (
+			items: ExportItem[],
+			sortedItems: ExportItem[]
+		) => {
+			const sortedIndices = new Map(
+				sortedItems.map((item, idx) => [item.name, idx])
+			);
+			const exportNames = new Set(items.map((item) => item.name));
+
+			return items.some((item) => {
+				const itemIndex = sortedIndices.get(item.name);
+				if (itemIndex === undefined) {
+					return false;
+				}
+
+				const dependencies = getImmediateDependencyNames(item.node);
+				for (const dependency of dependencies) {
+					const dependencyIndex = exportNames.has(dependency)
+						? sortedIndices.get(dependency)
+						: undefined;
+					if (
+						dependencyIndex !== undefined &&
+						itemIndex < dependencyIndex
+					)
+						return true;
+				}
+
 				return false;
 			});
 		};
@@ -424,11 +455,15 @@ export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
 				return;
 			}
 
-			if (checkForwardDependencies(items)) {
+			if (hasForwardDependenciesInOrder(items)) {
 				return;
 			}
 
 			const sortedItems = items.slice().sort(sortComparator);
+
+			if (wouldCreateForwardDependencies(items, sortedItems)) {
+				return;
+			}
 
 			const expectedOrder = sortedItems
 				.map((item) => item.name)

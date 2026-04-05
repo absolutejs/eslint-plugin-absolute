@@ -1114,7 +1114,7 @@ var sortExports = {
       });
       return unsorted ? messageId : null;
     };
-    const checkForwardDependencies = (items) => {
+    const hasForwardDependenciesInOrder = (items) => {
       const exportNames = items.map((item) => item.name);
       return items.some((item, idx) => {
         const laterNames = new Set(exportNames.slice(idx + 1));
@@ -1126,6 +1126,23 @@ var sortExports = {
           if (laterNames.has(dependency)) {
             return true;
           }
+        }
+        return false;
+      });
+    };
+    const wouldCreateForwardDependencies = (items, sortedItems) => {
+      const sortedIndices = new Map(sortedItems.map((item, idx) => [item.name, idx]));
+      const exportNames = new Set(items.map((item) => item.name));
+      return items.some((item) => {
+        const itemIndex = sortedIndices.get(item.name);
+        if (itemIndex === undefined) {
+          return false;
+        }
+        const dependencies = getImmediateDependencyNames(item.node);
+        for (const dependency of dependencies) {
+          const dependencyIndex = exportNames.has(dependency) ? sortedIndices.get(dependency) : undefined;
+          if (dependencyIndex !== undefined && itemIndex < dependencyIndex)
+            return true;
         }
         return false;
       });
@@ -1142,10 +1159,13 @@ var sortExports = {
       if (!messageId) {
         return;
       }
-      if (checkForwardDependencies(items)) {
+      if (hasForwardDependenciesInOrder(items)) {
         return;
       }
       const sortedItems = items.slice().sort(sortComparator);
+      if (wouldCreateForwardDependencies(items, sortedItems)) {
+        return;
+      }
       const expectedOrder = sortedItems.map((item) => item.name).join(", ");
       const [firstNode] = block;
       const lastNode = block[block.length - 1];
