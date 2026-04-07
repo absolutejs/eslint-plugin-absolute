@@ -186,6 +186,16 @@ var explicitObjectTypes = {
 
 // src/rules/sort-keys-fixable.ts
 var SORT_BEFORE = -1;
+var PURE_CONSTRUCTORS = new Set(["Date"]);
+var PURE_GLOBAL_FUNCTIONS = new Set(["Boolean", "Number", "String"]);
+var PURE_MEMBER_METHODS = new Set([
+  "getDay",
+  "getHours",
+  "getMilliseconds",
+  "getMinutes",
+  "getSeconds",
+  "padStart"
+]);
 var hasDuplicateNames = (names) => {
   const seen = new Set;
   const nonNullNames = names.flatMap((name) => name === null ? [] : [name]);
@@ -197,68 +207,13 @@ var hasDuplicateNames = (names) => {
   }
   return false;
 };
-var isSafeStaticTemplate = (node) => node.expressions.length === 0;
-var isSafeArrayElement = (node) => {
-  if (!node || node.type === "SpreadElement") {
-    return false;
-  }
-  return isSafeToReorderExpression(node);
-};
-var isSafeObjectProperty = (property) => {
-  if (property.type !== "Property" || property.computed || property.kind !== "init") {
-    return false;
-  }
-  if (property.key.type !== "Identifier" && property.key.type !== "Literal") {
-    return false;
-  }
-  if (property.method) {
-    return true;
-  }
-  return isSafeToReorderExpression(property.value);
-};
-var isSafeToReorderExpression = (node) => {
-  if (!node || node.type === "PrivateIdentifier") {
-    return false;
-  }
-  switch (node.type) {
-    case "Identifier":
-    case "Literal":
-    case "ThisExpression":
-    case "FunctionExpression":
-    case "ArrowFunctionExpression":
-    case "ClassExpression":
-      return true;
-    case "TemplateLiteral":
-      return isSafeStaticTemplate(node);
-    case "UnaryExpression":
-      return isSafeToReorderExpression(node.argument);
-    case "ArrayExpression":
-      return node.elements.every(isSafeArrayElement);
-    case "ObjectExpression":
-      return node.properties.every(isSafeObjectProperty);
-    default:
-      return false;
-  }
-};
-var isSafeJSXAttributeValue = (value) => {
-  if (value === null) {
-    return true;
-  }
-  if (value.type === "Literal") {
-    return true;
-  }
-  if (value.type !== "JSXExpressionContainer") {
-    return false;
-  }
-  if (value.expression.type === "JSXEmptyExpression") {
-    return false;
-  }
-  return isSafeToReorderExpression(value.expression);
-};
 var sortKeysFixable = {
   create(context) {
     const { sourceCode } = context;
     const [option] = context.options;
+    const topLevelBindings = new Map;
+    const pureFunctionCache = new Map;
+    const pureFunctionInProgress = new Set;
     const order = option && option.order ? option.order : "asc";
     const caseSensitive = option && typeof option.caseSensitive === "boolean" ? option.caseSensitive : false;
     const natural = option && typeof option.natural === "boolean" ? option.natural : false;
@@ -277,6 +232,305 @@ var sortKeysFixable = {
         });
       }
       return left.localeCompare(right);
+    };
+    const addImportBindings = (statement) => {
+      if (statement.specifiers.length === 0) {
+        return;
+      }
+      for (const specifier of statement.specifiers) {
+        topLevelBindings.set(specifier.local.name, {
+          kind: "import"
+        });
+      }
+    };
+    const addVariableBinding = (declaration) => {
+      if (declaration.id.type !== "Identifier" || !declaration.init) {
+        return;
+      }
+      if (declaration.init.type === "ArrowFunctionExpression" || declaration.init.type === "FunctionExpression") {
+        topLevelBindings.set(declaration.id.name, {
+          kind: "function",
+          node: declaration.init
+        });
+        return;
+      }
+      topLevelBindings.set(declaration.id.name, {
+        kind: "value",
+        node: declaration.init
+      });
+    };
+    const addTopLevelBindings = (statement) => {
+      if (statement.type === "ImportDeclaration") {
+        addImportBindings(statement);
+        return;
+      }
+      if (statement.type === "FunctionDeclaration" && statement.id) {
+        topLevelBindings.set(statement.id.name, {
+          kind: "function",
+          node: statement
+        });
+        return;
+      }
+      if (statement.type !== "VariableDeclaration" || statement.kind !== "const") {
+        return;
+      }
+      for (const declaration of statement.declarations) {
+        addVariableBinding(declaration);
+      }
+    };
+    for (const statement of sourceCode.ast.body) {
+      addTopLevelBindings(statement);
+    }
+    const addBoundIdentifiers = (node, stableLocals) => {
+      if (!node) {
+        return;
+      }
+      switch (node.type) {
+        case "Identifier":
+          stableLocals.add(node.name);
+          return;
+        case "AssignmentPattern":
+          addBoundIdentifiers(node.left, stableLocals);
+          return;
+        case "RestElement":
+          addBoundIdentifiers(node.argument, stableLocals);
+          return;
+        case "ArrayPattern":
+          for (const element of node.elements.filter(Boolean)) {
+            addBoundIdentifiers(element, stableLocals);
+          }
+          break;
+        case "ObjectPattern":
+          for (const property of node.properties) {
+            const bindingNode = property.type === "RestElement" ? property.argument : property.value;
+            addBoundIdentifiers(bindingNode, stableLocals);
+          }
+          break;
+        default:
+          break;
+      }
+    };
+    const addFunctionParamBindings = (functionNode, stableLocals) => {
+      for (const parameter of functionNode.params) {
+        addBoundIdentifiers(parameter, stableLocals);
+      }
+    };
+    const addAncestorConstBindings = (ancestor, node, stableLocals) => {
+      const addDeclarationBindings = (statement) => {
+        if (statement.type !== "VariableDeclaration" || statement.kind !== "const") {
+          return;
+        }
+        for (const declaration of statement.declarations) {
+          addBoundIdentifiers(declaration.id, stableLocals);
+        }
+      };
+      for (const statement of ancestor.body) {
+        if (statement.range[0] >= node.range[0]) {
+          return;
+        }
+        addDeclarationBindings(statement);
+      }
+    };
+    const addAncestorBindingsForNode = (ancestor, node, stableLocals) => {
+      if (ancestor.type !== "Program" && ancestor.type !== "BlockStatement") {
+        return;
+      }
+      addAncestorConstBindings(ancestor, node, stableLocals);
+    };
+    const addFunctionBindingsForAncestor = (ancestor, stableLocals) => {
+      if (ancestor.type !== "FunctionDeclaration" && ancestor.type !== "FunctionExpression" && ancestor.type !== "ArrowFunctionExpression") {
+        return;
+      }
+      addFunctionParamBindings(ancestor, stableLocals);
+    };
+    const getStableLocalsForNode = (node) => {
+      const stableLocals = new Set;
+      const ancestors = sourceCode.getAncestors(node);
+      for (const ancestor of ancestors) {
+        addFunctionBindingsForAncestor(ancestor, stableLocals);
+      }
+      for (const ancestor of ancestors) {
+        addAncestorBindingsForNode(ancestor, node, stableLocals);
+      }
+      return stableLocals;
+    };
+    const getStaticMemberName = (memberExpression) => {
+      if (!memberExpression.computed && memberExpression.property.type === "Identifier") {
+        return memberExpression.property.name;
+      }
+      if (memberExpression.computed && memberExpression.property.type === "Literal" && typeof memberExpression.property.value === "string") {
+        return memberExpression.property.value;
+      }
+      return null;
+    };
+    const isStableIdentifier = (name, stableLocals) => {
+      if (stableLocals.has(name)) {
+        return true;
+      }
+      const binding = topLevelBindings.get(name);
+      if (!binding) {
+        return false;
+      }
+      if (binding.kind === "import") {
+        return true;
+      }
+      if (binding.kind === "value") {
+        return isPureRuntimeExpression(binding.node, stableLocals);
+      }
+      return false;
+    };
+    const isPureConstStatement = (statement, stableLocals, checkExpression) => {
+      if (statement.kind !== "const") {
+        return false;
+      }
+      for (const declaration of statement.declarations) {
+        if (declaration.id.type !== "Identifier" || !declaration.init) {
+          return false;
+        }
+        if (!checkExpression(declaration.init)) {
+          return false;
+        }
+        stableLocals.add(declaration.id.name);
+      }
+      return true;
+    };
+    const isPureFunctionStatement = (statement, stableLocals, checkExpression) => {
+      if (statement.type === "ReturnStatement") {
+        return !statement.argument || checkExpression(statement.argument);
+      }
+      if (statement.type === "VariableDeclaration") {
+        return isPureConstStatement(statement, stableLocals, checkExpression);
+      }
+      return false;
+    };
+    const isPureFunctionBody = (body, stableLocals, checkExpression) => {
+      for (const statement of body.body) {
+        const statementIsPure = isPureFunctionStatement(statement, stableLocals, checkExpression);
+        if (!statementIsPure) {
+          return false;
+        }
+      }
+      return true;
+    };
+    const isPureTopLevelFunction = (functionNode) => {
+      const cached = pureFunctionCache.get(functionNode);
+      if (cached !== undefined) {
+        return cached;
+      }
+      if (pureFunctionInProgress.has(functionNode)) {
+        return false;
+      }
+      pureFunctionInProgress.add(functionNode);
+      const stableLocals = new Set;
+      addFunctionParamBindings(functionNode, stableLocals);
+      const checkExpression = (expression) => isPureRuntimeExpression(expression, stableLocals);
+      const isPure = functionNode.body.type === "BlockStatement" ? isPureFunctionBody(functionNode.body, stableLocals, checkExpression) : checkExpression(functionNode.body);
+      pureFunctionInProgress.delete(functionNode);
+      pureFunctionCache.set(functionNode, isPure);
+      return isPure;
+    };
+    const isPureIdentifierCall = (callExpression) => {
+      if (callExpression.callee.type !== "Identifier") {
+        return false;
+      }
+      if (PURE_GLOBAL_FUNCTIONS.has(callExpression.callee.name)) {
+        return true;
+      }
+      const binding = topLevelBindings.get(callExpression.callee.name);
+      return binding?.kind === "function" ? isPureTopLevelFunction(binding.node) : false;
+    };
+    const isPureRuntimeExpression = (node, stableLocals) => {
+      if (!node || node.type === "PrivateIdentifier") {
+        return false;
+      }
+      switch (node.type) {
+        case "Identifier":
+          return isStableIdentifier(node.name, stableLocals);
+        case "Literal":
+        case "FunctionExpression":
+        case "ArrowFunctionExpression":
+        case "ClassExpression":
+          return true;
+        case "ThisExpression":
+          return stableLocals.has("this");
+        case "TemplateLiteral":
+          return node.expressions.every((expression) => isPureRuntimeExpression(expression, stableLocals));
+        case "UnaryExpression":
+          return isPureRuntimeExpression(node.argument, stableLocals);
+        case "BinaryExpression":
+        case "LogicalExpression":
+          return isPureRuntimeExpression(node.left, stableLocals) && isPureRuntimeExpression(node.right, stableLocals);
+        case "ConditionalExpression":
+          return isPureRuntimeExpression(node.test, stableLocals) && isPureRuntimeExpression(node.consequent, stableLocals) && isPureRuntimeExpression(node.alternate, stableLocals);
+        case "ArrayExpression":
+          return node.elements.every((element) => {
+            if (!element || element.type === "SpreadElement") {
+              return false;
+            }
+            return isPureRuntimeExpression(element, stableLocals);
+          });
+        case "ObjectExpression":
+          return node.properties.every((property) => {
+            if (property.type !== "Property" || property.computed || property.kind !== "init") {
+              return false;
+            }
+            if (property.key.type !== "Identifier" && property.key.type !== "Literal") {
+              return false;
+            }
+            if (property.method) {
+              return true;
+            }
+            return isPureRuntimeExpression(property.value, stableLocals);
+          });
+        case "MemberExpression":
+          return isPureRuntimeExpression(node.object, stableLocals) && (!node.computed || isPureRuntimeExpression(node.property, stableLocals));
+        case "NewExpression":
+          return node.callee.type === "Identifier" && PURE_CONSTRUCTORS.has(node.callee.name) && node.arguments.every((argument) => {
+            if (argument.type === "SpreadElement") {
+              return false;
+            }
+            return isPureRuntimeExpression(argument, stableLocals);
+          });
+        case "CallExpression": {
+          const argsArePure = node.arguments.every((argument) => {
+            if (argument.type === "SpreadElement") {
+              return false;
+            }
+            return isPureRuntimeExpression(argument, stableLocals);
+          });
+          if (!argsArePure) {
+            return false;
+          }
+          if (node.callee.type === "Identifier") {
+            return isPureIdentifierCall(node);
+          }
+          if (node.callee.type !== "MemberExpression") {
+            return false;
+          }
+          const memberName = getStaticMemberName(node.callee);
+          if (!memberName || !PURE_MEMBER_METHODS.has(memberName)) {
+            return false;
+          }
+          return isPureRuntimeExpression(node.callee.object, stableLocals);
+        }
+        default:
+          return false;
+      }
+    };
+    const isSafeJSXAttributeValue = (value, scopeNode) => {
+      if (value === null) {
+        return true;
+      }
+      if (value.type === "Literal") {
+        return true;
+      }
+      if (value.type !== "JSXExpressionContainer") {
+        return false;
+      }
+      if (value.expression.type === "JSXEmptyExpression") {
+        return false;
+      }
+      return isPureRuntimeExpression(value.expression, getStableLocalsForNode(scopeNode));
     };
     const isFunctionProperty = (prop) => {
       const { value } = prop;
@@ -424,7 +678,7 @@ ${indent}`;
       if (hasDuplicateNames(keys.map((key) => key.keyName))) {
         autoFixable = false;
       }
-      if (autoFixable && keys.some((key) => key.node.type === "Property" && !isSafeToReorderExpression(key.node.value))) {
+      if (autoFixable && keys.some((key) => key.node.type === "Property" && !isPureRuntimeExpression(key.node.value, getStableLocalsForNode(key.node)))) {
         autoFixable = false;
       }
       let fixProvided = false;
@@ -523,7 +777,7 @@ ${indent}`;
         });
         return;
       }
-      if (attrs.some((attr) => attr.type === "JSXAttribute" && !isSafeJSXAttributeValue(attr.value))) {
+      if (attrs.some((attr) => attr.type === "JSXAttribute" && !isSafeJSXAttributeValue(attr.value, attr))) {
         context.report({
           messageId: "unsorted",
           node: attrs[0].type === "JSXAttribute" ? attrs[0].name : attrs[0]

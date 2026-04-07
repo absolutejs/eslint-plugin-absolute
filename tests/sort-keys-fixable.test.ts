@@ -77,6 +77,44 @@ ruleTester.run("sort-keys-fixable", sortKeysFixable, {
 			name: "side-effectful property values disable autofix"
 		},
 		{
+			code: `const formatTimestamp = (date) => {
+	const minuteText = String(date.getMinutes()).padStart(2, "0");
+
+	return minuteText;
+};
+const obj = { resolveOrder: "2nd", resolvedAt: formatTimestamp(new Date()) };`,
+			errors: [{ messageId: "unsorted" }],
+			name: "pure local helper call enables autofix",
+			output: `const formatTimestamp = (date) => {
+	const minuteText = String(date.getMinutes()).padStart(2, "0");
+
+	return minuteText;
+};
+const obj = { resolvedAt: formatTimestamp(new Date()), resolveOrder: "2nd" };`
+		},
+		{
+			code: `const formatTimestamp = (date) => String(date.getMinutes());
+const createSlotPromise = async (label, delayMs, resolveOrder) => {
+	return {
+		delayMs,
+		label,
+		resolveOrder,
+		resolvedAt: formatTimestamp(new Date())
+	};
+};`,
+			errors: [{ messageId: "unsorted" }],
+			name: "function params in object values remain autofixable",
+			output: `const formatTimestamp = (date) => String(date.getMinutes());
+const createSlotPromise = async (label, delayMs, resolveOrder) => {
+	return {
+		delayMs,
+		label,
+		resolvedAt: formatTimestamp(new Date()),
+		resolveOrder
+	};
+};`
+		},
+		{
 			code: `const obj = {
 	b: 1,
 	a: 2
@@ -226,6 +264,14 @@ jsxRuleTester.run("sort-keys-fixable (JSX)", sortKeysFixable, {
 			code: `const C = () => <Comp z={sideEffect("z")} a={sideEffect("a")} />;`,
 			errors: [{ messageId: "unsorted" }],
 			name: "side-effectful JSX attribute values disable autofix"
+		},
+		{
+			code: `const createFallback = (label) => \`\${label}\`;
+const C = () => <Comp z="1" a={createFallback("ok")} />;`,
+			errors: [{ messageId: "unsorted" }],
+			name: "pure local helper JSX attribute enables autofix",
+			output: `const createFallback = (label) => \`\${label}\`;
+const C = () => <Comp a={createFallback("ok")} z="1" />;`
 		}
 	],
 	valid: [
