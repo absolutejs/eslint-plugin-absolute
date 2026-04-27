@@ -187,6 +187,23 @@ var explicitObjectTypes = {
 // src/rules/sort-keys-fixable.ts
 var SORT_BEFORE = -1;
 var PURE_CONSTRUCTORS = new Set(["Date"]);
+var PURE_GLOBAL_IDENTIFIERS = new Set([
+  "Array",
+  "BigInt",
+  "Boolean",
+  "Date",
+  "Function",
+  "Map",
+  "Number",
+  "Object",
+  "Promise",
+  "RegExp",
+  "Set",
+  "String",
+  "Symbol",
+  "URL",
+  "undefined"
+]);
 var PURE_GLOBAL_FUNCTIONS = new Set(["Boolean", "Number", "String"]);
 var PURE_MEMBER_METHODS = new Set([
   "getDay",
@@ -364,6 +381,9 @@ var sortKeysFixable = {
       return null;
     };
     const isStableIdentifier = (name, stableLocals) => {
+      if (PURE_GLOBAL_IDENTIFIERS.has(name)) {
+        return true;
+      }
       if (stableLocals.has(name)) {
         return true;
       }

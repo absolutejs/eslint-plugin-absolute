@@ -52,6 +52,23 @@ type TopLevelBinding =
 
 const SORT_BEFORE = -1;
 const PURE_CONSTRUCTORS = new Set(["Date"]);
+const PURE_GLOBAL_IDENTIFIERS = new Set([
+	"Array",
+	"BigInt",
+	"Boolean",
+	"Date",
+	"Function",
+	"Map",
+	"Number",
+	"Object",
+	"Promise",
+	"RegExp",
+	"Set",
+	"String",
+	"Symbol",
+	"URL",
+	"undefined"
+]);
 const PURE_GLOBAL_FUNCTIONS = new Set(["Boolean", "Number", "String"]);
 const PURE_MEMBER_METHODS = new Set([
 	"getDay",
@@ -339,6 +356,10 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 			name: string,
 			stableLocals: ReadonlySet<string>
 		) => {
+			if (PURE_GLOBAL_IDENTIFIERS.has(name)) {
+				return true;
+			}
+
 			if (stableLocals.has(name)) {
 				return true;
 			}

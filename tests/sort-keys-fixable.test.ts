@@ -185,6 +185,75 @@ const createSlotPromise = async (label, delayMs, resolveOrder) => {
 	a: 2,
 	b: 1, // trailing comment
 };`
+		},
+		{
+			code: `import { DEFAULT_QUALITY } from './imageClient';
+const component = {
+	props: {
+		src: { required: true, type: String },
+		alt: { required: true, type: String },
+		width: { default: undefined, type: Number },
+		height: { default: undefined, type: Number },
+		fill: { default: false, type: Boolean },
+		quality: { default: DEFAULT_QUALITY, type: Number },
+		sizes: { default: undefined, type: String },
+		loader: { default: undefined, type: Function },
+		unoptimized: { default: false, type: Boolean },
+		loading: { default: 'lazy', type: String },
+		priority: { default: false, type: Boolean },
+		placeholder: { default: undefined, type: String },
+		blurDataURL: { default: undefined, type: String },
+		className: { default: undefined, type: String },
+		style: { default: undefined, type: Object },
+		onLoad: { default: undefined, type: Function },
+		onError: { default: undefined, type: Function },
+		crossOrigin: { default: undefined, type: String },
+		referrerPolicy: { default: undefined, type: String },
+		fetchPriority: { default: undefined, type: String },
+		overrideSrc: { default: undefined, type: String }
+	}
+};`,
+			errors: [
+				{ messageId: "unsorted" },
+				{ messageId: "unsorted" },
+				{ messageId: "unsorted" },
+				{ messageId: "unsorted" },
+				{ messageId: "unsorted" },
+				{ messageId: "unsorted" },
+				{ messageId: "unsorted" },
+				{ messageId: "unsorted" },
+				{ messageId: "unsorted" },
+				{ messageId: "unsorted" },
+				{ messageId: "unsorted" }
+			],
+			name: "Vue prop constructors and undefined defaults are autofixable",
+			options: [{ caseSensitive: true, variablesBeforeFunctions: true }],
+			output: `import { DEFAULT_QUALITY } from './imageClient';
+const component = {
+	props: {
+		alt: { required: true, type: String },
+		blurDataURL: { default: undefined, type: String },
+		className: { default: undefined, type: String },
+		crossOrigin: { default: undefined, type: String },
+		fetchPriority: { default: undefined, type: String },
+		fill: { default: false, type: Boolean },
+		height: { default: undefined, type: Number },
+		loader: { default: undefined, type: Function },
+		loading: { default: 'lazy', type: String },
+		onError: { default: undefined, type: Function },
+		onLoad: { default: undefined, type: Function },
+		overrideSrc: { default: undefined, type: String },
+		placeholder: { default: undefined, type: String },
+		priority: { default: false, type: Boolean },
+		quality: { default: DEFAULT_QUALITY, type: Number },
+		referrerPolicy: { default: undefined, type: String },
+		sizes: { default: undefined, type: String },
+		src: { required: true, type: String },
+		style: { default: undefined, type: Object },
+		unoptimized: { default: false, type: Boolean },
+		width: { default: undefined, type: Number }
+	}
+};`
 		}
 	],
 	valid: [
