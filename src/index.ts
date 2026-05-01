@@ -17,6 +17,7 @@ import { maxDepthExtended } from "./rules/max-depth-extended";
 import { springNamingConvention } from "./rules/spring-naming-convention";
 import { inlineStyleLimit } from "./rules/inline-style-limit";
 import { noInlinePropTypes } from "./rules/no-inline-prop-types";
+import { noNondeterministicRender } from "./rules/no-nondeterministic-render";
 import { noUnnecessaryDiv } from "./rules/no-unnecessary-div";
 
 export default {
@@ -32,6 +33,7 @@ export default {
 		"no-inline-prop-types": noInlinePropTypes,
 		"no-multi-style-objects": noMultiStyleObjects,
 		"no-nested-jsx-return": noNestedJSXReturn,
+		"no-nondeterministic-render": noNondeterministicRender,
 		"no-or-none-component": noOrNoneComponent,
 		"no-transition-cssproperties": noTransitionCSSProperties,
 		"no-unnecessary-div": noUnnecessaryDiv,

@@ -1,4 +1,5 @@
 import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+import * as ts from "typescript";
 
 /**
  * @fileoverview Enforce sorted keys in object literals (like ESLint's built-in sort-keys)
@@ -23,6 +24,7 @@ type SortKeysOptions = {
 	natural?: boolean;
 	minKeys?: number;
 	variablesBeforeFunctions?: boolean;
+	pureImports?: string[];
 };
 
 type Options = [SortKeysOptions?];
@@ -121,6 +123,36 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 			option && typeof option.variablesBeforeFunctions === "boolean"
 				? option.variablesBeforeFunctions
 				: false;
+
+		// C1 escape hatch: callees whose name (or member-access path like
+		// "t.Object") matches an entry in this set are treated as pure.
+		// Used for imports we cannot statically analyze (npm packages that
+		// only ship .d.ts), or where the user knows a function is pure
+		// despite the static checker's conservative answer.
+		const pureImports = new Set(
+			option && Array.isArray(option.pureImports)
+				? option.pureImports
+				: []
+		);
+
+		// C3: typed-services hook. When the consumer is running with
+		// @typescript-eslint/parser + parserOptions.project, we can resolve
+		// imported callees back to their declarations and inspect their
+		// bodies for purity. Falls back silently when typed services aren't
+		// available — in that case the rule behaves as before (every
+		// imported call is impure unless allowlisted via pureImports).
+		const parserServices = sourceCode.parserServices ?? null;
+		const tsProgram =
+			parserServices && "program" in parserServices
+				? parserServices.program
+				: null;
+		const tsChecker = tsProgram ? tsProgram.getTypeChecker() : null;
+		const esTreeNodeToTSNodeMap =
+			parserServices && "esTreeNodeToTSNodeMap" in parserServices
+				? parserServices.esTreeNodeToTSNodeMap
+				: null;
+		const importedCallPurityCache = new Map<ts.Node, boolean>();
+		const importedCallPurityInProgress = new Set<ts.Node>();
 
 		/**
 		 * Compare two key strings based on the provided options.
@@ -480,6 +512,527 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 			return isPure;
 		};
 
+		// ─── C3: TS-AST purity walker ────────────────────────────────────
+		// Mirrors isPureRuntimeExpression / isPureTopLevelFunction but
+		// operates on the TypeScript AST. Used when we resolve an imported
+		// callee back to its declaration in another source file — that
+		// declaration is a ts.Node (the program already has it parsed), and
+		// we want to inspect its body without re-parsing.
+		//
+		// Anything not handled here falls through to "impure" (conservative).
+
+		const ASSIGNMENT_OPERATOR_KINDS = new Set<ts.SyntaxKind>([
+			ts.SyntaxKind.EqualsToken,
+			ts.SyntaxKind.PlusEqualsToken,
+			ts.SyntaxKind.MinusEqualsToken,
+			ts.SyntaxKind.AsteriskEqualsToken,
+			ts.SyntaxKind.AsteriskAsteriskEqualsToken,
+			ts.SyntaxKind.SlashEqualsToken,
+			ts.SyntaxKind.PercentEqualsToken,
+			ts.SyntaxKind.AmpersandEqualsToken,
+			ts.SyntaxKind.BarEqualsToken,
+			ts.SyntaxKind.CaretEqualsToken,
+			ts.SyntaxKind.LessThanLessThanEqualsToken,
+			ts.SyntaxKind.GreaterThanGreaterThanEqualsToken,
+			ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken,
+			ts.SyntaxKind.AmpersandAmpersandEqualsToken,
+			ts.SyntaxKind.BarBarEqualsToken,
+			ts.SyntaxKind.QuestionQuestionEqualsToken
+		]);
+
+		const addTsBoundIdentifiers = (
+			node: ts.BindingName | ts.BindingElement | ts.OmittedExpression,
+			stableLocals: Set<string>
+		) => {
+			if (node.kind === ts.SyntaxKind.OmittedExpression) {
+				return;
+			}
+			if (ts.isIdentifier(node)) {
+				stableLocals.add(node.text);
+				return;
+			}
+			if (ts.isBindingElement(node)) {
+				addTsBoundIdentifiers(node.name, stableLocals);
+				return;
+			}
+			if (
+				ts.isObjectBindingPattern(node) ||
+				ts.isArrayBindingPattern(node)
+			) {
+				for (const element of node.elements) {
+					addTsBoundIdentifiers(element, stableLocals);
+				}
+			}
+		};
+
+		const getCalleeIdentifier = (callee: ts.Expression) => {
+			if (ts.isIdentifier(callee)) {
+				return callee;
+			}
+			if (
+				ts.isPropertyAccessExpression(callee) &&
+				ts.isIdentifier(callee.name)
+			) {
+				return callee.name;
+			}
+			return null;
+		};
+
+		const getTsCalleePath = (callee: ts.Expression): string | null => {
+			if (ts.isParenthesizedExpression(callee)) {
+				return getTsCalleePath(callee.expression);
+			}
+			if (ts.isIdentifier(callee)) {
+				return callee.text;
+			}
+			if (
+				ts.isPropertyAccessExpression(callee) &&
+				ts.isIdentifier(callee.name)
+			) {
+				const objectPath = getTsCalleePath(callee.expression);
+				return objectPath === null
+					? null
+					: `${objectPath}.${callee.name.text}`;
+			}
+			return null;
+		};
+
+		const getFunctionLikeFromDeclaration = (
+			declaration: ts.Declaration
+		):
+			| ts.ArrowFunction
+			| ts.FunctionDeclaration
+			| ts.FunctionExpression
+			| null => {
+			if (ts.isFunctionDeclaration(declaration)) {
+				return declaration;
+			}
+			if (
+				ts.isVariableDeclaration(declaration) &&
+				declaration.initializer
+			) {
+				const init = declaration.initializer;
+				if (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) {
+					return init;
+				}
+			}
+			return null;
+		};
+
+		const isPureTsIdentifier = (
+			identifier: ts.Identifier,
+			stableLocals: ReadonlySet<string>
+		): boolean => {
+			const name = identifier.text;
+			if (PURE_GLOBAL_IDENTIFIERS.has(name)) {
+				return true;
+			}
+			if (stableLocals.has(name)) {
+				return true;
+			}
+			if (!tsChecker) {
+				return false;
+			}
+
+			const symbol = tsChecker.getSymbolAtLocation(identifier);
+			if (!symbol) {
+				return false;
+			}
+
+			const target =
+				symbol.flags & ts.SymbolFlags.Alias
+					? tsChecker.getAliasedSymbol(symbol)
+					: symbol;
+			const declaration = target.declarations?.[0];
+			if (!declaration) {
+				return false;
+			}
+			if (declaration.getSourceFile().isDeclarationFile) {
+				return pureImports.has(name);
+			}
+
+			if (
+				ts.isVariableDeclaration(declaration) &&
+				declaration.initializer &&
+				declaration.parent &&
+				ts.isVariableDeclarationList(declaration.parent) &&
+				declaration.parent.flags & ts.NodeFlags.Const
+			) {
+				return isPureTsExpression(
+					declaration.initializer,
+					new Set<string>()
+				);
+			}
+
+			if (
+				ts.isFunctionDeclaration(declaration) ||
+				ts.isClassDeclaration(declaration)
+			) {
+				return true;
+			}
+
+			return false;
+		};
+
+		const isPureTsBlock = (
+			block: ts.Block,
+			stableLocals: Set<string>
+		): boolean => {
+			for (const statement of block.statements) {
+				if (ts.isReturnStatement(statement)) {
+					if (
+						statement.expression &&
+						!isPureTsExpression(statement.expression, stableLocals)
+					) {
+						return false;
+					}
+					continue;
+				}
+				if (ts.isVariableStatement(statement)) {
+					if (
+						!(statement.declarationList.flags & ts.NodeFlags.Const)
+					) {
+						return false;
+					}
+					for (const declaration of statement.declarationList
+						.declarations) {
+						if (
+							!ts.isIdentifier(declaration.name) ||
+							!declaration.initializer
+						) {
+							return false;
+						}
+						if (
+							!isPureTsExpression(
+								declaration.initializer,
+								stableLocals
+							)
+						) {
+							return false;
+						}
+						stableLocals.add(declaration.name.text);
+					}
+					continue;
+				}
+				return false;
+			}
+			return true;
+		};
+
+		const isPureTsFunction = (
+			func:
+				| ts.ArrowFunction
+				| ts.FunctionDeclaration
+				| ts.FunctionExpression
+		): boolean => {
+			const cached = importedCallPurityCache.get(func);
+			if (cached !== undefined) {
+				return cached;
+			}
+			if (importedCallPurityInProgress.has(func)) {
+				return false;
+			}
+			importedCallPurityInProgress.add(func);
+
+			const stableLocals = new Set<string>();
+			for (const parameter of func.parameters) {
+				addTsBoundIdentifiers(parameter.name, stableLocals);
+			}
+
+			let pure = false;
+			if (func.body) {
+				pure = ts.isBlock(func.body)
+					? isPureTsBlock(func.body, stableLocals)
+					: isPureTsExpression(func.body, stableLocals);
+			}
+
+			importedCallPurityInProgress.delete(func);
+			importedCallPurityCache.set(func, pure);
+			return pure;
+		};
+
+		const isPureTsCallExpression = (
+			node: ts.CallExpression,
+			stableLocals: ReadonlySet<string>
+		): boolean => {
+			const argsArePure = node.arguments.every((argument) => {
+				if (ts.isSpreadElement(argument)) {
+					return false;
+				}
+				return isPureTsExpression(argument, stableLocals);
+			});
+			if (!argsArePure) {
+				return false;
+			}
+
+			const calleePath = getTsCalleePath(node.expression);
+			if (calleePath !== null && pureImports.has(calleePath)) {
+				return true;
+			}
+
+			const calleeId = getCalleeIdentifier(node.expression);
+			if (!calleeId) {
+				return false;
+			}
+			if (PURE_GLOBAL_FUNCTIONS.has(calleeId.text)) {
+				return true;
+			}
+			if (!tsChecker) {
+				return false;
+			}
+
+			const symbol = tsChecker.getSymbolAtLocation(calleeId);
+			if (!symbol) {
+				return false;
+			}
+			const target =
+				symbol.flags & ts.SymbolFlags.Alias
+					? tsChecker.getAliasedSymbol(symbol)
+					: symbol;
+			const declaration = target.declarations?.[0];
+			if (!declaration) {
+				return false;
+			}
+			if (declaration.getSourceFile().isDeclarationFile) {
+				return false;
+			}
+
+			const funcNode = getFunctionLikeFromDeclaration(declaration);
+			if (!funcNode) {
+				return false;
+			}
+
+			return isPureTsFunction(funcNode);
+		};
+
+		const isPureTsExpression = (
+			node: ts.Node | undefined,
+			stableLocals: ReadonlySet<string>
+		): boolean => {
+			if (!node) {
+				return false;
+			}
+
+			if (
+				ts.isParenthesizedExpression(node) ||
+				ts.isAsExpression(node) ||
+				ts.isTypeAssertionExpression(node) ||
+				ts.isNonNullExpression(node) ||
+				ts.isSatisfiesExpression(node)
+			) {
+				return isPureTsExpression(node.expression, stableLocals);
+			}
+
+			if (
+				ts.isStringLiteral(node) ||
+				ts.isNoSubstitutionTemplateLiteral(node) ||
+				ts.isNumericLiteral(node) ||
+				ts.isBigIntLiteral(node) ||
+				node.kind === ts.SyntaxKind.TrueKeyword ||
+				node.kind === ts.SyntaxKind.FalseKeyword ||
+				node.kind === ts.SyntaxKind.NullKeyword
+			) {
+				return true;
+			}
+
+			if (
+				ts.isFunctionExpression(node) ||
+				ts.isArrowFunction(node) ||
+				ts.isClassExpression(node)
+			) {
+				return true;
+			}
+
+			if (node.kind === ts.SyntaxKind.ThisKeyword) {
+				return stableLocals.has("this");
+			}
+
+			if (ts.isIdentifier(node)) {
+				return isPureTsIdentifier(node, stableLocals);
+			}
+
+			if (ts.isTemplateExpression(node)) {
+				return node.templateSpans.every((span) =>
+					isPureTsExpression(span.expression, stableLocals)
+				);
+			}
+
+			if (
+				ts.isPrefixUnaryExpression(node) ||
+				ts.isPostfixUnaryExpression(node)
+			) {
+				return isPureTsExpression(node.operand, stableLocals);
+			}
+
+			if (ts.isBinaryExpression(node)) {
+				if (
+					ASSIGNMENT_OPERATOR_KINDS.has(node.operatorToken.kind) ||
+					node.operatorToken.kind === ts.SyntaxKind.CommaToken
+				) {
+					return false;
+				}
+				return (
+					isPureTsExpression(node.left, stableLocals) &&
+					isPureTsExpression(node.right, stableLocals)
+				);
+			}
+
+			if (ts.isConditionalExpression(node)) {
+				return (
+					isPureTsExpression(node.condition, stableLocals) &&
+					isPureTsExpression(node.whenTrue, stableLocals) &&
+					isPureTsExpression(node.whenFalse, stableLocals)
+				);
+			}
+
+			if (ts.isArrayLiteralExpression(node)) {
+				return node.elements.every((element) => {
+					if (ts.isSpreadElement(element)) {
+						return false;
+					}
+					if (element.kind === ts.SyntaxKind.OmittedExpression) {
+						return false;
+					}
+					return isPureTsExpression(element, stableLocals);
+				});
+			}
+
+			if (ts.isObjectLiteralExpression(node)) {
+				return node.properties.every((property) => {
+					if (ts.isShorthandPropertyAssignment(property)) {
+						return isPureTsIdentifier(property.name, stableLocals);
+					}
+					if (ts.isPropertyAssignment(property)) {
+						if (ts.isComputedPropertyName(property.name)) {
+							return false;
+						}
+						return isPureTsExpression(
+							property.initializer,
+							stableLocals
+						);
+					}
+					if (ts.isMethodDeclaration(property)) {
+						return !ts.isComputedPropertyName(property.name);
+					}
+					return false;
+				});
+			}
+
+			if (ts.isPropertyAccessExpression(node)) {
+				return isPureTsExpression(node.expression, stableLocals);
+			}
+
+			if (ts.isElementAccessExpression(node)) {
+				return (
+					isPureTsExpression(node.expression, stableLocals) &&
+					isPureTsExpression(node.argumentExpression, stableLocals)
+				);
+			}
+
+			if (ts.isNewExpression(node)) {
+				if (
+					!ts.isIdentifier(node.expression) ||
+					!PURE_CONSTRUCTORS.has(node.expression.text)
+				) {
+					return false;
+				}
+				return (
+					node.arguments?.every((argument) => {
+						if (ts.isSpreadElement(argument)) {
+							return false;
+						}
+						return isPureTsExpression(argument, stableLocals);
+					}) ?? true
+				);
+			}
+
+			if (ts.isCallExpression(node)) {
+				return isPureTsCallExpression(node, stableLocals);
+			}
+
+			return false;
+		};
+
+		// Render a callee like `asset` or `t.Object` to a dotted string for
+		// matching against the pureImports allowlist. Returns null if the
+		// callee is dynamic (computed access, calls, etc.) and can't be
+		// expressed as a simple path.
+		const getCalleePath = (node: TSESTree.Node): string | null => {
+			if (node.type === "Identifier") {
+				return node.name;
+			}
+			if (node.type === "ChainExpression") {
+				return getCalleePath(node.expression);
+			}
+			if (
+				node.type === "MemberExpression" &&
+				!node.computed &&
+				node.property.type === "Identifier"
+			) {
+				const objectPath = getCalleePath(node.object);
+				return objectPath === null
+					? null
+					: `${objectPath}.${node.property.name}`;
+			}
+			return null;
+		};
+
+		// Look up the ESTree callee in the TS Program and walk the resolved
+		// declaration's body. Returns true when the imported function's body
+		// is statically pure; false when typed services are unavailable, the
+		// declaration lives in a .d.ts (no body), or the body has side
+		// effects we can detect.
+		const isPureImportedCallExpression = (
+			callExpression: TSESTree.CallExpression
+		): boolean => {
+			if (!tsChecker || !esTreeNodeToTSNodeMap) {
+				return false;
+			}
+
+			let calleeEsNode: TSESTree.Node | null = null;
+			if (callExpression.callee.type === "Identifier") {
+				calleeEsNode = callExpression.callee;
+			} else if (
+				callExpression.callee.type === "MemberExpression" &&
+				!callExpression.callee.computed &&
+				callExpression.callee.property.type === "Identifier"
+			) {
+				calleeEsNode = callExpression.callee.property;
+			}
+			if (!calleeEsNode) {
+				return false;
+			}
+
+			const tsCallee = esTreeNodeToTSNodeMap.get(calleeEsNode);
+			if (!tsCallee || !ts.isIdentifier(tsCallee)) {
+				return false;
+			}
+
+			const symbol = tsChecker.getSymbolAtLocation(tsCallee);
+			if (!symbol) {
+				return false;
+			}
+
+			const target =
+				symbol.flags & ts.SymbolFlags.Alias
+					? tsChecker.getAliasedSymbol(symbol)
+					: symbol;
+			const declaration = target.declarations?.[0];
+			if (!declaration) {
+				return false;
+			}
+			if (declaration.getSourceFile().isDeclarationFile) {
+				return false;
+			}
+
+			const funcNode = getFunctionLikeFromDeclaration(declaration);
+			if (!funcNode) {
+				return false;
+			}
+
+			return isPureTsFunction(funcNode);
+		};
+
 		const isPureIdentifierCall = (
 			callExpression: TSESTree.CallExpression
 		) => {
@@ -491,10 +1044,18 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 				return true;
 			}
 
+			if (pureImports.has(callExpression.callee.name)) {
+				return true;
+			}
+
 			const binding = topLevelBindings.get(callExpression.callee.name);
-			return binding?.kind === "function"
-				? isPureTopLevelFunction(binding.node)
-				: false;
+			if (binding?.kind === "function") {
+				return isPureTopLevelFunction(binding.node);
+			}
+
+			// binding is undefined (free name) or "import" — fall back to
+			// resolving the symbol via the TS program.
+			return isPureImportedCallExpression(callExpression);
 		};
 
 		const isPureRuntimeExpression: (
@@ -515,6 +1076,11 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 					return true;
 				case "ThisExpression":
 					return stableLocals.has("this");
+				case "ChainExpression":
+					return isPureRuntimeExpression(
+						node.expression,
+						stableLocals
+					);
 				case "TemplateLiteral":
 					return node.expressions.every((expression) =>
 						isPureRuntimeExpression(expression, stableLocals)
@@ -607,6 +1173,11 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 						return false;
 					}
 
+					const calleePath = getCalleePath(node.callee);
+					if (calleePath !== null && pureImports.has(calleePath)) {
+						return true;
+					}
+
 					if (node.callee.type === "Identifier") {
 						return isPureIdentifierCall(node);
 					}
@@ -616,14 +1187,17 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 					}
 
 					const memberName = getStaticMemberName(node.callee);
-					if (!memberName || !PURE_MEMBER_METHODS.has(memberName)) {
-						return false;
+					if (memberName && PURE_MEMBER_METHODS.has(memberName)) {
+						return isPureRuntimeExpression(
+							node.callee.object,
+							stableLocals
+						);
 					}
 
-					return isPureRuntimeExpression(
-						node.callee.object,
-						stableLocals
-					);
+					// Namespaced imports like `t.Object(...)`: ask the TS
+					// checker whether the property resolves to a function
+					// declaration in a source file we can analyze.
+					return isPureImportedCallExpression(node);
 				}
 				default:
 					return false;
@@ -943,18 +1517,25 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 				autoFixable = false;
 			}
 
-			if (
-				autoFixable &&
-				keys.some(
+			// Reordering object literal properties is safe when at most one
+			// value has side effects: JS evaluates property values in source
+			// order, so if only one value is impure it gets called exactly
+			// once regardless of position, and its execution order relative
+			// to anything outside the literal is unchanged. Two or more
+			// impure values would have their execution order swapped.
+			if (autoFixable) {
+				const impureCount = keys.filter(
 					(key) =>
 						key.node.type === "Property" &&
 						!isPureRuntimeExpression(
 							key.node.value,
 							getStableLocalsForNode(key.node)
 						)
-				)
-			) {
-				autoFixable = false;
+				).length;
+
+				if (impureCount > 1) {
+					autoFixable = false;
+				}
 			}
 
 			let fixProvided = false;
@@ -1139,13 +1720,16 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 				return;
 			}
 
-			if (
-				attrs.some(
-					(attr) =>
-						attr.type === "JSXAttribute" &&
-						!isSafeJSXAttributeValue(attr.value, attr)
-				)
-			) {
+			// Same reasoning as ObjectExpression: a single impure attribute
+			// value reorders safely (it executes once either way), but two or
+			// more would swap their relative evaluation order.
+			const impureAttrCount = attrs.filter(
+				(attr) =>
+					attr.type === "JSXAttribute" &&
+					!isSafeJSXAttributeValue(attr.value, attr)
+			).length;
+
+			if (impureAttrCount > 1) {
 				context.report({
 					messageId: "unsorted",
 					node:
@@ -1252,6 +1836,11 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 					order: {
 						enum: ["asc", "desc"],
 						type: "string"
+					},
+					pureImports: {
+						items: { type: "string" },
+						type: "array",
+						uniqueItems: true
 					},
 					variablesBeforeFunctions: {
 						type: "boolean"

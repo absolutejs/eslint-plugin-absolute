@@ -74,7 +74,63 @@ ruleTester.run("sort-keys-fixable", sortKeysFixable, {
 		{
 			code: `const obj = { b: sideEffect("b"), a: sideEffect("a") };`,
 			errors: [{ messageId: "unsorted" }],
-			name: "side-effectful property values disable autofix"
+			name: "two side-effectful property values disable autofix"
+		},
+		{
+			code: `import { sideEffect } from "./x";
+const obj = { b: 1, a: sideEffect("a") };`,
+			errors: [{ messageId: "unsorted" }],
+			name: "single impure value still autofixes when other values are pure",
+			output: `import { sideEffect } from "./x";
+const obj = { a: sideEffect("a"), b: 1 };`
+		},
+		{
+			code: `const fn = (theme) => ({ b: 1, a: theme?.value });`,
+			errors: [{ messageId: "unsorted" }],
+			name: "optional member access on a stable local is treated as pure",
+			output: `const fn = (theme) => ({ a: theme?.value, b: 1 });`
+		},
+		{
+			code: `import { asset } from "./absolute";
+import { Home } from "./Home";
+const fn = (manifest, theme, user) => ({
+	Page: Home,
+	index: asset(manifest, "HomeIndex"),
+	props: { theme: theme?.value, user }
+});`,
+			errors: [{ messageId: "unsorted" }],
+			name: "imported call alongside pure values autofixes (single-impure relaxation + optional chaining)",
+			output: `import { asset } from "./absolute";
+import { Home } from "./Home";
+const fn = (manifest, theme, user) => ({
+	index: asset(manifest, "HomeIndex"),
+	Page: Home,
+	props: { theme: theme?.value, user }
+});`
+		},
+		{
+			code: `import { asset, isValidProviderOption } from "./absolute";
+const fn = (manifest, query) => ({
+	b: asset(manifest, "x"),
+	a: isValidProviderOption(query.provider) ? query.provider : "default"
+});`,
+			errors: [{ messageId: "unsorted" }],
+			name: "C1 pureImports allowlist treats listed callees as pure",
+			options: [{ pureImports: ["asset", "isValidProviderOption"] }],
+			output: `import { asset, isValidProviderOption } from "./absolute";
+const fn = (manifest, query) => ({
+	a: isValidProviderOption(query.provider) ? query.provider : "default",
+	b: asset(manifest, "x")
+});`
+		},
+		{
+			code: `import { t } from "elysia";
+const obj = { b: t.Object({}), a: t.Optional(t.String()) };`,
+			errors: [{ messageId: "unsorted" }],
+			name: "C1 pureImports allowlist supports namespace member paths",
+			options: [{ pureImports: ["t.Object", "t.Optional", "t.String"] }],
+			output: `import { t } from "elysia";
+const obj = { a: t.Optional(t.String()), b: t.Object({}) };`
 		},
 		{
 			code: `const formatTimestamp = (date) => {
@@ -332,7 +388,15 @@ jsxRuleTester.run("sort-keys-fixable (JSX)", sortKeysFixable, {
 		{
 			code: `const C = () => <Comp z={sideEffect("z")} a={sideEffect("a")} />;`,
 			errors: [{ messageId: "unsorted" }],
-			name: "side-effectful JSX attribute values disable autofix"
+			name: "two side-effectful JSX attribute values disable autofix"
+		},
+		{
+			code: `import { sideEffect } from "./x";
+const C = () => <Comp z="1" a={sideEffect("a")} />;`,
+			errors: [{ messageId: "unsorted" }],
+			name: "single impure JSX attribute still autofixes when other attrs are pure",
+			output: `import { sideEffect } from "./x";
+const C = () => <Comp a={sideEffect("a")} z="1" />;`
 		},
 		{
 			code: `const createFallback = (label) => \`\${label}\`;

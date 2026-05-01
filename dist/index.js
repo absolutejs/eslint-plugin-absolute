@@ -185,6 +185,7 @@ var explicitObjectTypes = {
 };
 
 // src/rules/sort-keys-fixable.ts
+import * as ts from "typescript";
 var SORT_BEFORE = -1;
 var PURE_CONSTRUCTORS = new Set(["Date"]);
 var PURE_GLOBAL_IDENTIFIERS = new Set([
@@ -236,6 +237,13 @@ var sortKeysFixable = {
     const natural = option && typeof option.natural === "boolean" ? option.natural : false;
     const minKeys = option && typeof option.minKeys === "number" ? option.minKeys : 2;
     const variablesBeforeFunctions = option && typeof option.variablesBeforeFunctions === "boolean" ? option.variablesBeforeFunctions : false;
+    const pureImports = new Set(option && Array.isArray(option.pureImports) ? option.pureImports : []);
+    const parserServices = sourceCode.parserServices ?? null;
+    const tsProgram = parserServices && "program" in parserServices ? parserServices.program : null;
+    const tsChecker = tsProgram ? tsProgram.getTypeChecker() : null;
+    const esTreeNodeToTSNodeMap = parserServices && "esTreeNodeToTSNodeMap" in parserServices ? parserServices.esTreeNodeToTSNodeMap : null;
+    const importedCallPurityCache = new Map;
+    const importedCallPurityInProgress = new Set;
     const compareKeys = (keyLeft, keyRight) => {
       let left = keyLeft;
       let right = keyRight;
@@ -449,6 +457,329 @@ var sortKeysFixable = {
       pureFunctionCache.set(functionNode, isPure);
       return isPure;
     };
+    const ASSIGNMENT_OPERATOR_KINDS = new Set([
+      ts.SyntaxKind.EqualsToken,
+      ts.SyntaxKind.PlusEqualsToken,
+      ts.SyntaxKind.MinusEqualsToken,
+      ts.SyntaxKind.AsteriskEqualsToken,
+      ts.SyntaxKind.AsteriskAsteriskEqualsToken,
+      ts.SyntaxKind.SlashEqualsToken,
+      ts.SyntaxKind.PercentEqualsToken,
+      ts.SyntaxKind.AmpersandEqualsToken,
+      ts.SyntaxKind.BarEqualsToken,
+      ts.SyntaxKind.CaretEqualsToken,
+      ts.SyntaxKind.LessThanLessThanEqualsToken,
+      ts.SyntaxKind.GreaterThanGreaterThanEqualsToken,
+      ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken,
+      ts.SyntaxKind.AmpersandAmpersandEqualsToken,
+      ts.SyntaxKind.BarBarEqualsToken,
+      ts.SyntaxKind.QuestionQuestionEqualsToken
+    ]);
+    const addTsBoundIdentifiers = (node, stableLocals) => {
+      if (node.kind === ts.SyntaxKind.OmittedExpression) {
+        return;
+      }
+      if (ts.isIdentifier(node)) {
+        stableLocals.add(node.text);
+        return;
+      }
+      if (ts.isBindingElement(node)) {
+        addTsBoundIdentifiers(node.name, stableLocals);
+        return;
+      }
+      if (ts.isObjectBindingPattern(node) || ts.isArrayBindingPattern(node)) {
+        for (const element of node.elements) {
+          addTsBoundIdentifiers(element, stableLocals);
+        }
+      }
+    };
+    const getCalleeIdentifier = (callee) => {
+      if (ts.isIdentifier(callee)) {
+        return callee;
+      }
+      if (ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.name)) {
+        return callee.name;
+      }
+      return null;
+    };
+    const getTsCalleePath = (callee) => {
+      if (ts.isParenthesizedExpression(callee)) {
+        return getTsCalleePath(callee.expression);
+      }
+      if (ts.isIdentifier(callee)) {
+        return callee.text;
+      }
+      if (ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.name)) {
+        const objectPath = getTsCalleePath(callee.expression);
+        return objectPath === null ? null : `${objectPath}.${callee.name.text}`;
+      }
+      return null;
+    };
+    const getFunctionLikeFromDeclaration = (declaration) => {
+      if (ts.isFunctionDeclaration(declaration)) {
+        return declaration;
+      }
+      if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
+        const init = declaration.initializer;
+        if (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) {
+          return init;
+        }
+      }
+      return null;
+    };
+    const isPureTsIdentifier = (identifier, stableLocals) => {
+      const name = identifier.text;
+      if (PURE_GLOBAL_IDENTIFIERS.has(name)) {
+        return true;
+      }
+      if (stableLocals.has(name)) {
+        return true;
+      }
+      if (!tsChecker) {
+        return false;
+      }
+      const symbol = tsChecker.getSymbolAtLocation(identifier);
+      if (!symbol) {
+        return false;
+      }
+      const target = symbol.flags & ts.SymbolFlags.Alias ? tsChecker.getAliasedSymbol(symbol) : symbol;
+      const declaration = target.declarations?.[0];
+      if (!declaration) {
+        return false;
+      }
+      if (declaration.getSourceFile().isDeclarationFile) {
+        return pureImports.has(name);
+      }
+      if (ts.isVariableDeclaration(declaration) && declaration.initializer && declaration.parent && ts.isVariableDeclarationList(declaration.parent) && declaration.parent.flags & ts.NodeFlags.Const) {
+        return isPureTsExpression(declaration.initializer, new Set);
+      }
+      if (ts.isFunctionDeclaration(declaration) || ts.isClassDeclaration(declaration)) {
+        return true;
+      }
+      return false;
+    };
+    const isPureTsBlock = (block, stableLocals) => {
+      for (const statement of block.statements) {
+        if (ts.isReturnStatement(statement)) {
+          if (statement.expression && !isPureTsExpression(statement.expression, stableLocals)) {
+            return false;
+          }
+          continue;
+        }
+        if (ts.isVariableStatement(statement)) {
+          if (!(statement.declarationList.flags & ts.NodeFlags.Const)) {
+            return false;
+          }
+          for (const declaration of statement.declarationList.declarations) {
+            if (!ts.isIdentifier(declaration.name) || !declaration.initializer) {
+              return false;
+            }
+            if (!isPureTsExpression(declaration.initializer, stableLocals)) {
+              return false;
+            }
+            stableLocals.add(declaration.name.text);
+          }
+          continue;
+        }
+        return false;
+      }
+      return true;
+    };
+    const isPureTsFunction = (func) => {
+      const cached = importedCallPurityCache.get(func);
+      if (cached !== undefined) {
+        return cached;
+      }
+      if (importedCallPurityInProgress.has(func)) {
+        return false;
+      }
+      importedCallPurityInProgress.add(func);
+      const stableLocals = new Set;
+      for (const parameter of func.parameters) {
+        addTsBoundIdentifiers(parameter.name, stableLocals);
+      }
+      let pure = false;
+      if (func.body) {
+        pure = ts.isBlock(func.body) ? isPureTsBlock(func.body, stableLocals) : isPureTsExpression(func.body, stableLocals);
+      }
+      importedCallPurityInProgress.delete(func);
+      importedCallPurityCache.set(func, pure);
+      return pure;
+    };
+    const isPureTsCallExpression = (node, stableLocals) => {
+      const argsArePure = node.arguments.every((argument) => {
+        if (ts.isSpreadElement(argument)) {
+          return false;
+        }
+        return isPureTsExpression(argument, stableLocals);
+      });
+      if (!argsArePure) {
+        return false;
+      }
+      const calleePath = getTsCalleePath(node.expression);
+      if (calleePath !== null && pureImports.has(calleePath)) {
+        return true;
+      }
+      const calleeId = getCalleeIdentifier(node.expression);
+      if (!calleeId) {
+        return false;
+      }
+      if (PURE_GLOBAL_FUNCTIONS.has(calleeId.text)) {
+        return true;
+      }
+      if (!tsChecker) {
+        return false;
+      }
+      const symbol = tsChecker.getSymbolAtLocation(calleeId);
+      if (!symbol) {
+        return false;
+      }
+      const target = symbol.flags & ts.SymbolFlags.Alias ? tsChecker.getAliasedSymbol(symbol) : symbol;
+      const declaration = target.declarations?.[0];
+      if (!declaration) {
+        return false;
+      }
+      if (declaration.getSourceFile().isDeclarationFile) {
+        return false;
+      }
+      const funcNode = getFunctionLikeFromDeclaration(declaration);
+      if (!funcNode) {
+        return false;
+      }
+      return isPureTsFunction(funcNode);
+    };
+    const isPureTsExpression = (node, stableLocals) => {
+      if (!node) {
+        return false;
+      }
+      if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isTypeAssertionExpression(node) || ts.isNonNullExpression(node) || ts.isSatisfiesExpression(node)) {
+        return isPureTsExpression(node.expression, stableLocals);
+      }
+      if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isNumericLiteral(node) || ts.isBigIntLiteral(node) || node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword || node.kind === ts.SyntaxKind.NullKeyword) {
+        return true;
+      }
+      if (ts.isFunctionExpression(node) || ts.isArrowFunction(node) || ts.isClassExpression(node)) {
+        return true;
+      }
+      if (node.kind === ts.SyntaxKind.ThisKeyword) {
+        return stableLocals.has("this");
+      }
+      if (ts.isIdentifier(node)) {
+        return isPureTsIdentifier(node, stableLocals);
+      }
+      if (ts.isTemplateExpression(node)) {
+        return node.templateSpans.every((span) => isPureTsExpression(span.expression, stableLocals));
+      }
+      if (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) {
+        return isPureTsExpression(node.operand, stableLocals);
+      }
+      if (ts.isBinaryExpression(node)) {
+        if (ASSIGNMENT_OPERATOR_KINDS.has(node.operatorToken.kind) || node.operatorToken.kind === ts.SyntaxKind.CommaToken) {
+          return false;
+        }
+        return isPureTsExpression(node.left, stableLocals) && isPureTsExpression(node.right, stableLocals);
+      }
+      if (ts.isConditionalExpression(node)) {
+        return isPureTsExpression(node.condition, stableLocals) && isPureTsExpression(node.whenTrue, stableLocals) && isPureTsExpression(node.whenFalse, stableLocals);
+      }
+      if (ts.isArrayLiteralExpression(node)) {
+        return node.elements.every((element) => {
+          if (ts.isSpreadElement(element)) {
+            return false;
+          }
+          if (element.kind === ts.SyntaxKind.OmittedExpression) {
+            return false;
+          }
+          return isPureTsExpression(element, stableLocals);
+        });
+      }
+      if (ts.isObjectLiteralExpression(node)) {
+        return node.properties.every((property) => {
+          if (ts.isShorthandPropertyAssignment(property)) {
+            return isPureTsIdentifier(property.name, stableLocals);
+          }
+          if (ts.isPropertyAssignment(property)) {
+            if (ts.isComputedPropertyName(property.name)) {
+              return false;
+            }
+            return isPureTsExpression(property.initializer, stableLocals);
+          }
+          if (ts.isMethodDeclaration(property)) {
+            return !ts.isComputedPropertyName(property.name);
+          }
+          return false;
+        });
+      }
+      if (ts.isPropertyAccessExpression(node)) {
+        return isPureTsExpression(node.expression, stableLocals);
+      }
+      if (ts.isElementAccessExpression(node)) {
+        return isPureTsExpression(node.expression, stableLocals) && isPureTsExpression(node.argumentExpression, stableLocals);
+      }
+      if (ts.isNewExpression(node)) {
+        if (!ts.isIdentifier(node.expression) || !PURE_CONSTRUCTORS.has(node.expression.text)) {
+          return false;
+        }
+        return node.arguments?.every((argument) => {
+          if (ts.isSpreadElement(argument)) {
+            return false;
+          }
+          return isPureTsExpression(argument, stableLocals);
+        }) ?? true;
+      }
+      if (ts.isCallExpression(node)) {
+        return isPureTsCallExpression(node, stableLocals);
+      }
+      return false;
+    };
+    const getCalleePath = (node) => {
+      if (node.type === "Identifier") {
+        return node.name;
+      }
+      if (node.type === "ChainExpression") {
+        return getCalleePath(node.expression);
+      }
+      if (node.type === "MemberExpression" && !node.computed && node.property.type === "Identifier") {
+        const objectPath = getCalleePath(node.object);
+        return objectPath === null ? null : `${objectPath}.${node.property.name}`;
+      }
+      return null;
+    };
+    const isPureImportedCallExpression = (callExpression) => {
+      if (!tsChecker || !esTreeNodeToTSNodeMap) {
+        return false;
+      }
+      let calleeEsNode = null;
+      if (callExpression.callee.type === "Identifier") {
+        calleeEsNode = callExpression.callee;
+      } else if (callExpression.callee.type === "MemberExpression" && !callExpression.callee.computed && callExpression.callee.property.type === "Identifier") {
+        calleeEsNode = callExpression.callee.property;
+      }
+      if (!calleeEsNode) {
+        return false;
+      }
+      const tsCallee = esTreeNodeToTSNodeMap.get(calleeEsNode);
+      if (!tsCallee || !ts.isIdentifier(tsCallee)) {
+        return false;
+      }
+      const symbol = tsChecker.getSymbolAtLocation(tsCallee);
+      if (!symbol) {
+        return false;
+      }
+      const target = symbol.flags & ts.SymbolFlags.Alias ? tsChecker.getAliasedSymbol(symbol) : symbol;
+      const declaration = target.declarations?.[0];
+      if (!declaration) {
+        return false;
+      }
+      if (declaration.getSourceFile().isDeclarationFile) {
+        return false;
+      }
+      const funcNode = getFunctionLikeFromDeclaration(declaration);
+      if (!funcNode) {
+        return false;
+      }
+      return isPureTsFunction(funcNode);
+    };
     const isPureIdentifierCall = (callExpression) => {
       if (callExpression.callee.type !== "Identifier") {
         return false;
@@ -456,8 +787,14 @@ var sortKeysFixable = {
       if (PURE_GLOBAL_FUNCTIONS.has(callExpression.callee.name)) {
         return true;
       }
+      if (pureImports.has(callExpression.callee.name)) {
+        return true;
+      }
       const binding = topLevelBindings.get(callExpression.callee.name);
-      return binding?.kind === "function" ? isPureTopLevelFunction(binding.node) : false;
+      if (binding?.kind === "function") {
+        return isPureTopLevelFunction(binding.node);
+      }
+      return isPureImportedCallExpression(callExpression);
     };
     const isPureRuntimeExpression = (node, stableLocals) => {
       if (!node || node.type === "PrivateIdentifier") {
@@ -473,6 +810,8 @@ var sortKeysFixable = {
           return true;
         case "ThisExpression":
           return stableLocals.has("this");
+        case "ChainExpression":
+          return isPureRuntimeExpression(node.expression, stableLocals);
         case "TemplateLiteral":
           return node.expressions.every((expression) => isPureRuntimeExpression(expression, stableLocals));
         case "UnaryExpression":
@@ -521,6 +860,10 @@ var sortKeysFixable = {
           if (!argsArePure) {
             return false;
           }
+          const calleePath = getCalleePath(node.callee);
+          if (calleePath !== null && pureImports.has(calleePath)) {
+            return true;
+          }
           if (node.callee.type === "Identifier") {
             return isPureIdentifierCall(node);
           }
@@ -528,10 +871,10 @@ var sortKeysFixable = {
             return false;
           }
           const memberName = getStaticMemberName(node.callee);
-          if (!memberName || !PURE_MEMBER_METHODS.has(memberName)) {
-            return false;
+          if (memberName && PURE_MEMBER_METHODS.has(memberName)) {
+            return isPureRuntimeExpression(node.callee.object, stableLocals);
           }
-          return isPureRuntimeExpression(node.callee.object, stableLocals);
+          return isPureImportedCallExpression(node);
         }
         default:
           return false;
@@ -698,8 +1041,11 @@ ${indent}`;
       if (hasDuplicateNames(keys.map((key) => key.keyName))) {
         autoFixable = false;
       }
-      if (autoFixable && keys.some((key) => key.node.type === "Property" && !isPureRuntimeExpression(key.node.value, getStableLocalsForNode(key.node)))) {
-        autoFixable = false;
+      if (autoFixable) {
+        const impureCount = keys.filter((key) => key.node.type === "Property" && !isPureRuntimeExpression(key.node.value, getStableLocalsForNode(key.node))).length;
+        if (impureCount > 1) {
+          autoFixable = false;
+        }
       }
       let fixProvided = false;
       const createReportWithFix = (curr, shouldFix) => {
@@ -797,7 +1143,8 @@ ${indent}`;
         });
         return;
       }
-      if (attrs.some((attr) => attr.type === "JSXAttribute" && !isSafeJSXAttributeValue(attr.value, attr))) {
+      const impureAttrCount = attrs.filter((attr) => attr.type === "JSXAttribute" && !isSafeJSXAttributeValue(attr.value, attr)).length;
+      if (impureAttrCount > 1) {
         context.report({
           messageId: "unsorted",
           node: attrs[0].type === "JSXAttribute" ? attrs[0].name : attrs[0]
@@ -871,6 +1218,11 @@ ${indent}`;
           order: {
             enum: ["asc", "desc"],
             type: "string"
+          },
+          pureImports: {
+            items: { type: "string" },
+            type: "array",
+            uniqueItems: true
           },
           variablesBeforeFunctions: {
             type: "boolean"
@@ -2666,16 +3018,121 @@ var noInlinePropTypes = {
   }
 };
 
-// src/rules/no-unnecessary-div.ts
+// src/rules/no-nondeterministic-render.ts
 import { AST_NODE_TYPES as AST_NODE_TYPES3 } from "@typescript-eslint/utils";
+var BANNED_TEMPLATE_PATTERN = /\bMath\.random\s*\(|\bDate\.now\s*\(|\bnew\s+Date\s*\(\s*\)|\bcrypto\.randomUUID\s*\(|\bperformance\.now\s*\(/;
+var isIdentifier2 = (node, name) => node?.type === AST_NODE_TYPES3.Identifier && node.name === name;
+var isStaticMemberCall = (node, objectName, propertyName) => node.callee.type === AST_NODE_TYPES3.MemberExpression && !node.callee.computed && isIdentifier2(node.callee.object, objectName) && isIdentifier2(node.callee.property, propertyName);
+var getPropertyName2 = (node) => {
+  const { key } = node;
+  if (key.type === AST_NODE_TYPES3.Identifier)
+    return key.name;
+  if (key.type === AST_NODE_TYPES3.Literal && typeof key.value === "string") {
+    return key.value;
+  }
+  return null;
+};
+var isComponentDecorator = (decorator) => {
+  const { expression } = decorator;
+  return expression.type === AST_NODE_TYPES3.CallExpression && isIdentifier2(expression.callee, "Component");
+};
+var isAngularComponentClass = (node) => node.type === AST_NODE_TYPES3.ClassDeclaration && (node.decorators ?? []).some(isComponentDecorator);
+var getTemplateText = (node) => {
+  if (node.type === AST_NODE_TYPES3.Literal && typeof node.value === "string") {
+    return node.value;
+  }
+  if (node.type === AST_NODE_TYPES3.TemplateLiteral) {
+    return node.quasis.map((quasi) => quasi.value.cooked ?? "").join("");
+  }
+  return null;
+};
+var getEnclosingAngularComponentClass = (node) => {
+  let current = node.parent;
+  while (current) {
+    if (isAngularComponentClass(current))
+      return current;
+    current = current.parent;
+  }
+  return null;
+};
+var getEnclosingPropertyDefinition = (node) => {
+  let current = node.parent;
+  while (current) {
+    if (current.type === AST_NODE_TYPES3.PropertyDefinition) {
+      return current;
+    }
+    if (current.type === AST_NODE_TYPES3.MethodDefinition || current.type === AST_NODE_TYPES3.FunctionDeclaration || current.type === AST_NODE_TYPES3.FunctionExpression || current.type === AST_NODE_TYPES3.ArrowFunctionExpression) {
+      return null;
+    }
+    current = current.parent;
+  }
+  return null;
+};
+var isInAngularFieldInitializer = (node) => {
+  const propertyDefinition = getEnclosingPropertyDefinition(node);
+  if (!propertyDefinition || propertyDefinition.value === null)
+    return false;
+  return getEnclosingAngularComponentClass(propertyDefinition) !== null;
+};
+var isBannedCall = (node) => isStaticMemberCall(node, "Math", "random") || isStaticMemberCall(node, "Date", "now") || isStaticMemberCall(node, "crypto", "randomUUID") || isStaticMemberCall(node, "performance", "now");
+var noNondeterministicRender = {
+  create(context) {
+    const reportField = (node) => {
+      if (!isInAngularFieldInitializer(node))
+        return;
+      context.report({
+        messageId: "nondeterministicField",
+        node
+      });
+    };
+    return {
+      CallExpression(node) {
+        if (isBannedCall(node))
+          reportField(node);
+      },
+      "ClassDeclaration > Decorator CallExpression > ObjectExpression > Property"(node) {
+        if (getPropertyName2(node) !== "template")
+          return;
+        const templateText = getTemplateText(node.value);
+        if (templateText === null || !BANNED_TEMPLATE_PATTERN.test(templateText)) {
+          return;
+        }
+        context.report({
+          messageId: "nondeterministicTemplate",
+          node: node.value
+        });
+      },
+      NewExpression(node) {
+        if (isIdentifier2(node.callee, "Date") && node.arguments.length === 0) {
+          reportField(node);
+        }
+      }
+    };
+  },
+  defaultOptions: [],
+  meta: {
+    docs: {
+      description: "Disallow nondeterministic values in Angular render paths that can cause SSR hydration mismatches."
+    },
+    messages: {
+      nondeterministicField: "Do not use nondeterministic values in Angular component field initializers. Inject AbsoluteJS deterministic tokens instead.",
+      nondeterministicTemplate: "Do not use nondeterministic values in Angular templates. Compute a deterministic value before render instead."
+    },
+    schema: [],
+    type: "problem"
+  }
+};
+
+// src/rules/no-unnecessary-div.ts
+import { AST_NODE_TYPES as AST_NODE_TYPES4 } from "@typescript-eslint/utils";
 var noUnnecessaryDiv = {
   create(context) {
     const isDivElement = (node) => {
       const nameNode = node.openingElement.name;
-      return nameNode.type === AST_NODE_TYPES3.JSXIdentifier && nameNode.name === "div";
+      return nameNode.type === AST_NODE_TYPES4.JSXIdentifier && nameNode.name === "div";
     };
     const isMeaningfulChild = (child) => {
-      if (child.type === AST_NODE_TYPES3.JSXText) {
+      if (child.type === AST_NODE_TYPES4.JSXText) {
         return child.value.trim() !== "";
       }
       return true;
@@ -2694,7 +3151,7 @@ var noUnnecessaryDiv = {
         if (!onlyChild) {
           return;
         }
-        if (onlyChild.type === AST_NODE_TYPES3.JSXElement) {
+        if (onlyChild.type === AST_NODE_TYPES4.JSXElement) {
           context.report({
             messageId: "unnecessaryDivWrapper",
             node
@@ -2730,6 +3187,7 @@ var src_default = {
     "no-inline-prop-types": noInlinePropTypes,
     "no-multi-style-objects": noMultiStyleObjects,
     "no-nested-jsx-return": noNestedJSXReturn,
+    "no-nondeterministic-render": noNondeterministicRender,
     "no-or-none-component": noOrNoneComponent,
     "no-transition-cssproperties": noTransitionCSSProperties,
     "no-unnecessary-div": noUnnecessaryDiv,
