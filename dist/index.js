@@ -194,7 +194,9 @@ var PURE_GLOBAL_IDENTIFIERS = new Set([
   "Boolean",
   "Date",
   "Function",
+  "JSON",
   "Map",
+  "Math",
   "Number",
   "Object",
   "Promise",
@@ -203,16 +205,145 @@ var PURE_GLOBAL_IDENTIFIERS = new Set([
   "String",
   "Symbol",
   "URL",
+  "globalThis",
   "undefined"
 ]);
-var PURE_GLOBAL_FUNCTIONS = new Set(["Boolean", "Number", "String"]);
+var PURE_GLOBAL_FUNCTIONS = new Set([
+  "Boolean",
+  "Number",
+  "String",
+  "decodeURI",
+  "decodeURIComponent",
+  "encodeURI",
+  "encodeURIComponent",
+  "isFinite",
+  "isNaN",
+  "parseFloat",
+  "parseInt"
+]);
 var PURE_MEMBER_METHODS = new Set([
+  "toString",
+  "valueOf",
+  "at",
+  "charAt",
+  "charCodeAt",
+  "codePointAt",
+  "endsWith",
+  "includes",
+  "indexOf",
+  "lastIndexOf",
+  "match",
+  "matchAll",
+  "normalize",
+  "padEnd",
+  "padStart",
+  "repeat",
+  "replace",
+  "replaceAll",
+  "search",
+  "slice",
+  "split",
+  "startsWith",
+  "substr",
+  "substring",
+  "toLocaleLowerCase",
+  "toLocaleUpperCase",
+  "toLowerCase",
+  "toUpperCase",
+  "trim",
+  "trimEnd",
+  "trimStart",
+  "exec",
+  "test",
+  "toExponential",
+  "toFixed",
+  "toPrecision",
+  "isInteger",
+  "isSafeInteger",
+  "getDate",
   "getDay",
+  "getFullYear",
   "getHours",
   "getMilliseconds",
   "getMinutes",
+  "getMonth",
   "getSeconds",
-  "padStart"
+  "getTime",
+  "getTimezoneOffset",
+  "getUTCDate",
+  "getUTCDay",
+  "getUTCFullYear",
+  "getUTCHours",
+  "getUTCMilliseconds",
+  "getUTCMinutes",
+  "getUTCMonth",
+  "getUTCSeconds",
+  "toDateString",
+  "toISOString",
+  "toJSON",
+  "toLocaleDateString",
+  "toLocaleString",
+  "toLocaleTimeString",
+  "toTimeString",
+  "toUTCString",
+  "abs",
+  "acos",
+  "acosh",
+  "asin",
+  "asinh",
+  "atan",
+  "atan2",
+  "atanh",
+  "cbrt",
+  "ceil",
+  "clz32",
+  "cos",
+  "cosh",
+  "exp",
+  "expm1",
+  "floor",
+  "fround",
+  "hypot",
+  "log",
+  "log10",
+  "log1p",
+  "log2",
+  "max",
+  "min",
+  "pow",
+  "round",
+  "sign",
+  "sin",
+  "sinh",
+  "sqrt",
+  "tan",
+  "tanh",
+  "trunc",
+  "entries",
+  "fromEntries",
+  "getOwnPropertyNames",
+  "getOwnPropertySymbols",
+  "getPrototypeOf",
+  "hasOwn",
+  "isArray",
+  "keys",
+  "values",
+  "concat",
+  "join",
+  "every",
+  "filter",
+  "find",
+  "findIndex",
+  "findLast",
+  "findLastIndex",
+  "flatMap",
+  "map",
+  "reduce",
+  "reduceRight",
+  "some",
+  "sort",
+  "parse",
+  "stringify"
 ]);
 var hasDuplicateNames = (names) => {
   const seen = new Set;
@@ -222,6 +353,37 @@ var hasDuplicateNames = (names) => {
       return true;
     }
     seen.add(name);
+  }
+  return false;
+};
+var hasDuplicatePropertyNames = (properties) => {
+  const kindsByName = new Map;
+  for (const property of properties) {
+    if (property.type !== "Property") {
+      continue;
+    }
+    let keyName = null;
+    if (property.key.type === "Identifier") {
+      keyName = property.key.name;
+    } else if (property.key.type === "Literal") {
+      const { value } = property.key;
+      keyName = typeof value === "string" ? value : String(value);
+    }
+    if (keyName === null) {
+      continue;
+    }
+    const kinds = kindsByName.get(keyName) ?? [];
+    kinds.push(property.kind);
+    kindsByName.set(keyName, kinds);
+  }
+  for (const kinds of kindsByName.values()) {
+    if (kinds.length === 1) {
+      continue;
+    }
+    if (kinds.length === 2 && kinds.includes("get") && kinds.includes("set")) {
+      continue;
+    }
+    return true;
   }
   return false;
 };
@@ -285,21 +447,27 @@ var sortKeysFixable = {
       });
     };
     const addTopLevelBindings = (statement) => {
-      if (statement.type === "ImportDeclaration") {
-        addImportBindings(statement);
+      let inner = statement;
+      if (inner.type === "ExportNamedDeclaration" && inner.declaration) {
+        inner = inner.declaration;
+      } else if (inner.type === "ExportDefaultDeclaration" && (inner.declaration.type === "FunctionDeclaration" || inner.declaration.type === "ClassDeclaration")) {
+        inner = inner.declaration;
+      }
+      if (inner.type === "ImportDeclaration") {
+        addImportBindings(inner);
         return;
       }
-      if (statement.type === "FunctionDeclaration" && statement.id) {
-        topLevelBindings.set(statement.id.name, {
+      if (inner.type === "FunctionDeclaration" && inner.id) {
+        topLevelBindings.set(inner.id.name, {
           kind: "function",
-          node: statement
+          node: inner
         });
         return;
       }
-      if (statement.type !== "VariableDeclaration" || statement.kind !== "const") {
+      if (inner.type !== "VariableDeclaration" || inner.kind !== "const") {
         return;
       }
-      for (const declaration of statement.declarations) {
+      for (const declaration of inner.declarations) {
         addVariableBinding(declaration);
       }
     };
@@ -342,10 +510,14 @@ var sortKeysFixable = {
     };
     const addAncestorConstBindings = (ancestor, node, stableLocals) => {
       const addDeclarationBindings = (statement) => {
-        if (statement.type !== "VariableDeclaration" || statement.kind !== "const") {
+        let inner = statement;
+        if (inner.type === "ExportNamedDeclaration" && inner.declaration) {
+          inner = inner.declaration;
+        }
+        if (inner.type !== "VariableDeclaration") {
           return;
         }
-        for (const declaration of statement.declarations) {
+        for (const declaration of inner.declarations) {
           addBoundIdentifiers(declaration.id, stableLocals);
         }
       };
@@ -368,15 +540,38 @@ var sortKeysFixable = {
       }
       addFunctionParamBindings(ancestor, stableLocals);
     };
+    const addForStatementBindings = (ancestor, stableLocals) => {
+      if (ancestor.type !== "ForOfStatement" && ancestor.type !== "ForInStatement" && ancestor.type !== "ForStatement") {
+        return;
+      }
+      const left = ancestor.type === "ForStatement" ? ancestor.init : ancestor.left;
+      if (!left)
+        return;
+      if (left.type === "VariableDeclaration") {
+        for (const declaration of left.declarations) {
+          addBoundIdentifiers(declaration.id, stableLocals);
+        }
+      } else {
+        addBoundIdentifiers(left, stableLocals);
+      }
+    };
+    const addCatchClauseBindings = (ancestor, stableLocals) => {
+      if (ancestor.type !== "CatchClause" || !ancestor.param)
+        return;
+      addBoundIdentifiers(ancestor.param, stableLocals);
+    };
     const getStableLocalsForNode = (node) => {
       const stableLocals = new Set;
       const ancestors = sourceCode.getAncestors(node);
       for (const ancestor of ancestors) {
         addFunctionBindingsForAncestor(ancestor, stableLocals);
+        addForStatementBindings(ancestor, stableLocals);
+        addCatchClauseBindings(ancestor, stableLocals);
       }
       for (const ancestor of ancestors) {
         addAncestorBindingsForNode(ancestor, node, stableLocals);
       }
+      stableLocals.add("this");
       return stableLocals;
     };
     const getStaticMemberName = (memberExpression) => {
@@ -407,34 +602,60 @@ var sortKeysFixable = {
       }
       return false;
     };
-    const isPureConstStatement = (statement, stableLocals, checkExpression) => {
-      if (statement.kind !== "const") {
-        return false;
-      }
+    const isPureLocalVariableStatement = (statement, stableLocals) => {
       for (const declaration of statement.declarations) {
-        if (declaration.id.type !== "Identifier" || !declaration.init) {
-          return false;
+        if (declaration.init) {
+          if (!isPureRuntimeExpression(declaration.init, stableLocals)) {
+            return false;
+          }
         }
-        if (!checkExpression(declaration.init)) {
-          return false;
-        }
-        stableLocals.add(declaration.id.name);
+        addBoundIdentifiers(declaration.id, stableLocals);
       }
       return true;
     };
-    const isPureFunctionStatement = (statement, stableLocals, checkExpression) => {
+    const isPureLocalAssignment = (expression, stableLocals) => {
+      if (expression.type !== "AssignmentExpression")
+        return false;
+      if (expression.operator !== "=") {}
+      if (expression.left.type !== "Identifier")
+        return false;
+      if (!stableLocals.has(expression.left.name))
+        return false;
+      return isPureRuntimeExpression(expression.right, stableLocals);
+    };
+    const isPureFunctionStatement = (statement, stableLocals) => {
       if (statement.type === "ReturnStatement") {
-        return !statement.argument || checkExpression(statement.argument);
+        return !statement.argument || isPureRuntimeExpression(statement.argument, stableLocals);
       }
       if (statement.type === "VariableDeclaration") {
-        return isPureConstStatement(statement, stableLocals, checkExpression);
+        return isPureLocalVariableStatement(statement, stableLocals);
+      }
+      if (statement.type === "ExpressionStatement") {
+        return isPureLocalAssignment(statement.expression, stableLocals);
+      }
+      if (statement.type === "IfStatement") {
+        if (!isPureRuntimeExpression(statement.test, stableLocals)) {
+          return false;
+        }
+        if (!isPureFunctionBranch(statement.consequent, new Set(stableLocals))) {
+          return false;
+        }
+        return !statement.alternate || isPureFunctionBranch(statement.alternate, new Set(stableLocals));
+      }
+      if (statement.type === "BlockStatement") {
+        return isPureFunctionBody(statement, new Set(stableLocals));
       }
       return false;
     };
-    const isPureFunctionBody = (body, stableLocals, checkExpression) => {
+    const isPureFunctionBranch = (statement, stableLocals) => {
+      if (statement.type === "BlockStatement") {
+        return isPureFunctionBody(statement, stableLocals);
+      }
+      return isPureFunctionStatement(statement, stableLocals);
+    };
+    const isPureFunctionBody = (body, stableLocals) => {
       for (const statement of body.body) {
-        const statementIsPure = isPureFunctionStatement(statement, stableLocals, checkExpression);
-        if (!statementIsPure) {
+        if (!isPureFunctionStatement(statement, stableLocals)) {
           return false;
         }
       }
@@ -451,8 +672,7 @@ var sortKeysFixable = {
       pureFunctionInProgress.add(functionNode);
       const stableLocals = new Set;
       addFunctionParamBindings(functionNode, stableLocals);
-      const checkExpression = (expression) => isPureRuntimeExpression(expression, stableLocals);
-      const isPure = functionNode.body.type === "BlockStatement" ? isPureFunctionBody(functionNode.body, stableLocals, checkExpression) : checkExpression(functionNode.body);
+      const isPure = functionNode.body.type === "BlockStatement" ? isPureFunctionBody(functionNode.body, stableLocals) : isPureRuntimeExpression(functionNode.body, stableLocals);
       pureFunctionInProgress.delete(functionNode);
       pureFunctionCache.set(functionNode, isPure);
       return isPure;
@@ -553,35 +773,69 @@ var sortKeysFixable = {
       if (ts.isVariableDeclaration(declaration) && declaration.initializer && declaration.parent && ts.isVariableDeclarationList(declaration.parent) && declaration.parent.flags & ts.NodeFlags.Const) {
         return isPureTsExpression(declaration.initializer, new Set);
       }
-      if (ts.isFunctionDeclaration(declaration) || ts.isClassDeclaration(declaration)) {
+      if (ts.isVariableDeclaration(declaration) || ts.isFunctionDeclaration(declaration) || ts.isClassDeclaration(declaration) || ts.isParameter(declaration) || ts.isBindingElement(declaration)) {
         return true;
       }
       return false;
     };
-    const isPureTsBlock = (block, stableLocals) => {
-      for (const statement of block.statements) {
-        if (ts.isReturnStatement(statement)) {
-          if (statement.expression && !isPureTsExpression(statement.expression, stableLocals)) {
-            return false;
-          }
-          continue;
-        }
-        if (ts.isVariableStatement(statement)) {
-          if (!(statement.declarationList.flags & ts.NodeFlags.Const)) {
-            return false;
-          }
-          for (const declaration of statement.declarationList.declarations) {
-            if (!ts.isIdentifier(declaration.name) || !declaration.initializer) {
-              return false;
-            }
+    const isPureTsLocalAssignment = (expression, stableLocals) => {
+      if (!ts.isBinaryExpression(expression))
+        return false;
+      if (!ASSIGNMENT_OPERATOR_KINDS.has(expression.operatorToken.kind))
+        return false;
+      if (!ts.isIdentifier(expression.left))
+        return false;
+      if (!stableLocals.has(expression.left.text))
+        return false;
+      return isPureTsExpression(expression.right, stableLocals);
+    };
+    const isPureTsStatement = (statement, stableLocals) => {
+      if (ts.isReturnStatement(statement)) {
+        return !statement.expression || isPureTsExpression(statement.expression, stableLocals);
+      }
+      if (ts.isVariableStatement(statement)) {
+        for (const declaration of statement.declarationList.declarations) {
+          if (declaration.initializer) {
             if (!isPureTsExpression(declaration.initializer, stableLocals)) {
               return false;
             }
-            stableLocals.add(declaration.name.text);
           }
-          continue;
+          addTsBoundIdentifiers(declaration.name, stableLocals);
         }
-        return false;
+        return true;
+      }
+      if (ts.isExpressionStatement(statement)) {
+        return isPureTsLocalAssignment(statement.expression, stableLocals);
+      }
+      if (ts.isIfStatement(statement)) {
+        if (!isPureTsExpression(statement.expression, stableLocals)) {
+          return false;
+        }
+        const branchScope = new Set(stableLocals);
+        if (!isPureTsStatementOrBlock(statement.thenStatement, branchScope)) {
+          return false;
+        }
+        if (statement.elseStatement && !isPureTsStatementOrBlock(statement.elseStatement, new Set(stableLocals))) {
+          return false;
+        }
+        return true;
+      }
+      if (ts.isBlock(statement)) {
+        return isPureTsBlock(statement, new Set(stableLocals));
+      }
+      return false;
+    };
+    const isPureTsStatementOrBlock = (statement, stableLocals) => {
+      if (ts.isBlock(statement)) {
+        return isPureTsBlock(statement, stableLocals);
+      }
+      return isPureTsStatement(statement, stableLocals);
+    };
+    const isPureTsBlock = (block, stableLocals) => {
+      for (const statement of block.statements) {
+        if (!isPureTsStatement(statement, stableLocals)) {
+          return false;
+        }
       }
       return true;
     };
@@ -609,7 +863,7 @@ var sortKeysFixable = {
     const isPureTsCallExpression = (node, stableLocals) => {
       const argsArePure = node.arguments.every((argument) => {
         if (ts.isSpreadElement(argument)) {
-          return false;
+          return isPureTsExpression(argument.expression, stableLocals);
         }
         return isPureTsExpression(argument, stableLocals);
       });
@@ -619,6 +873,12 @@ var sortKeysFixable = {
       const calleePath = getTsCalleePath(node.expression);
       if (calleePath !== null && pureImports.has(calleePath)) {
         return true;
+      }
+      if (ts.isPropertyAccessExpression(node.expression)) {
+        const memberName = node.expression.name.text;
+        if (PURE_MEMBER_METHODS.has(memberName)) {
+          return isPureTsExpression(node.expression.expression, stableLocals);
+        }
       }
       const calleeId = getCalleeIdentifier(node.expression);
       if (!calleeId) {
@@ -673,6 +933,9 @@ var sortKeysFixable = {
       if (ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) {
         return isPureTsExpression(node.operand, stableLocals);
       }
+      if (ts.isTypeOfExpression(node) || ts.isVoidExpression(node)) {
+        return isPureTsExpression(node.expression, stableLocals);
+      }
       if (ts.isBinaryExpression(node)) {
         if (ASSIGNMENT_OPERATOR_KINDS.has(node.operatorToken.kind) || node.operatorToken.kind === ts.SyntaxKind.CommaToken) {
           return false;
@@ -685,7 +948,7 @@ var sortKeysFixable = {
       if (ts.isArrayLiteralExpression(node)) {
         return node.elements.every((element) => {
           if (ts.isSpreadElement(element)) {
-            return false;
+            return isPureTsExpression(element.expression, stableLocals);
           }
           if (element.kind === ts.SyntaxKind.OmittedExpression) {
             return false;
@@ -796,9 +1059,79 @@ var sortKeysFixable = {
       }
       return isPureImportedCallExpression(callExpression);
     };
+    const getCallReturnTypeSymbol = (node) => {
+      if (!tsChecker || !esTreeNodeToTSNodeMap)
+        return;
+      const tsNode = esTreeNodeToTSNodeMap.get(node);
+      if (!tsNode)
+        return;
+      const type = tsChecker.getTypeAtLocation(tsNode);
+      return type.symbol ?? type.aliasSymbol;
+    };
+    const isObjectLikeType = (type) => {
+      if (type.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined | ts.TypeFlags.Void)) {
+        return false;
+      }
+      if (type.flags & ts.TypeFlags.Union) {
+        return type.types.every((member) => {
+          if (member.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined | ts.TypeFlags.Void)) {
+            return true;
+          }
+          return isObjectLikeType(member);
+        });
+      }
+      return Boolean(type.flags & (ts.TypeFlags.Object | ts.TypeFlags.Intersection));
+    };
+    const callReturnsNominalInstance = (node) => {
+      if (!tsChecker || !esTreeNodeToTSNodeMap)
+        return false;
+      const tsNode = esTreeNodeToTSNodeMap.get(node);
+      if (!tsNode)
+        return false;
+      const type = tsChecker.getTypeAtLocation(tsNode);
+      return isObjectLikeType(type);
+    };
+    const isEncapsulatedFreshExpression = (node, stableLocals) => {
+      if (!node)
+        return false;
+      if (node.type === "TSAsExpression" || node.type === "TSTypeAssertion" || node.type === "TSNonNullExpression" || node.type === "TSSatisfiesExpression" || node.type === "TSInstantiationExpression") {
+        return isEncapsulatedFreshExpression(node.expression, stableLocals);
+      }
+      if (node.type === "ObjectExpression" || node.type === "ArrayExpression") {
+        return isPureRuntimeExpression(node, stableLocals);
+      }
+      if (node.type === "NewExpression") {
+        return node.arguments.every((argument) => {
+          if (argument.type === "SpreadElement") {
+            return isPureRuntimeExpression(argument.argument, stableLocals);
+          }
+          return isPureRuntimeExpression(argument, stableLocals);
+        });
+      }
+      if (node.type === "CallExpression") {
+        const argsArePure = node.arguments.every((argument) => {
+          if (argument.type === "SpreadElement") {
+            return isPureRuntimeExpression(argument.argument, stableLocals);
+          }
+          return isPureRuntimeExpression(argument, stableLocals);
+        });
+        if (!argsArePure)
+          return false;
+        if (node.callee.type === "MemberExpression") {
+          return isEncapsulatedFreshExpression(node.callee.object, stableLocals);
+        }
+        if (node.callee.type === "Identifier") {
+          return callReturnsNominalInstance(node);
+        }
+      }
+      return false;
+    };
     const isPureRuntimeExpression = (node, stableLocals) => {
       if (!node || node.type === "PrivateIdentifier") {
         return false;
+      }
+      if (node.type === "TSAsExpression" || node.type === "TSTypeAssertion" || node.type === "TSNonNullExpression" || node.type === "TSSatisfiesExpression" || node.type === "TSInstantiationExpression") {
+        return isPureRuntimeExpression(node.expression, stableLocals);
       }
       switch (node.type) {
         case "Identifier":
@@ -823,8 +1156,11 @@ var sortKeysFixable = {
           return isPureRuntimeExpression(node.test, stableLocals) && isPureRuntimeExpression(node.consequent, stableLocals) && isPureRuntimeExpression(node.alternate, stableLocals);
         case "ArrayExpression":
           return node.elements.every((element) => {
-            if (!element || element.type === "SpreadElement") {
+            if (!element) {
               return false;
+            }
+            if (element.type === "SpreadElement") {
+              return isPureRuntimeExpression(element.argument, stableLocals);
             }
             return isPureRuntimeExpression(element, stableLocals);
           });
@@ -843,13 +1179,20 @@ var sortKeysFixable = {
           });
         case "MemberExpression":
           return isPureRuntimeExpression(node.object, stableLocals) && (!node.computed || isPureRuntimeExpression(node.property, stableLocals));
-        case "NewExpression":
-          return node.callee.type === "Identifier" && PURE_CONSTRUCTORS.has(node.callee.name) && node.arguments.every((argument) => {
+        case "NewExpression": {
+          const argsArePure = node.arguments.every((argument) => {
             if (argument.type === "SpreadElement") {
-              return false;
+              return isPureRuntimeExpression(argument.argument, stableLocals);
             }
             return isPureRuntimeExpression(argument, stableLocals);
           });
+          if (!argsArePure)
+            return false;
+          if (node.callee.type === "Identifier" && PURE_CONSTRUCTORS.has(node.callee.name)) {
+            return true;
+          }
+          return true;
+        }
         case "CallExpression": {
           const argsArePure = node.arguments.every((argument) => {
             if (argument.type === "SpreadElement") {
@@ -865,7 +1208,10 @@ var sortKeysFixable = {
             return true;
           }
           if (node.callee.type === "Identifier") {
-            return isPureIdentifierCall(node);
+            if (isPureIdentifierCall(node)) {
+              return true;
+            }
+            return callReturnsNominalInstance(node);
           }
           if (node.callee.type !== "MemberExpression") {
             return false;
@@ -873,6 +1219,12 @@ var sortKeysFixable = {
           const memberName = getStaticMemberName(node.callee);
           if (memberName && PURE_MEMBER_METHODS.has(memberName)) {
             return isPureRuntimeExpression(node.callee.object, stableLocals);
+          }
+          if (isEncapsulatedFreshExpression(node.callee.object, stableLocals)) {
+            return true;
+          }
+          if (isPureRuntimeExpression(node.callee.object, stableLocals) && callReturnsNominalInstance(node)) {
+            return true;
           }
           return isPureImportedCallExpression(node);
         }
@@ -1038,7 +1390,7 @@ ${indent}`;
           node: prop
         };
       });
-      if (hasDuplicateNames(keys.map((key) => key.keyName))) {
+      if (hasDuplicatePropertyNames(node.properties)) {
         autoFixable = false;
       }
       if (autoFixable) {
@@ -3173,6 +3525,112 @@ var noUnnecessaryDiv = {
   }
 };
 
+// src/rules/prefer-inline-exports.ts
+var isLocalDeclaration = (node) => node.type === "VariableDeclaration" || node.type === "FunctionDeclaration" || node.type === "ClassDeclaration" || node.type === "TSTypeAliasDeclaration" || node.type === "TSInterfaceDeclaration" || node.type === "TSEnumDeclaration";
+var declarationName = (decl) => {
+  if (decl.type === "VariableDeclaration") {
+    if (decl.declarations.length !== 1)
+      return null;
+    const [first] = decl.declarations;
+    if (!first || first.id.type !== "Identifier")
+      return null;
+    return first.id.name;
+  }
+  if (!decl.id || decl.id.type !== "Identifier")
+    return null;
+  return decl.id.name;
+};
+var findOwnDeclaration = (program, name) => {
+  for (const stmt of program.body) {
+    if (stmt.type === "ExportNamedDeclaration" && stmt.declaration && isLocalDeclaration(stmt.declaration) && declarationName(stmt.declaration) === name) {
+      return { alreadyExported: true, decl: stmt.declaration };
+    }
+    if (stmt.type === "ExportDefaultDeclaration" && stmt.declaration.type !== "Identifier" && isLocalDeclaration(stmt.declaration) && declarationName(stmt.declaration) === name) {
+      return {
+        alreadyExported: true,
+        decl: stmt.declaration
+      };
+    }
+    if (isLocalDeclaration(stmt) && declarationName(stmt) === name) {
+      return { alreadyExported: false, decl: stmt };
+    }
+  }
+  return null;
+};
+var preferInlineExports = {
+  create(context) {
+    const { sourceCode } = context;
+    const program = sourceCode.ast;
+    return {
+      ExportNamedDeclaration(node) {
+        if (node.source)
+          return;
+        if (node.declaration)
+          return;
+        if (node.specifiers.length === 0)
+          return;
+        if (node.exportKind === "type")
+          return;
+        const fixable = [];
+        for (const spec of node.specifiers) {
+          if (spec.type !== "ExportSpecifier")
+            continue;
+          if (spec.local.type !== "Identifier")
+            continue;
+          if (spec.exported.type !== "Identifier")
+            continue;
+          if (spec.local.name !== spec.exported.name)
+            continue;
+          if (spec.exportKind === "type")
+            continue;
+          const found = findOwnDeclaration(program, spec.local.name);
+          if (!found)
+            continue;
+          if (found.alreadyExported)
+            continue;
+          fixable.push({ decl: found.decl, spec });
+        }
+        if (fixable.length === 0)
+          return;
+        const allSpecsAreFixable = fixable.length === node.specifiers.length;
+        const names = fixable.map(({ spec }) => spec.local.type === "Identifier" ? spec.local.name : "").filter((name) => name.length > 0);
+        context.report({
+          data: { names: names.join(", ") },
+          fix(fixer) {
+            const fixes = [];
+            for (const { decl } of fixable) {
+              const [declStart] = decl.range;
+              fixes.push(fixer.insertTextBeforeRange([declStart, declStart], "export "));
+            }
+            if (allSpecsAreFixable) {
+              fixes.push(fixer.remove(node));
+            } else {
+              const survivors = node.specifiers.filter((spec) => !fixable.some((entry) => entry.spec === spec));
+              const replacement = `export { ${survivors.map((spec) => sourceCode.getText(spec)).join(", ")} };`;
+              fixes.push(fixer.replaceText(node, replacement));
+            }
+            return fixes;
+          },
+          messageId: "preferInline",
+          node
+        });
+      }
+    };
+  },
+  defaultOptions: [],
+  meta: {
+    docs: {
+      description: "Prefer inlining `export` at a declaration site over a trailing `export { name }` statement when the name is a local declaration."
+    },
+    fixable: "code",
+    messages: {
+      preferInline: "Inline `export` at the declaration of `{{names}}` instead of re-exporting at the bottom of the file."
+    },
+    schema: [],
+    type: "suggestion"
+  }
+};
+
 // src/index.ts
 var src_default = {
   rules: {
@@ -3193,6 +3651,7 @@ var src_default = {
     "no-unnecessary-div": noUnnecessaryDiv,
     "no-unnecessary-key": noUnnecessaryKey,
     "no-useless-function": noUselessFunction,
+    "prefer-inline-exports": preferInlineExports,
     "seperate-style-files": seperateStyleFiles,
     "sort-exports": sortExports,
     "sort-keys-fixable": sortKeysFixable,

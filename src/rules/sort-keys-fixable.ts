@@ -60,7 +60,9 @@ const PURE_GLOBAL_IDENTIFIERS = new Set([
 	"Boolean",
 	"Date",
 	"Function",
+	"JSON",
 	"Map",
+	"Math",
 	"Number",
 	"Object",
 	"Promise",
@@ -69,16 +71,167 @@ const PURE_GLOBAL_IDENTIFIERS = new Set([
 	"String",
 	"Symbol",
 	"URL",
+	"globalThis",
 	"undefined"
 ]);
-const PURE_GLOBAL_FUNCTIONS = new Set(["Boolean", "Number", "String"]);
+const PURE_GLOBAL_FUNCTIONS = new Set([
+	"Boolean",
+	"Number",
+	"String",
+	"decodeURI",
+	"decodeURIComponent",
+	"encodeURI",
+	"encodeURIComponent",
+	"isFinite",
+	"isNaN",
+	"parseFloat",
+	"parseInt"
+]);
+// Method names that are side-effect-free on any standard built-in receiver.
+// The rule still verifies the receiver and arguments are pure separately, so a
+// match here only relaxes the method-call step itself. Names included here
+// are common enough on built-ins (String/Number/Date/Array/Object/Math/JSON)
+// that an overload with side effects on a non-built-in class would be highly
+// unusual; the single-impure relaxation handles the rare miss.
 const PURE_MEMBER_METHODS = new Set([
+	// universal
+	"toString",
+	"valueOf",
+	// String non-mutating
+	"at",
+	"charAt",
+	"charCodeAt",
+	"codePointAt",
+	"endsWith",
+	"includes",
+	"indexOf",
+	"lastIndexOf",
+	"match",
+	"matchAll",
+	"normalize",
+	"padEnd",
+	"padStart",
+	"repeat",
+	"replace",
+	"replaceAll",
+	"search",
+	"slice",
+	"split",
+	"startsWith",
+	"substr",
+	"substring",
+	"toLocaleLowerCase",
+	"toLocaleUpperCase",
+	"toLowerCase",
+	"toUpperCase",
+	"trim",
+	"trimEnd",
+	"trimStart",
+	// RegExp non-mutating methods
+	"exec",
+	"test",
+	// Number
+	"toExponential",
+	"toFixed",
+	"toPrecision",
+	// Number static (Number.isFinite, etc.) — names distinctive enough
+	"isInteger",
+	"isSafeInteger",
+	// Date getters / formatters
+	"getDate",
 	"getDay",
+	"getFullYear",
 	"getHours",
 	"getMilliseconds",
 	"getMinutes",
+	"getMonth",
 	"getSeconds",
-	"padStart"
+	"getTime",
+	"getTimezoneOffset",
+	"getUTCDate",
+	"getUTCDay",
+	"getUTCFullYear",
+	"getUTCHours",
+	"getUTCMilliseconds",
+	"getUTCMinutes",
+	"getUTCMonth",
+	"getUTCSeconds",
+	"toDateString",
+	"toISOString",
+	"toJSON",
+	"toLocaleDateString",
+	"toLocaleString",
+	"toLocaleTimeString",
+	"toTimeString",
+	"toUTCString",
+	// Math
+	"abs",
+	"acos",
+	"acosh",
+	"asin",
+	"asinh",
+	"atan",
+	"atan2",
+	"atanh",
+	"cbrt",
+	"ceil",
+	"clz32",
+	"cos",
+	"cosh",
+	"exp",
+	"expm1",
+	"floor",
+	"fround",
+	"hypot",
+	"log",
+	"log10",
+	"log1p",
+	"log2",
+	"max",
+	"min",
+	"pow",
+	"round",
+	"sign",
+	"sin",
+	"sinh",
+	"sqrt",
+	"tan",
+	"tanh",
+	"trunc",
+	// Object/Array static
+	"entries",
+	"fromEntries",
+	"getOwnPropertyNames",
+	"getOwnPropertySymbols",
+	"getPrototypeOf",
+	"hasOwn",
+	"isArray",
+	"keys",
+	"values",
+	// Array non-mutating, non-callback
+	"concat",
+	"join",
+	// Array non-mutating, callback-taking. Caveat: the callback body could
+	// have side effects, but the args-purity check requires each arg to
+	// itself be pure (a function expression always counts as pure-as-value),
+	// so this only ever creates a false positive when the callback is an
+	// arrow whose body has hidden side effects we couldn't see — a rare
+	// case in practice and one the single-impure relaxation handles.
+	"every",
+	"filter",
+	"find",
+	"findIndex",
+	"findLast",
+	"findLastIndex",
+	"flatMap",
+	"map",
+	"reduce",
+	"reduceRight",
+	"some",
+	"sort", // mutates in-place but returns same array; safe when receiver is fresh
+	// JSON
+	"parse",
+	"stringify"
 ]);
 
 const hasDuplicateNames = (names: Array<string | null>) => {
@@ -90,6 +243,54 @@ const hasDuplicateNames = (names: Array<string | null>) => {
 			return true;
 		}
 		seen.add(name);
+	}
+
+	return false;
+};
+
+// Object-property duplicate check that knows about accessor pairs. A pair of
+// `get x` and `set x` shares a key by design and is not a real duplicate, so
+// it should not disable the autofix the way `{ a: 1, a: 2 }` does. Anything
+// else (two inits, two gets, init alongside an accessor, etc.) is a real
+// duplicate.
+const hasDuplicatePropertyNames = (
+	properties: ReadonlyArray<TSESTree.Property | TSESTree.SpreadElement>
+) => {
+	const kindsByName = new Map<string, Array<"init" | "get" | "set">>();
+
+	for (const property of properties) {
+		if (property.type !== "Property") {
+			continue;
+		}
+
+		let keyName: string | null = null;
+		if (property.key.type === "Identifier") {
+			keyName = property.key.name;
+		} else if (property.key.type === "Literal") {
+			const { value } = property.key;
+			keyName = typeof value === "string" ? value : String(value);
+		}
+		if (keyName === null) {
+			continue;
+		}
+
+		const kinds = kindsByName.get(keyName) ?? [];
+		kinds.push(property.kind);
+		kindsByName.set(keyName, kinds);
+	}
+
+	for (const kinds of kindsByName.values()) {
+		if (kinds.length === 1) {
+			continue;
+		}
+		if (
+			kinds.length === 2 &&
+			kinds.includes("get") &&
+			kinds.includes("set")
+		) {
+			continue;
+		}
+		return true;
 	}
 
 	return false;
@@ -213,27 +414,43 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 		};
 
 		const addTopLevelBindings = (statement: TSESTree.ProgramStatement) => {
-			if (statement.type === "ImportDeclaration") {
-				addImportBindings(statement);
+			// Unwrap `export const X = ...` / `export function X() {}` /
+			// `export default function X() {}` so the inner declaration is
+			// processed normally. Without this, every exported top-level
+			// binding was invisible to the purity check, which silently
+			// poisoned every reference to it elsewhere in the file.
+			let inner: TSESTree.ProgramStatement = statement;
+			if (inner.type === "ExportNamedDeclaration" && inner.declaration) {
+				inner = inner.declaration as TSESTree.ProgramStatement;
+			} else if (
+				inner.type === "ExportDefaultDeclaration" &&
+				(inner.declaration.type === "FunctionDeclaration" ||
+					inner.declaration.type === "ClassDeclaration")
+			) {
+				inner = inner.declaration as TSESTree.ProgramStatement;
+			}
+
+			if (inner.type === "ImportDeclaration") {
+				addImportBindings(inner);
 				return;
 			}
 
-			if (statement.type === "FunctionDeclaration" && statement.id) {
-				topLevelBindings.set(statement.id.name, {
+			if (inner.type === "FunctionDeclaration" && inner.id) {
+				topLevelBindings.set(inner.id.name, {
 					kind: "function",
-					node: statement
+					node: inner
 				});
 				return;
 			}
 
 			if (
-				statement.type !== "VariableDeclaration" ||
-				statement.kind !== "const"
+				inner.type !== "VariableDeclaration" ||
+				inner.kind !== "const"
 			) {
 				return;
 			}
 
-			for (const declaration of statement.declarations) {
+			for (const declaration of inner.declarations) {
 				addVariableBinding(declaration);
 			}
 		};
@@ -296,15 +513,34 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 			node: TSESTree.Node,
 			stableLocals: Set<string>
 		) => {
-			const addDeclarationBindings = (statement: TSESTree.Statement) => {
+			const addDeclarationBindings = (
+				statement: TSESTree.Statement | TSESTree.ProgramStatement
+			) => {
+				// Unwrap `export const X = ...` so module-level exports
+				// participate. Without this, every exported binding was
+				// invisible to the purity check — which silently poisoned
+				// every reference to it elsewhere in the file.
+				let inner = statement;
 				if (
-					statement.type !== "VariableDeclaration" ||
-					statement.kind !== "const"
+					inner.type === "ExportNamedDeclaration" &&
+					inner.declaration
 				) {
+					inner = inner.declaration as TSESTree.Statement;
+				}
+
+				// Reading any local binding (const, let, or var) is
+				// side-effect-free — there are no getters on bindings. We
+				// previously gated this on `kind === "const"`, but that
+				// missed `let firstName = body.firstName ?? ""` patterns
+				// where the read is still pure even though the variable can
+				// be reassigned. Mutating expressions (assignments, ++, etc.)
+				// are caught separately via the default impure branch in
+				// isPureRuntimeExpression.
+				if (inner.type !== "VariableDeclaration") {
 					return;
 				}
 
-				for (const declaration of statement.declarations) {
+				for (const declaration of inner.declarations) {
 					addBoundIdentifiers(declaration.id, stableLocals);
 				}
 			};
@@ -348,17 +584,67 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 			addFunctionParamBindings(ancestor, stableLocals);
 		};
 
+		// for (const [k, v] of iterable) { ... } — the loop variable
+		// declarations are scoped to the loop body but live on the
+		// ForOfStatement / ForInStatement / ForStatement node, not in the
+		// body's statement list. Without this, references to `k`/`v`
+		// inside the body are treated as unstable, which silently disables
+		// reordering for any object built inside the loop.
+		const addForStatementBindings = (
+			ancestor: TSESTree.Node,
+			stableLocals: Set<string>
+		) => {
+			if (
+				ancestor.type !== "ForOfStatement" &&
+				ancestor.type !== "ForInStatement" &&
+				ancestor.type !== "ForStatement"
+			) {
+				return;
+			}
+
+			const left =
+				ancestor.type === "ForStatement"
+					? ancestor.init
+					: ancestor.left;
+			if (!left) return;
+			if (left.type === "VariableDeclaration") {
+				for (const declaration of left.declarations) {
+					addBoundIdentifiers(declaration.id, stableLocals);
+				}
+			} else {
+				addBoundIdentifiers(left, stableLocals);
+			}
+		};
+
+		// `try { ... } catch (err) { ... }` — `err` is bound inside the
+		// catch block and frequently referenced in property values.
+		const addCatchClauseBindings = (
+			ancestor: TSESTree.Node,
+			stableLocals: Set<string>
+		) => {
+			if (ancestor.type !== "CatchClause" || !ancestor.param) return;
+			addBoundIdentifiers(ancestor.param, stableLocals);
+		};
+
 		const getStableLocalsForNode = (node: TSESTree.Node) => {
 			const stableLocals = new Set<string>();
 			const ancestors = sourceCode.getAncestors(node);
 
 			for (const ancestor of ancestors) {
 				addFunctionBindingsForAncestor(ancestor, stableLocals);
+				addForStatementBindings(ancestor, stableLocals);
+				addCatchClauseBindings(ancestor, stableLocals);
 			}
 
 			for (const ancestor of ancestors) {
 				addAncestorBindingsForNode(ancestor, node, stableLocals);
 			}
+
+			// `this` is a stable receiver for the duration of any single
+			// function call (or arrow that closes over one). Property reads
+			// on `this` have the same purity profile as reads on any other
+			// stable local, so treat ThisExpression as stable everywhere.
+			stableLocals.add("this");
 
 			return stableLocals;
 		};
@@ -412,64 +698,116 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 			return false;
 		};
 
-		const isPureConstStatement = (
+		const isPureLocalVariableStatement = (
 			statement: TSESTree.VariableDeclaration,
-			stableLocals: Set<string>,
-			checkExpression: (expression: TSESTree.Expression) => boolean
+			stableLocals: Set<string>
 		) => {
-			if (statement.kind !== "const") {
-				return false;
-			}
-
 			for (const declaration of statement.declarations) {
-				if (declaration.id.type !== "Identifier" || !declaration.init) {
-					return false;
+				// `let x;` (no init) is fine — the binding exists and is
+				// readable; reading an undefined slot is not a side effect.
+				if (declaration.init) {
+					if (
+						!isPureRuntimeExpression(declaration.init, stableLocals)
+					) {
+						return false;
+					}
 				}
 
-				if (!checkExpression(declaration.init)) {
-					return false;
-				}
-
-				stableLocals.add(declaration.id.name);
+				// Handle destructuring (`const { x, y } = obj`,
+				// `const [a, b] = arr`) — every bound name becomes a
+				// stable read in the rest of the body. addBoundIdentifiers
+				// handles nested patterns recursively.
+				addBoundIdentifiers(declaration.id, stableLocals);
 			}
 
 			return true;
 		};
 
-		const isPureFunctionStatement = (
+		// Assignments to a local binding don't escape — they only mutate
+		// state owned by the function itself. Allowing them as
+		// statement-level expressions covers the common
+		// `let x = …; x = transform(x); … return x;` pattern in helper
+		// functions, without compromising safety: a write to a name we
+		// haven't seen as a local binding is still rejected.
+		const isPureLocalAssignment = (
+			expression: TSESTree.Expression,
+			stableLocals: Set<string>
+		): boolean => {
+			if (expression.type !== "AssignmentExpression") return false;
+			if (expression.operator !== "=") {
+				// `+=`, `*=`, etc. — same logic, but ensure left is local.
+			}
+			if (expression.left.type !== "Identifier") return false;
+			if (!stableLocals.has(expression.left.name)) return false;
+			return isPureRuntimeExpression(expression.right, stableLocals);
+		};
+
+		const isPureFunctionStatement: (
 			statement: TSESTree.Statement,
-			stableLocals: Set<string>,
-			checkExpression: (expression: TSESTree.Expression) => boolean
-		) => {
+			stableLocals: Set<string>
+		) => boolean = (statement, stableLocals) => {
 			if (statement.type === "ReturnStatement") {
 				return (
-					!statement.argument || checkExpression(statement.argument)
+					!statement.argument ||
+					isPureRuntimeExpression(statement.argument, stableLocals)
 				);
 			}
 
 			if (statement.type === "VariableDeclaration") {
-				return isPureConstStatement(
-					statement,
-					stableLocals,
-					checkExpression
+				return isPureLocalVariableStatement(statement, stableLocals);
+			}
+
+			if (statement.type === "ExpressionStatement") {
+				return isPureLocalAssignment(
+					statement.expression,
+					stableLocals
 				);
+			}
+
+			if (statement.type === "IfStatement") {
+				if (!isPureRuntimeExpression(statement.test, stableLocals)) {
+					return false;
+				}
+				if (
+					!isPureFunctionBranch(
+						statement.consequent,
+						new Set(stableLocals)
+					)
+				) {
+					return false;
+				}
+				return (
+					!statement.alternate ||
+					isPureFunctionBranch(
+						statement.alternate,
+						new Set(stableLocals)
+					)
+				);
+			}
+
+			if (statement.type === "BlockStatement") {
+				return isPureFunctionBody(statement, new Set(stableLocals));
 			}
 
 			return false;
 		};
 
-		const isPureFunctionBody = (
+		const isPureFunctionBranch = (
+			statement: TSESTree.Statement,
+			stableLocals: Set<string>
+		): boolean => {
+			if (statement.type === "BlockStatement") {
+				return isPureFunctionBody(statement, stableLocals);
+			}
+			return isPureFunctionStatement(statement, stableLocals);
+		};
+
+		const isPureFunctionBody: (
 			body: TSESTree.BlockStatement,
-			stableLocals: Set<string>,
-			checkExpression: (expression: TSESTree.Expression) => boolean
-		) => {
+			stableLocals: Set<string>
+		) => boolean = (body, stableLocals) => {
 			for (const statement of body.body) {
-				const statementIsPure = isPureFunctionStatement(
-					statement,
-					stableLocals,
-					checkExpression
-				);
-				if (!statementIsPure) {
+				if (!isPureFunctionStatement(statement, stableLocals)) {
 					return false;
 				}
 			}
@@ -496,16 +834,10 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 
 			const stableLocals = new Set<string>();
 			addFunctionParamBindings(functionNode, stableLocals);
-			const checkExpression = (expression: TSESTree.Expression) =>
-				isPureRuntimeExpression(expression, stableLocals);
 			const isPure =
 				functionNode.body.type === "BlockStatement"
-					? isPureFunctionBody(
-							functionNode.body,
-							stableLocals,
-							checkExpression
-						)
-					: checkExpression(functionNode.body);
+					? isPureFunctionBody(functionNode.body, stableLocals)
+					: isPureRuntimeExpression(functionNode.body, stableLocals);
 
 			pureFunctionInProgress.delete(functionNode);
 			pureFunctionCache.set(functionNode, isPure);
@@ -664,9 +996,20 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 				);
 			}
 
+			// `let`/`var` declarations and function/class names — reading
+			// the binding is side-effect-free regardless of whether the
+			// value can later change. Same reasoning for function
+			// parameters (including closure params from outer scopes):
+			// reading the parameter slot is always pure. This matters for
+			// nested-function-as-helper patterns like
+			// `const optStr = (key) => record[key]` where `record` is a
+			// closure variable of the enclosing function.
 			if (
+				ts.isVariableDeclaration(declaration) ||
 				ts.isFunctionDeclaration(declaration) ||
-				ts.isClassDeclaration(declaration)
+				ts.isClassDeclaration(declaration) ||
+				ts.isParameter(declaration) ||
+				ts.isBindingElement(declaration)
 			) {
 				return true;
 			}
@@ -674,34 +1017,35 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 			return false;
 		};
 
-		const isPureTsBlock = (
-			block: ts.Block,
+		const isPureTsLocalAssignment = (
+			expression: ts.Expression,
+			stableLocals: ReadonlySet<string>
+		): boolean => {
+			if (!ts.isBinaryExpression(expression)) return false;
+			if (!ASSIGNMENT_OPERATOR_KINDS.has(expression.operatorToken.kind))
+				return false;
+			if (!ts.isIdentifier(expression.left)) return false;
+			if (!stableLocals.has(expression.left.text)) return false;
+			return isPureTsExpression(expression.right, stableLocals);
+		};
+
+		const isPureTsStatement = (
+			statement: ts.Statement,
 			stableLocals: Set<string>
 		): boolean => {
-			for (const statement of block.statements) {
-				if (ts.isReturnStatement(statement)) {
-					if (
-						statement.expression &&
-						!isPureTsExpression(statement.expression, stableLocals)
-					) {
-						return false;
-					}
-					continue;
-				}
-				if (ts.isVariableStatement(statement)) {
-					if (
-						!(statement.declarationList.flags & ts.NodeFlags.Const)
-					) {
-						return false;
-					}
-					for (const declaration of statement.declarationList
-						.declarations) {
-						if (
-							!ts.isIdentifier(declaration.name) ||
-							!declaration.initializer
-						) {
-							return false;
-						}
+			if (ts.isReturnStatement(statement)) {
+				return (
+					!statement.expression ||
+					isPureTsExpression(statement.expression, stableLocals)
+				);
+			}
+			if (ts.isVariableStatement(statement)) {
+				// Accept const, let, and var. Reading any local binding is
+				// side-effect-free; reassignment is handled separately via
+				// the ExpressionStatement branch.
+				for (const declaration of statement.declarationList
+					.declarations) {
+					if (declaration.initializer) {
 						if (
 							!isPureTsExpression(
 								declaration.initializer,
@@ -710,11 +1054,68 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 						) {
 							return false;
 						}
-						stableLocals.add(declaration.name.text);
 					}
-					continue;
+					// Walk binding name (Identifier, ObjectBindingPattern,
+					// ArrayBindingPattern) to capture every introduced
+					// stable local.
+					addTsBoundIdentifiers(declaration.name, stableLocals);
 				}
-				return false;
+				return true;
+			}
+			if (ts.isExpressionStatement(statement)) {
+				return isPureTsLocalAssignment(
+					statement.expression,
+					stableLocals
+				);
+			}
+			if (ts.isIfStatement(statement)) {
+				if (!isPureTsExpression(statement.expression, stableLocals)) {
+					return false;
+				}
+				const branchScope = new Set(stableLocals);
+				if (
+					!isPureTsStatementOrBlock(
+						statement.thenStatement,
+						branchScope
+					)
+				) {
+					return false;
+				}
+				if (
+					statement.elseStatement &&
+					!isPureTsStatementOrBlock(
+						statement.elseStatement,
+						new Set(stableLocals)
+					)
+				) {
+					return false;
+				}
+				return true;
+			}
+			if (ts.isBlock(statement)) {
+				return isPureTsBlock(statement, new Set(stableLocals));
+			}
+			return false;
+		};
+
+		const isPureTsStatementOrBlock = (
+			statement: ts.Statement,
+			stableLocals: Set<string>
+		): boolean => {
+			if (ts.isBlock(statement)) {
+				return isPureTsBlock(statement, stableLocals);
+			}
+			return isPureTsStatement(statement, stableLocals);
+		};
+
+		const isPureTsBlock = (
+			block: ts.Block,
+			stableLocals: Set<string>
+		): boolean => {
+			for (const statement of block.statements) {
+				if (!isPureTsStatement(statement, stableLocals)) {
+					return false;
+				}
 			}
 			return true;
 		};
@@ -757,7 +1158,10 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 		): boolean => {
 			const argsArePure = node.arguments.every((argument) => {
 				if (ts.isSpreadElement(argument)) {
-					return false;
+					return isPureTsExpression(
+						argument.expression,
+						stableLocals
+					);
 				}
 				return isPureTsExpression(argument, stableLocals);
 			});
@@ -768,6 +1172,20 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 			const calleePath = getTsCalleePath(node.expression);
 			if (calleePath !== null && pureImports.has(calleePath)) {
 				return true;
+			}
+
+			// Member-method call (`Math.floor(x)`, `Array.isArray(x)`,
+			// `str.trim()`, etc.) — if the method name is in our standard
+			// non-mutating allowlist and the receiver is pure, the call is
+			// pure. Mirrors the JS-AST walker's PURE_MEMBER_METHODS check.
+			if (ts.isPropertyAccessExpression(node.expression)) {
+				const memberName = node.expression.name.text;
+				if (PURE_MEMBER_METHODS.has(memberName)) {
+					return isPureTsExpression(
+						node.expression.expression,
+						stableLocals
+					);
+				}
 			}
 
 			const calleeId = getCalleeIdentifier(node.expression);
@@ -864,6 +1282,13 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 				return isPureTsExpression(node.operand, stableLocals);
 			}
 
+			// `typeof x` and `void x` are pure if their operand is pure.
+			// (`delete` is intentionally not handled — it mutates the
+			// target. `await` and `yield` are also excluded.)
+			if (ts.isTypeOfExpression(node) || ts.isVoidExpression(node)) {
+				return isPureTsExpression(node.expression, stableLocals);
+			}
+
 			if (ts.isBinaryExpression(node)) {
 				if (
 					ASSIGNMENT_OPERATOR_KINDS.has(node.operatorToken.kind) ||
@@ -887,8 +1312,13 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 
 			if (ts.isArrayLiteralExpression(node)) {
 				return node.elements.every((element) => {
+					// Spread of a pure expression — see the matching JS-AST
+					// branch for the rationale.
 					if (ts.isSpreadElement(element)) {
-						return false;
+						return isPureTsExpression(
+							element.expression,
+							stableLocals
+						);
 					}
 					if (element.kind === ts.SyntaxKind.OmittedExpression) {
 						return false;
@@ -1058,12 +1488,199 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 			return isPureImportedCallExpression(callExpression);
 		};
 
+		// ─── Encapsulated-mutation detection (typed) ─────────────────────
+		// Drizzle / Zod / TypeBox-style chains like
+		// `text("name").notNull().default("foo")` are not strictly "pure" —
+		// each method may mutate the column-builder receiver — but their
+		// effects are *encapsulated*: the builder is freshly allocated by
+		// the root factory and never escapes the chain, so any mutation is
+		// invisible to the rest of the program. For sort-keys reordering,
+		// encapsulated mutation is equivalent to purity, since any two such
+		// chains can be swapped without affecting observable state.
+		//
+		// We can't ask "is this method side-effect-free" without walking
+		// the body (and library code lives in `.d.ts` where there is no
+		// body). What we *can* check is whether the receiver chain
+		// originates from a freshly-allocated value. If yes, then whatever
+		// the method does to its receiver stays inside that chain.
+		//
+		// The probes here are guarded behind `tsChecker` availability — if
+		// typed services aren't engaged we fall through to existing logic
+		// and behavior is unchanged.
+
+		const getCallReturnTypeSymbol = (
+			node: TSESTree.CallExpression
+		): ts.Symbol | undefined => {
+			if (!tsChecker || !esTreeNodeToTSNodeMap) return undefined;
+			const tsNode = esTreeNodeToTSNodeMap.get(node);
+			if (!tsNode) return undefined;
+			const type = tsChecker.getTypeAtLocation(tsNode);
+			return type.symbol ?? type.aliasSymbol;
+		};
+
+		// Is this TS type "object-like" for our purposes — a value you'd
+		// reasonably consider freshly-allocated and self-contained?
+		//   - Class instances, interfaces, anonymous object types          → yes
+		//   - Intersections (TypeBox brand types like `T & {kind}`)        → yes
+		//   - Unions where every member is object-like or null/undefined   → yes
+		//     (covers Angular's `T | null` getters)
+		//   - Function-returning factories (`Validators.minLength(1)`)     → yes
+		//     (constructing a fresh closure is itself an encapsulated op)
+		//   - Primitives, void                                             → no
+		const isObjectLikeType = (type: ts.Type): boolean => {
+			if (
+				type.flags &
+				(ts.TypeFlags.Null | ts.TypeFlags.Undefined | ts.TypeFlags.Void)
+			) {
+				return false;
+			}
+
+			if (type.flags & ts.TypeFlags.Union) {
+				return (type as ts.UnionType).types.every((member) => {
+					if (
+						member.flags &
+						(ts.TypeFlags.Null |
+							ts.TypeFlags.Undefined |
+							ts.TypeFlags.Void)
+					) {
+						return true;
+					}
+					return isObjectLikeType(member);
+				});
+			}
+
+			// Object types — including function and constructor types,
+			// since a factory that returns a fresh function (validator,
+			// curried fn, event handler) is creating an encapsulated value
+			// the same way a factory that returns a class instance is.
+			return Boolean(
+				type.flags & (ts.TypeFlags.Object | ts.TypeFlags.Intersection)
+			);
+		};
+
+		// Does the call's return type look object-like? Used to distinguish
+		// factory-style functions (Drizzle's `text(...)`, TypeBox's
+		// `t.Optional(...)`, Angular's `form.get(...)`) from utility
+		// functions returning strings/numbers (`errorStatus(...)`,
+		// `formatDate(...)`).
+		const callReturnsNominalInstance = (
+			node: TSESTree.CallExpression
+		): boolean => {
+			if (!tsChecker || !esTreeNodeToTSNodeMap) return false;
+			const tsNode = esTreeNodeToTSNodeMap.get(node);
+			if (!tsNode) return false;
+			const type = tsChecker.getTypeAtLocation(tsNode);
+			return isObjectLikeType(type);
+		};
+
+		// "Encapsulated-fresh" means the expression evaluates to a value
+		// nothing else in the program holds a reference to: a `new`, a
+		// factory call returning a class instance, an inline literal, or a
+		// method-call chain anchored to such a root. We deliberately do
+		// NOT require the method's return type to match the receiver's
+		// (Drizzle's brand-typed return values like `NotNull` / `HasDefault`
+		// would never satisfy a same-symbol check). We only require that
+		// the *receiver* is encapsulated-fresh — that's the property that
+		// keeps mutations invisible.
+		const isEncapsulatedFreshExpression: (
+			node: TSESTree.Node | null,
+			stableLocals: ReadonlySet<string>
+		) => boolean = (node, stableLocals) => {
+			if (!node) return false;
+
+			if (
+				node.type === "TSAsExpression" ||
+				node.type === "TSTypeAssertion" ||
+				node.type === "TSNonNullExpression" ||
+				node.type === "TSSatisfiesExpression" ||
+				node.type === "TSInstantiationExpression"
+			) {
+				return isEncapsulatedFreshExpression(
+					node.expression,
+					stableLocals
+				);
+			}
+
+			// Inline literals are always fresh.
+			if (
+				node.type === "ObjectExpression" ||
+				node.type === "ArrayExpression"
+			) {
+				return isPureRuntimeExpression(node, stableLocals);
+			}
+
+			// `new C(args)` is always fresh; only need pure args.
+			if (node.type === "NewExpression") {
+				return node.arguments.every((argument) => {
+					if (argument.type === "SpreadElement") {
+						return isPureRuntimeExpression(
+							argument.argument,
+							stableLocals
+						);
+					}
+					return isPureRuntimeExpression(argument, stableLocals);
+				});
+			}
+
+			if (node.type === "CallExpression") {
+				const argsArePure = node.arguments.every((argument) => {
+					if (argument.type === "SpreadElement") {
+						return isPureRuntimeExpression(
+							argument.argument,
+							stableLocals
+						);
+					}
+					return isPureRuntimeExpression(argument, stableLocals);
+				});
+				if (!argsArePure) return false;
+
+				// Method call: any method on an encapsulated-fresh receiver
+				// keeps the chain encapsulated. The method may transform
+				// the receiver into a brand-typed view (`PgTextBuilder` →
+				// `NotNull`) without breaking the freshness property —
+				// what matters is no other code holds a reference to the
+				// underlying object.
+				if (node.callee.type === "MemberExpression") {
+					return isEncapsulatedFreshExpression(
+						node.callee.object,
+						stableLocals
+					);
+				}
+
+				// Free function: factory if return type is a class/interface
+				// instance. We accept any free identifier callee here (not
+				// just allowlisted ones), since the type signal is
+				// sufficient: a function declared to return a nominal class
+				// in a real-world TS codebase is virtually always a factory.
+				if (node.callee.type === "Identifier") {
+					return callReturnsNominalInstance(node);
+				}
+			}
+
+			return false;
+		};
+
 		const isPureRuntimeExpression: (
 			node: TSESTree.Node | null,
 			stableLocals: ReadonlySet<string>
 		) => boolean = (node, stableLocals) => {
 			if (!node || node.type === "PrivateIdentifier") {
 				return false;
+			}
+
+			// TypeScript expression wrappers are erased at runtime — the
+			// wrapped expression is what actually executes. Mirrors the
+			// equivalent unwrap branch in isPureTsExpression so the JS-AST
+			// walker doesn't conservatively flag `"x" as const`, `x!`, etc.
+			// as impure.
+			if (
+				node.type === "TSAsExpression" ||
+				node.type === "TSTypeAssertion" ||
+				node.type === "TSNonNullExpression" ||
+				node.type === "TSSatisfiesExpression" ||
+				node.type === "TSInstantiationExpression"
+			) {
+				return isPureRuntimeExpression(node.expression, stableLocals);
 			}
 
 			switch (node.type) {
@@ -1104,8 +1721,23 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 					);
 				case "ArrayExpression":
 					return node.elements.every((element) => {
-						if (!element || element.type === "SpreadElement") {
+						if (!element) {
 							return false;
+						}
+
+						// Spread inside an array literal (`[...x]`) is safe as
+						// long as the spread argument is itself a pure
+						// expression — the iterator on the resulting array is
+						// the standard one for built-ins, and any side effects
+						// from a custom iterator would be confined to the
+						// fresh array we're constructing here. Common cases:
+						// `[...STABLE_CONST]`, `[...(arr ?? [])]`,
+						// `[...someParam]`.
+						if (element.type === "SpreadElement") {
+							return isPureRuntimeExpression(
+								element.argument,
+								stableLocals
+							);
 						}
 
 						return isPureRuntimeExpression(element, stableLocals);
@@ -1145,21 +1777,39 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 								stableLocals
 							))
 					);
-				case "NewExpression":
-					return (
-						node.callee.type === "Identifier" &&
-						PURE_CONSTRUCTORS.has(node.callee.name) &&
-						node.arguments.every((argument) => {
-							if (argument.type === "SpreadElement") {
-								return false;
-							}
-
+				case "NewExpression": {
+					// Args must be pure (a side-effecting argument
+					// expression breaks reorderability regardless of the
+					// constructor).
+					const argsArePure = node.arguments.every((argument) => {
+						if (argument.type === "SpreadElement") {
 							return isPureRuntimeExpression(
-								argument,
+								argument.argument,
 								stableLocals
 							);
-						})
-					);
+						}
+						return isPureRuntimeExpression(argument, stableLocals);
+					});
+					if (!argsArePure) return false;
+
+					// Built-in pure constructors (Date) — pure value, not
+					// just encapsulated.
+					if (
+						node.callee.type === "Identifier" &&
+						PURE_CONSTRUCTORS.has(node.callee.name)
+					) {
+						return true;
+					}
+
+					// Any other constructor with pure args creates a fresh
+					// instance: whatever side effects the constructor does
+					// to the new object are encapsulated by definition (the
+					// caller is the only thing that holds the reference).
+					// This covers `new FormControl("", [validators])`,
+					// `new Map()`, `new Set([1,2,3])`, user-defined classes
+					// in factory positions, etc.
+					return true;
+				}
 				case "CallExpression": {
 					const argsArePure = node.arguments.every((argument) => {
 						if (argument.type === "SpreadElement") {
@@ -1179,7 +1829,14 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 					}
 
 					if (node.callee.type === "Identifier") {
-						return isPureIdentifierCall(node);
+						if (isPureIdentifierCall(node)) {
+							return true;
+						}
+						// Factory-style free function (Drizzle's `text(...)`,
+						// `uuid(...)`, etc.): the call returns a fresh class
+						// instance, so any internal mutation the constructor
+						// or factory body performs is invisible elsewhere.
+						return callReturnsNominalInstance(node);
 					}
 
 					if (node.callee.type !== "MemberExpression") {
@@ -1194,9 +1851,41 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 						);
 					}
 
-					// Namespaced imports like `t.Object(...)`: ask the TS
-					// checker whether the property resolves to a function
-					// declaration in a source file we can analyze.
+					// Fluent-builder chains (Drizzle-style): if the method's
+					// receiver chain roots in a freshly-allocated value, any
+					// mutations the method does are invisible elsewhere, so
+					// the whole chain is reorderable. See the helper for
+					// details on what counts as encapsulated-fresh.
+					if (
+						isEncapsulatedFreshExpression(
+							node.callee.object,
+							stableLocals
+						)
+					) {
+						return true;
+					}
+
+					// Namespaced factory calls (TypeBox's `t.Object(...)`,
+					// `t.String(...)`, etc.): the receiver is a stable
+					// namespace import rather than a fresh value, but if the
+					// call's return type is a nominal class/interface
+					// instance and the receiver is itself pure to read, the
+					// call constructs a fresh value with encapsulated
+					// effects — same encapsulated-mutation property as
+					// Drizzle, just rooted at a namespace member.
+					if (
+						isPureRuntimeExpression(
+							node.callee.object,
+							stableLocals
+						) &&
+						callReturnsNominalInstance(node)
+					) {
+						return true;
+					}
+
+					// Last resort: ask the TS checker whether the property
+					// resolves to a function declaration in a source file we
+					// can analyze.
 					return isPureImportedCallExpression(node);
 				}
 				default:
@@ -1513,7 +2202,7 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 				};
 			});
 
-			if (hasDuplicateNames(keys.map((key) => key.keyName))) {
+			if (hasDuplicatePropertyNames(node.properties)) {
 				autoFixable = false;
 			}
 

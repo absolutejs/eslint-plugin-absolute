@@ -19,6 +19,7 @@ import { inlineStyleLimit } from "./rules/inline-style-limit";
 import { noInlinePropTypes } from "./rules/no-inline-prop-types";
 import { noNondeterministicRender } from "./rules/no-nondeterministic-render";
 import { noUnnecessaryDiv } from "./rules/no-unnecessary-div";
+import { preferInlineExports } from "./rules/prefer-inline-exports";
 
 export default {
 	rules: {
@@ -39,6 +40,7 @@ export default {
 		"no-unnecessary-div": noUnnecessaryDiv,
 		"no-unnecessary-key": noUnnecessaryKey,
 		"no-useless-function": noUselessFunction,
+		"prefer-inline-exports": preferInlineExports,
 		"seperate-style-files": seperateStyleFiles,
 		"sort-exports": sortExports,
 		"sort-keys-fixable": sortKeysFixable,

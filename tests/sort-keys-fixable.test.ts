@@ -1,4 +1,5 @@
 import { RuleTester } from "@typescript-eslint/rule-tester";
+import parser from "typescript-eslint";
 import { sortKeysFixable } from "../src/rules/sort-keys-fixable";
 
 const ruleTester = new RuleTester({
@@ -243,6 +244,338 @@ const createSlotPromise = async (label, delayMs, resolveOrder) => {
 };`
 		},
 		{
+			code: `const fn = (state) => ({
+	z: 1,
+	first: state.first.trim(),
+	second: state.second.toUpperCase(),
+	third: state.third.padEnd(5, "x")
+});`,
+			errors: [{ messageId: "unsorted" }],
+			name: "expanded PURE_MEMBER_METHODS: string non-mutating chain (0.5.0 #2)",
+			output: `const fn = (state) => ({
+	first: state.first.trim(),
+	second: state.second.toUpperCase(),
+	third: state.third.padEnd(5, "x"),
+	z: 1
+});`
+		},
+		{
+			code: `const fn = (data) => ({
+	zeta: 1,
+	floor: Math.floor(data.x),
+	abs: Math.abs(data.y),
+	max: Math.max(data.a, data.b)
+});`,
+			errors: [{ messageId: "unsorted" }, { messageId: "unsorted" }],
+			name: "expanded PURE_MEMBER_METHODS: Math static methods (0.5.0 #2)",
+			output: `const fn = (data) => ({
+	abs: Math.abs(data.y),
+	floor: Math.floor(data.x),
+	max: Math.max(data.a, data.b),
+	zeta: 1
+});`
+		},
+		{
+			code: `const fn = (obj) => ({
+	zeta: 1,
+	keys: Object.keys(obj),
+	entries: Object.entries(obj),
+	values: Object.values(obj)
+});`,
+			errors: [{ messageId: "unsorted" }, { messageId: "unsorted" }],
+			name: "expanded PURE_MEMBER_METHODS: Object static methods (0.5.0 #2)",
+			output: `const fn = (obj) => ({
+	entries: Object.entries(obj),
+	keys: Object.keys(obj),
+	values: Object.values(obj),
+	zeta: 1
+});`
+		},
+		{
+			code: `const arr = [1, 2, 3];
+const fn = (other) => ({
+	zeta: arr.push(other),
+	alpha: arr.push(0)
+});`,
+			errors: [{ messageId: "unsorted" }],
+			name: "mutating array methods (push) still disable autofix"
+		},
+		{
+			code: `const SIZES = [1, 2, 3];
+const fn = (extras) => ({
+	zeta: 1,
+	alpha: [...SIZES],
+	beta: [...SIZES, 4]
+});`,
+			errors: [{ messageId: "unsorted" }],
+			name: "spread of stable identifier in array literal is pure (0.5.0 #3)",
+			output: `const SIZES = [1, 2, 3];
+const fn = (extras) => ({
+	alpha: [...SIZES],
+	beta: [...SIZES, 4],
+	zeta: 1
+});`
+		},
+		{
+			code: `const fn = (data) => ({
+	zeta: 1,
+	alpha: [...(data.a || [])],
+	beta: [...(data.b || [])]
+});`,
+			errors: [{ messageId: "unsorted" }],
+			name: "spread of pure logical expression in array literal is pure (0.5.0 #3)",
+			output: `const fn = (data) => ({
+	alpha: [...(data.a || [])],
+	beta: [...(data.b || [])],
+	zeta: 1
+});`
+		},
+		{
+			code: `const fn = (input) => {
+	let firstName = input.firstName;
+	let lastName = input.lastName;
+	const email = "x";
+	if (!firstName) firstName = "x";
+	if (!lastName) lastName = "x";
+
+	return { z: 1, firstName, lastName, email };
+};`,
+			errors: [{ messageId: "unsorted" }, { messageId: "unsorted" }],
+			name: "let-bound shorthand reads are pure (Fix #1)",
+			output: `const fn = (input) => {
+	let firstName = input.firstName;
+	let lastName = input.lastName;
+	const email = "x";
+	if (!firstName) firstName = "x";
+	if (!lastName) lastName = "x";
+
+	return { email, firstName, lastName, z: 1 };
+};`
+		},
+		{
+			code: `var counterA = 0;
+var counterB = 0;
+const obj = { z: 1, counterA, counterB };`,
+			errors: [{ messageId: "unsorted" }],
+			name: "var-bound shorthand reads are pure (Fix #1)",
+			output: `var counterA = 0;
+var counterB = 0;
+const obj = { counterA, counterB, z: 1 };`
+		},
+		{
+			code: `let counter = 0;
+const obj = { b: counter = 5, a: counter = 6 };`,
+			errors: [{ messageId: "unsorted" }],
+			name: "two assignment-expression values still disable autofix (Fix #1 doesn't make writes pure)"
+		},
+		{
+			code: `const fn = () => {
+	const handlers = {
+		get total() {
+			return 1;
+		},
+		get rows() {
+			return 2;
+		},
+		set rows(value) {
+			void value;
+		},
+		get pageSize() {
+			return 3;
+		}
+	};
+
+	return handlers;
+};`,
+			errors: [{ messageId: "unsorted" }, { messageId: "unsorted" }],
+			name: "getter/setter accessor pair sorts together as a unit (Fix #2)",
+			output: `const fn = () => {
+	const handlers = {
+		get pageSize() {
+			return 3;
+		},
+		get rows() {
+			return 2;
+		},
+		set rows(value) {
+			void value;
+		},
+		get total() {
+			return 1;
+		}
+	};
+
+	return handlers;
+};`
+		},
+		{
+			code: `const fn = () => {
+	const obj = {
+		set name(value) {
+			void value;
+		},
+		get name() {
+			return "x";
+		},
+		age: 1
+	};
+
+	return obj;
+};`,
+			errors: [{ messageId: "unsorted" }],
+			name: "set-then-get pair preserves their relative order after sort (Fix #2)",
+			output: `const fn = () => {
+	const obj = {
+		age: 1,
+		set name(value) {
+			void value;
+		},
+		get name() {
+			return "x";
+		}
+	};
+
+	return obj;
+};`
+		},
+		{
+			code: `const obj = { b: 1, a: 2, b: 3 };`,
+			errors: [{ messageId: "unsorted" }],
+			name: "real init/init duplicate keys still disable autofix (Fix #2 only relaxes accessor pairs)"
+		},
+		{
+			code: `const obj = {
+	get name() {
+		return 1;
+	},
+	get name() {
+		return 2;
+	},
+	age: 1
+};`,
+			errors: [{ messageId: "unsorted" }],
+			name: "duplicate getters (no setter) still disable autofix"
+		},
+		{
+			code: `const obj = {
+	get name() {
+		return 1;
+	},
+	name: "x",
+	age: 1
+};`,
+			errors: [{ messageId: "unsorted" }],
+			name: "init alongside accessor with same key still disables autofix"
+		},
+		{
+			code: `class Cls {
+	log() {
+		return {
+			profileId: this.profileId,
+			searchRunId: this.searchRunId,
+			trigger: this.trigger,
+			source: 1,
+			operation: 2
+		};
+	}
+}
+new Cls();`,
+			errors: [{ messageId: "unsorted" }, { messageId: "unsorted" }],
+			name: "this.<name> reads in a method are pure for reordering (Fix #3)",
+			output: `class Cls {
+	log() {
+		return {
+			operation: 2,
+			profileId: this.profileId,
+			searchRunId: this.searchRunId,
+			source: 1,
+			trigger: this.trigger
+		};
+	}
+}
+new Cls();`
+		},
+		{
+			code: `export const Aaa = 1;
+export const Bbb = 2;
+export const Ccc = 3;
+
+export const exports = {
+	Ccc,
+	Aaa,
+	Bbb
+};`,
+			errors: [{ messageId: "unsorted" }],
+			name: "exported top-level consts are visible to the cascade check (0.6.0)",
+			output: `export const Aaa = 1;
+export const Bbb = 2;
+export const Ccc = 3;
+
+export const exports = {
+	Aaa,
+	Bbb,
+	Ccc
+};`
+		},
+		{
+			code: `const fn = () => {
+	const handlers = new Map();
+	const ws = new WeakSet([{}]);
+
+	return { z: handlers, a: ws };
+};`,
+			errors: [{ messageId: "unsorted" }],
+			name: "new <UserClass>(pureArgs) is encapsulated-fresh (0.6.0)",
+			output: `const fn = () => {
+	const handlers = new Map();
+	const ws = new WeakSet([{}]);
+
+	return { a: ws, z: handlers };
+};`
+		},
+		{
+			code: `const fn = (entries) => {
+	const map = new Map();
+	for (const [key, group] of entries) {
+		map.set(key, { value: group, key });
+	}
+
+	return { z: 1, m: map };
+};`,
+			errors: [{ messageId: "unsorted" }, { messageId: "unsorted" }],
+			name: "for-of bindings are stable inside the loop body (0.6.0)",
+			output: `const fn = (entries) => {
+	const map = new Map();
+	for (const [key, group] of entries) {
+		map.set(key, { key, value: group });
+	}
+
+	return { m: map, z: 1 };
+};`
+		},
+		{
+			code: `const trim = (str) => {
+	if (!str) return "";
+	let out = str;
+	out = out.toLowerCase();
+
+	return out;
+};
+
+const fn = (input) => ({ z: 1, a: trim(input.a), b: trim(input.b) });`,
+			errors: [{ messageId: "unsorted" }],
+			name: "module helper with if + let + assignment is recognized pure (0.6.0)",
+			output: `const trim = (str) => {
+	if (!str) return "";
+	let out = str;
+	out = out.toLowerCase();
+
+	return out;
+};
+
+const fn = (input) => ({ a: trim(input.a), b: trim(input.b), z: 1 });`
+		},
+		{
 			code: `import { DEFAULT_QUALITY } from './imageClient';
 const component = {
 	props: {
@@ -415,6 +748,83 @@ const C = () => <Comp a={createFallback("ok")} z="1" />;`
 		{
 			code: `const C = () => <Comp style={{ a: 1, b: 2 }} />;`,
 			name: "JSX attribute with sorted object value"
+		}
+	]
+});
+
+const tsRuleTester = new RuleTester({
+	languageOptions: {
+		ecmaVersion: 2020,
+		parser: parser.parser,
+		sourceType: "module"
+	}
+});
+
+tsRuleTester.run("sort-keys-fixable (TypeScript wrappers)", sortKeysFixable, {
+	invalid: [
+		{
+			code: `const obj = { b: 1, a: "received" as const };`,
+			errors: [{ messageId: "unsorted" }],
+			name: "as const value is treated as pure (Fix #4)",
+			output: `const obj = { a: "received" as const, b: 1 };`
+		},
+		{
+			code: `const fn = (x: string | null) => ({
+	zeta: 1,
+	alpha: x!,
+	beta: 2
+});`,
+			errors: [{ messageId: "unsorted" }],
+			name: "non-null assertion (x!) is treated as pure (Fix #4)",
+			output: `const fn = (x: string | null) => ({
+	alpha: x!,
+	beta: 2,
+	zeta: 1
+});`
+		},
+		{
+			code: `const fn = (x: unknown) => ({
+	zeta: 1,
+	alpha: x as string,
+	beta: 2
+});`,
+			errors: [{ messageId: "unsorted" }],
+			name: "as expression value is treated as pure (Fix #4)",
+			output: `const fn = (x: unknown) => ({
+	alpha: x as string,
+	beta: 2,
+	zeta: 1
+});`
+		},
+		{
+			code: `type Foo = { foo: number };
+const fn = () => ({
+	zeta: 1,
+	alpha: { foo: 1 } satisfies Foo,
+	beta: 2
+});`,
+			errors: [{ messageId: "unsorted" }],
+			name: "satisfies expression is treated as pure (Fix #4)",
+			output: `type Foo = { foo: number };
+const fn = () => ({
+	alpha: { foo: 1 } satisfies Foo,
+	beta: 2,
+	zeta: 1
+});`
+		},
+		{
+			code: `import { sideEffect } from "./x";
+const obj = { c: sideEffect("c"), b: 1, a: "x" as const };`,
+			errors: [{ messageId: "unsorted" }, { messageId: "unsorted" }],
+			name: "as const composes with single-impure relaxation (only sideEffect counts as impure)",
+			output: `import { sideEffect } from "./x";
+const obj = { a: "x" as const, b: 1, c: sideEffect("c") };`
+		}
+	],
+	valid: [
+		{
+			code: `const obj = { a: "x" as const, b: 1 };`,
+			name: "already-sorted with as const"
 		}
 	]
 });
