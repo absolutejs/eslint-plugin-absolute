@@ -248,6 +248,18 @@ const hasDuplicateNames = (names: Array<string | null>) => {
 	return false;
 };
 
+const getStaticPropertyKeyName = (property: TSESTree.Property) => {
+	if (property.key.type === "Identifier") return property.key.name;
+	if (property.key.type === "Literal") {
+		const { value } = property.key;
+		return typeof value === "string" ? value : String(value);
+	}
+	return null;
+};
+
+const isAccessorPairOnly = (kinds: ReadonlyArray<"init" | "get" | "set">) =>
+	kinds.length === 2 && kinds.includes("get") && kinds.includes("set");
+
 // Object-property duplicate check that knows about accessor pairs. A pair of
 // `get x` and `set x` shares a key by design and is not a real duplicate, so
 // it should not disable the autofix the way `{ a: 1, a: 2 }` does. Anything
@@ -258,42 +270,18 @@ const hasDuplicatePropertyNames = (
 ) => {
 	const kindsByName = new Map<string, Array<"init" | "get" | "set">>();
 
-	for (const property of properties) {
-		if (property.type !== "Property") {
-			continue;
-		}
-
-		let keyName: string | null = null;
-		if (property.key.type === "Identifier") {
-			keyName = property.key.name;
-		} else if (property.key.type === "Literal") {
-			const { value } = property.key;
-			keyName = typeof value === "string" ? value : String(value);
-		}
-		if (keyName === null) {
-			continue;
-		}
-
+	properties.forEach((property) => {
+		if (property.type !== "Property") return;
+		const keyName = getStaticPropertyKeyName(property);
+		if (keyName === null) return;
 		const kinds = kindsByName.get(keyName) ?? [];
 		kinds.push(property.kind);
 		kindsByName.set(keyName, kinds);
-	}
+	});
 
-	for (const kinds of kindsByName.values()) {
-		if (kinds.length === 1) {
-			continue;
-		}
-		if (
-			kinds.length === 2 &&
-			kinds.includes("get") &&
-			kinds.includes("set")
-		) {
-			continue;
-		}
-		return true;
-	}
-
-	return false;
+	return [...kindsByName.values()].some(
+		(kinds) => kinds.length > 1 && !isAccessorPairOnly(kinds)
+	);
 };
 
 export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
@@ -419,15 +407,15 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 			// processed normally. Without this, every exported top-level
 			// binding was invisible to the purity check, which silently
 			// poisoned every reference to it elsewhere in the file.
-			let inner: TSESTree.ProgramStatement = statement;
+			let inner: TSESTree.Node = statement;
 			if (inner.type === "ExportNamedDeclaration" && inner.declaration) {
-				inner = inner.declaration as TSESTree.ProgramStatement;
+				inner = inner.declaration;
 			} else if (
 				inner.type === "ExportDefaultDeclaration" &&
 				(inner.declaration.type === "FunctionDeclaration" ||
 					inner.declaration.type === "ClassDeclaration")
 			) {
-				inner = inner.declaration as TSESTree.ProgramStatement;
+				inner = inner.declaration;
 			}
 
 			if (inner.type === "ImportDeclaration") {
@@ -520,12 +508,12 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 				// participate. Without this, every exported binding was
 				// invisible to the purity check — which silently poisoned
 				// every reference to it elsewhere in the file.
-				let inner = statement;
+				let inner: TSESTree.Node = statement;
 				if (
 					inner.type === "ExportNamedDeclaration" &&
 					inner.declaration
 				) {
-					inner = inner.declaration as TSESTree.Statement;
+					inner = inner.declaration;
 				}
 
 				// Reading any local binding (const, let, or var) is
@@ -607,13 +595,13 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 					? ancestor.init
 					: ancestor.left;
 			if (!left) return;
-			if (left.type === "VariableDeclaration") {
-				for (const declaration of left.declarations) {
-					addBoundIdentifiers(declaration.id, stableLocals);
-				}
-			} else {
+			if (left.type !== "VariableDeclaration") {
 				addBoundIdentifiers(left, stableLocals);
+				return;
 			}
+			left.declarations.forEach((declaration) =>
+				addBoundIdentifiers(declaration.id, stableLocals)
+			);
 		};
 
 		// `try { ... } catch (err) { ... }` — `err` is bound inside the
@@ -705,12 +693,11 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 			for (const declaration of statement.declarations) {
 				// `let x;` (no init) is fine — the binding exists and is
 				// readable; reading an undefined slot is not a side effect.
-				if (declaration.init) {
-					if (
-						!isPureRuntimeExpression(declaration.init, stableLocals)
-					) {
-						return false;
-					}
+				if (
+					declaration.init &&
+					!isPureRuntimeExpression(declaration.init, stableLocals)
+				) {
+					return false;
 				}
 
 				// Handle destructuring (`const { x, y } = obj`,
@@ -732,7 +719,7 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 		const isPureLocalAssignment = (
 			expression: TSESTree.Expression,
 			stableLocals: Set<string>
-		): boolean => {
+		) => {
 			if (expression.type !== "AssignmentExpression") return false;
 			if (expression.operator !== "=") {
 				// `+=`, `*=`, etc. — same logic, but ensure left is local.
@@ -795,7 +782,7 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 		const isPureFunctionBranch = (
 			statement: TSESTree.Statement,
 			stableLocals: Set<string>
-		): boolean => {
+		) => {
 			if (statement.type === "BlockStatement") {
 				return isPureFunctionBody(statement, stableLocals);
 			}
@@ -891,9 +878,9 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 				ts.isObjectBindingPattern(node) ||
 				ts.isArrayBindingPattern(node)
 			) {
-				for (const element of node.elements) {
-					addTsBoundIdentifiers(element, stableLocals);
-				}
+				node.elements.forEach((element) =>
+					addTsBoundIdentifiers(element, stableLocals)
+				);
 			}
 		};
 
@@ -910,6 +897,7 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 			return null;
 		};
 
+		// eslint-disable-next-line absolute/no-explicit-return-type
 		const getTsCalleePath = (callee: ts.Expression): string | null => {
 			if (ts.isParenthesizedExpression(callee)) {
 				return getTsCalleePath(callee.expression);
@@ -931,11 +919,7 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 
 		const getFunctionLikeFromDeclaration = (
 			declaration: ts.Declaration
-		):
-			| ts.ArrowFunction
-			| ts.FunctionDeclaration
-			| ts.FunctionExpression
-			| null => {
+		) => {
 			if (ts.isFunctionDeclaration(declaration)) {
 				return declaration;
 			}
@@ -954,6 +938,7 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 		const isPureTsIdentifier = (
 			identifier: ts.Identifier,
 			stableLocals: ReadonlySet<string>
+			// eslint-disable-next-line absolute/no-explicit-return-type
 		): boolean => {
 			const name = identifier.text;
 			if (PURE_GLOBAL_IDENTIFIERS.has(name)) {
@@ -1020,7 +1005,7 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 		const isPureTsLocalAssignment = (
 			expression: ts.Expression,
 			stableLocals: ReadonlySet<string>
-		): boolean => {
+		) => {
 			if (!ts.isBinaryExpression(expression)) return false;
 			if (!ASSIGNMENT_OPERATOR_KINDS.has(expression.operatorToken.kind))
 				return false;
@@ -1029,10 +1014,29 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 			return isPureTsExpression(expression.right, stableLocals);
 		};
 
+		const isPureTsVariableStatement = (
+			statement: ts.VariableStatement,
+			stableLocals: Set<string>
+		) => {
+			for (const declaration of statement.declarationList.declarations) {
+				if (
+					declaration.initializer &&
+					!isPureTsExpression(declaration.initializer, stableLocals)
+				) {
+					return false;
+				}
+				// Walk binding name (Identifier, ObjectBindingPattern,
+				// ArrayBindingPattern) to capture every introduced
+				// stable local.
+				addTsBoundIdentifiers(declaration.name, stableLocals);
+			}
+			return true;
+		};
+
 		const isPureTsStatement = (
 			statement: ts.Statement,
 			stableLocals: Set<string>
-		): boolean => {
+		) => {
 			if (ts.isReturnStatement(statement)) {
 				return (
 					!statement.expression ||
@@ -1043,24 +1047,7 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 				// Accept const, let, and var. Reading any local binding is
 				// side-effect-free; reassignment is handled separately via
 				// the ExpressionStatement branch.
-				for (const declaration of statement.declarationList
-					.declarations) {
-					if (declaration.initializer) {
-						if (
-							!isPureTsExpression(
-								declaration.initializer,
-								stableLocals
-							)
-						) {
-							return false;
-						}
-					}
-					// Walk binding name (Identifier, ObjectBindingPattern,
-					// ArrayBindingPattern) to capture every introduced
-					// stable local.
-					addTsBoundIdentifiers(declaration.name, stableLocals);
-				}
-				return true;
+				return isPureTsVariableStatement(statement, stableLocals);
 			}
 			if (ts.isExpressionStatement(statement)) {
 				return isPureTsLocalAssignment(
@@ -1101,17 +1088,14 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 		const isPureTsStatementOrBlock = (
 			statement: ts.Statement,
 			stableLocals: Set<string>
-		): boolean => {
+		) => {
 			if (ts.isBlock(statement)) {
 				return isPureTsBlock(statement, stableLocals);
 			}
 			return isPureTsStatement(statement, stableLocals);
 		};
 
-		const isPureTsBlock = (
-			block: ts.Block,
-			stableLocals: Set<string>
-		): boolean => {
+		const isPureTsBlock = (block: ts.Block, stableLocals: Set<string>) => {
 			for (const statement of block.statements) {
 				if (!isPureTsStatement(statement, stableLocals)) {
 					return false;
@@ -1125,6 +1109,7 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 				| ts.ArrowFunction
 				| ts.FunctionDeclaration
 				| ts.FunctionExpression
+			// eslint-disable-next-line absolute/no-explicit-return-type
 		): boolean => {
 			const cached = importedCallPurityCache.get(func);
 			if (cached !== undefined) {
@@ -1155,6 +1140,7 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 		const isPureTsCallExpression = (
 			node: ts.CallExpression,
 			stableLocals: ReadonlySet<string>
+			// eslint-disable-next-line absolute/no-explicit-return-type
 		): boolean => {
 			const argsArePure = node.arguments.every((argument) => {
 				if (ts.isSpreadElement(argument)) {
@@ -1226,6 +1212,7 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 		const isPureTsExpression = (
 			node: ts.Node | undefined,
 			stableLocals: ReadonlySet<string>
+			// eslint-disable-next-line absolute/no-explicit-return-type
 		): boolean => {
 			if (!node) {
 				return false;
@@ -1387,6 +1374,7 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 		// matching against the pureImports allowlist. Returns null if the
 		// callee is dynamic (computed access, calls, etc.) and can't be
 		// expressed as a simple path.
+		// eslint-disable-next-line absolute/no-explicit-return-type
 		const getCalleePath = (node: TSESTree.Node): string | null => {
 			if (node.type === "Identifier") {
 				return node.name;
@@ -1414,7 +1402,7 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 		// effects we can detect.
 		const isPureImportedCallExpression = (
 			callExpression: TSESTree.CallExpression
-		): boolean => {
+		) => {
 			if (!tsChecker || !esTreeNodeToTSNodeMap) {
 				return false;
 			}
@@ -1508,15 +1496,8 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 		// typed services aren't engaged we fall through to existing logic
 		// and behavior is unchanged.
 
-		const getCallReturnTypeSymbol = (
-			node: TSESTree.CallExpression
-		): ts.Symbol | undefined => {
-			if (!tsChecker || !esTreeNodeToTSNodeMap) return undefined;
-			const tsNode = esTreeNodeToTSNodeMap.get(node);
-			if (!tsNode) return undefined;
-			const type = tsChecker.getTypeAtLocation(tsNode);
-			return type.symbol ?? type.aliasSymbol;
-		};
+		const isUnionType = (type: ts.Type): type is ts.UnionType =>
+			Boolean(type.flags & ts.TypeFlags.Union);
 
 		// Is this TS type "object-like" for our purposes — a value you'd
 		// reasonably consider freshly-allocated and self-contained?
@@ -1527,6 +1508,7 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 		//   - Function-returning factories (`Validators.minLength(1)`)     → yes
 		//     (constructing a fresh closure is itself an encapsulated op)
 		//   - Primitives, void                                             → no
+		// eslint-disable-next-line absolute/no-explicit-return-type
 		const isObjectLikeType = (type: ts.Type): boolean => {
 			if (
 				type.flags &
@@ -1535,8 +1517,8 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 				return false;
 			}
 
-			if (type.flags & ts.TypeFlags.Union) {
-				return (type as ts.UnionType).types.every((member) => {
+			if (isUnionType(type)) {
+				return type.types.every((member) => {
 					if (
 						member.flags &
 						(ts.TypeFlags.Null |
@@ -1563,9 +1545,7 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 		// `t.Optional(...)`, Angular's `form.get(...)`) from utility
 		// functions returning strings/numbers (`errorStatus(...)`,
 		// `formatDate(...)`).
-		const callReturnsNominalInstance = (
-			node: TSESTree.CallExpression
-		): boolean => {
+		const callReturnsNominalInstance = (node: TSESTree.CallExpression) => {
 			if (!tsChecker || !esTreeNodeToTSNodeMap) return false;
 			const tsNode = esTreeNodeToTSNodeMap.get(node);
 			if (!tsNode) return false;
@@ -1829,14 +1809,14 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 					}
 
 					if (node.callee.type === "Identifier") {
-						if (isPureIdentifierCall(node)) {
-							return true;
-						}
 						// Factory-style free function (Drizzle's `text(...)`,
 						// `uuid(...)`, etc.): the call returns a fresh class
 						// instance, so any internal mutation the constructor
 						// or factory body performs is invisible elsewhere.
-						return callReturnsNominalInstance(node);
+						return (
+							isPureIdentifierCall(node) ||
+							callReturnsNominalInstance(node)
+						);
 					}
 
 					if (node.callee.type !== "MemberExpression") {
@@ -2221,10 +2201,7 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 							getStableLocalsForNode(key.node)
 						)
 				).length;
-
-				if (impureCount > 1) {
-					autoFixable = false;
-				}
+				autoFixable = impureCount <= 1;
 			}
 
 			let fixProvided = false;

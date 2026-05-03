@@ -356,36 +356,29 @@ var hasDuplicateNames = (names) => {
   }
   return false;
 };
+var getStaticPropertyKeyName = (property) => {
+  if (property.key.type === "Identifier")
+    return property.key.name;
+  if (property.key.type === "Literal") {
+    const { value } = property.key;
+    return typeof value === "string" ? value : String(value);
+  }
+  return null;
+};
+var isAccessorPairOnly = (kinds) => kinds.length === 2 && kinds.includes("get") && kinds.includes("set");
 var hasDuplicatePropertyNames = (properties) => {
   const kindsByName = new Map;
-  for (const property of properties) {
-    if (property.type !== "Property") {
-      continue;
-    }
-    let keyName = null;
-    if (property.key.type === "Identifier") {
-      keyName = property.key.name;
-    } else if (property.key.type === "Literal") {
-      const { value } = property.key;
-      keyName = typeof value === "string" ? value : String(value);
-    }
-    if (keyName === null) {
-      continue;
-    }
+  properties.forEach((property) => {
+    if (property.type !== "Property")
+      return;
+    const keyName = getStaticPropertyKeyName(property);
+    if (keyName === null)
+      return;
     const kinds = kindsByName.get(keyName) ?? [];
     kinds.push(property.kind);
     kindsByName.set(keyName, kinds);
-  }
-  for (const kinds of kindsByName.values()) {
-    if (kinds.length === 1) {
-      continue;
-    }
-    if (kinds.length === 2 && kinds.includes("get") && kinds.includes("set")) {
-      continue;
-    }
-    return true;
-  }
-  return false;
+  });
+  return [...kindsByName.values()].some((kinds) => kinds.length > 1 && !isAccessorPairOnly(kinds));
 };
 var sortKeysFixable = {
   create(context) {
@@ -547,13 +540,11 @@ var sortKeysFixable = {
       const left = ancestor.type === "ForStatement" ? ancestor.init : ancestor.left;
       if (!left)
         return;
-      if (left.type === "VariableDeclaration") {
-        for (const declaration of left.declarations) {
-          addBoundIdentifiers(declaration.id, stableLocals);
-        }
-      } else {
+      if (left.type !== "VariableDeclaration") {
         addBoundIdentifiers(left, stableLocals);
+        return;
       }
+      left.declarations.forEach((declaration) => addBoundIdentifiers(declaration.id, stableLocals));
     };
     const addCatchClauseBindings = (ancestor, stableLocals) => {
       if (ancestor.type !== "CatchClause" || !ancestor.param)
@@ -604,10 +595,8 @@ var sortKeysFixable = {
     };
     const isPureLocalVariableStatement = (statement, stableLocals) => {
       for (const declaration of statement.declarations) {
-        if (declaration.init) {
-          if (!isPureRuntimeExpression(declaration.init, stableLocals)) {
-            return false;
-          }
+        if (declaration.init && !isPureRuntimeExpression(declaration.init, stableLocals)) {
+          return false;
         }
         addBoundIdentifiers(declaration.id, stableLocals);
       }
@@ -708,9 +697,7 @@ var sortKeysFixable = {
         return;
       }
       if (ts.isObjectBindingPattern(node) || ts.isArrayBindingPattern(node)) {
-        for (const element of node.elements) {
-          addTsBoundIdentifiers(element, stableLocals);
-        }
+        node.elements.forEach((element) => addTsBoundIdentifiers(element, stableLocals));
       }
     };
     const getCalleeIdentifier = (callee) => {
@@ -789,20 +776,21 @@ var sortKeysFixable = {
         return false;
       return isPureTsExpression(expression.right, stableLocals);
     };
+    const isPureTsVariableStatement = (statement, stableLocals) => {
+      for (const declaration of statement.declarationList.declarations) {
+        if (declaration.initializer && !isPureTsExpression(declaration.initializer, stableLocals)) {
+          return false;
+        }
+        addTsBoundIdentifiers(declaration.name, stableLocals);
+      }
+      return true;
+    };
     const isPureTsStatement = (statement, stableLocals) => {
       if (ts.isReturnStatement(statement)) {
         return !statement.expression || isPureTsExpression(statement.expression, stableLocals);
       }
       if (ts.isVariableStatement(statement)) {
-        for (const declaration of statement.declarationList.declarations) {
-          if (declaration.initializer) {
-            if (!isPureTsExpression(declaration.initializer, stableLocals)) {
-              return false;
-            }
-          }
-          addTsBoundIdentifiers(declaration.name, stableLocals);
-        }
-        return true;
+        return isPureTsVariableStatement(statement, stableLocals);
       }
       if (ts.isExpressionStatement(statement)) {
         return isPureTsLocalAssignment(statement.expression, stableLocals);
@@ -1059,20 +1047,12 @@ var sortKeysFixable = {
       }
       return isPureImportedCallExpression(callExpression);
     };
-    const getCallReturnTypeSymbol = (node) => {
-      if (!tsChecker || !esTreeNodeToTSNodeMap)
-        return;
-      const tsNode = esTreeNodeToTSNodeMap.get(node);
-      if (!tsNode)
-        return;
-      const type = tsChecker.getTypeAtLocation(tsNode);
-      return type.symbol ?? type.aliasSymbol;
-    };
+    const isUnionType = (type) => Boolean(type.flags & ts.TypeFlags.Union);
     const isObjectLikeType = (type) => {
       if (type.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined | ts.TypeFlags.Void)) {
         return false;
       }
-      if (type.flags & ts.TypeFlags.Union) {
+      if (isUnionType(type)) {
         return type.types.every((member) => {
           if (member.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined | ts.TypeFlags.Void)) {
             return true;
@@ -1208,10 +1188,7 @@ var sortKeysFixable = {
             return true;
           }
           if (node.callee.type === "Identifier") {
-            if (isPureIdentifierCall(node)) {
-              return true;
-            }
-            return callReturnsNominalInstance(node);
+            return isPureIdentifierCall(node) || callReturnsNominalInstance(node);
           }
           if (node.callee.type !== "MemberExpression") {
             return false;
@@ -1395,9 +1372,7 @@ ${indent}`;
       }
       if (autoFixable) {
         const impureCount = keys.filter((key) => key.node.type === "Property" && !isPureRuntimeExpression(key.node.value, getStableLocalsForNode(key.node))).length;
-        if (impureCount > 1) {
-          autoFixable = false;
-        }
+        autoFixable = impureCount <= 1;
       }
       let fixProvided = false;
       const createReportWithFix = (curr, shouldFix) => {
@@ -3329,43 +3304,142 @@ var inlineStyleLimit = {
   }
 };
 
-// src/rules/no-inline-prop-types.ts
-var noInlinePropTypes = {
+// src/rules/no-inline-object-types.ts
+var DEFAULT_MIN_PROPERTIES = 2;
+var toPascalCase = (name) => {
+  const parts = name.replace(/[_-]+/g, " ").split(/\s+/).filter(Boolean);
+  if (parts.length === 0)
+    return name;
+  return parts.map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join("");
+};
+var collectInlineObjectTypes = (node, found) => {
+  if (node.type === "TSTypeLiteral") {
+    found.push(node);
+    return;
+  }
+  if (node.type === "TSArrayType") {
+    collectInlineObjectTypes(node.elementType, found);
+    return;
+  }
+  if (node.type === "TSUnionType" || node.type === "TSIntersectionType") {
+    node.types.forEach((member) => collectInlineObjectTypes(member, found));
+    return;
+  }
+  if (node.type === "TSTypeReference" && node.typeArguments) {
+    node.typeArguments.params.forEach((arg) => collectInlineObjectTypes(arg, found));
+  }
+};
+var unwrapParamTarget = (node) => {
+  if (node.type === "TSParameterProperty") {
+    return unwrapParamTarget(node.parameter);
+  }
+  if (node.type === "AssignmentPattern") {
+    return unwrapParamTarget(node.left);
+  }
+  return node;
+};
+var SCOPE_BOUNDARY_TYPES = new Set([
+  "ArrowFunctionExpression",
+  "ClassDeclaration",
+  "ClassExpression",
+  "FunctionDeclaration",
+  "FunctionExpression"
+]);
+var deriveNameFromAncestors = (node) => {
+  let current = node.parent;
+  while (current) {
+    if (current.type === "VariableDeclarator" && current.id.type === "Identifier") {
+      return toPascalCase(current.id.name);
+    }
+    if (current.type === "PropertyDefinition" && current.key.type === "Identifier") {
+      return toPascalCase(current.key.name);
+    }
+    if (SCOPE_BOUNDARY_TYPES.has(current.type))
+      return "T";
+    current = current.parent;
+  }
+  return "T";
+};
+var noInlineObjectTypes = {
   create(context) {
-    const checkParameter = (param) => {
-      if (param.type !== "ObjectPattern" || !param.typeAnnotation || param.typeAnnotation.type !== "TSTypeAnnotation") {
-        return;
-      }
-      const annotation = param.typeAnnotation.typeAnnotation;
-      if (annotation.type === "TSTypeLiteral") {
+    const [options] = context.options;
+    const minProperties = options?.minProperties ?? DEFAULT_MIN_PROPERTIES;
+    const reportAnnotation = (typeNode, suggestedName) => {
+      const literals = [];
+      collectInlineObjectTypes(typeNode, literals);
+      for (const literal of literals) {
+        if (literal.members.length < minProperties)
+          continue;
+        const hasIndexSignature = literal.members.some((member) => member.type === "TSIndexSignature");
+        if (hasIndexSignature)
+          continue;
         context.report({
-          messageId: "noInlinePropTypes",
-          node: param
+          data: { suggestedName },
+          messageId: "inlineObjectType",
+          node: literal
         });
       }
     };
+    const handleFunctionParams = (params) => {
+      for (const param of params) {
+        const target = unwrapParamTarget(param);
+        if (!("typeAnnotation" in target))
+          continue;
+        const annotation = target.typeAnnotation;
+        if (!annotation || annotation.type !== "TSTypeAnnotation")
+          continue;
+        const name = target.type === "Identifier" ? toPascalCase(target.name) : "Params";
+        reportAnnotation(annotation.typeAnnotation, name);
+      }
+    };
     return {
-      "FunctionDeclaration, ArrowFunctionExpression, FunctionExpression"(node) {
-        if (node.params.length === 0) {
+      "CallExpression, NewExpression"(node) {
+        if (!node.typeArguments)
           return;
+        const name = deriveNameFromAncestors(node);
+        for (const typeArg of node.typeArguments.params) {
+          reportAnnotation(typeArg, name);
         }
-        const [firstParam] = node.params;
-        if (!firstParam) {
+      },
+      "FunctionDeclaration, FunctionExpression, ArrowFunctionExpression"(node) {
+        handleFunctionParams(node.params);
+      },
+      PropertyDefinition(node) {
+        if (!node.typeAnnotation || node.typeAnnotation.type !== "TSTypeAnnotation")
           return;
-        }
-        checkParameter(firstParam);
+        const name = node.key.type === "Identifier" ? toPascalCase(node.key.name) : "Field";
+        reportAnnotation(node.typeAnnotation.typeAnnotation, name);
+      },
+      VariableDeclarator(node) {
+        if (node.id.type !== "Identifier")
+          return;
+        const annotation = node.id.typeAnnotation;
+        if (!annotation || annotation.type !== "TSTypeAnnotation")
+          return;
+        reportAnnotation(annotation.typeAnnotation, toPascalCase(node.id.name));
       }
     };
   },
-  defaultOptions: [],
+  defaultOptions: [{ minProperties: DEFAULT_MIN_PROPERTIES }],
   meta: {
     docs: {
-      description: "Enforce that component prop types are not defined inline (using an object literal) but rather use a named type or interface."
+      description: "Disallow inline object type literals on annotations (variables, class fields, function params, generic type arguments); prefer extracting them to a named type alias."
     },
     messages: {
-      noInlinePropTypes: "Inline prop type definitions are not allowed. Use a named type alias or interface instead of an inline object type."
+      inlineObjectType: "Inline object type should be extracted to a named type alias (e.g., `type {{suggestedName}} = { ... }`)."
     },
-    schema: [],
+    schema: [
+      {
+        additionalProperties: false,
+        properties: {
+          minProperties: {
+            minimum: 1,
+            type: "number"
+          }
+        },
+        type: "object"
+      }
+    ],
     type: "suggestion"
   }
 };
@@ -3475,6 +3549,81 @@ var noNondeterministicRender = {
   }
 };
 
+// src/rules/no-redundant-type-annotation.ts
+import * as ts2 from "typescript";
+var ALLOWED_INIT_TYPES = new Set([
+  "CallExpression",
+  "Identifier",
+  "MemberExpression",
+  "NewExpression",
+  "TSAsExpression"
+]);
+var noRedundantTypeAnnotation = {
+  create(context) {
+    const { sourceCode } = context;
+    const parserServices = sourceCode.parserServices ?? null;
+    const tsProgram = parserServices && "program" in parserServices ? parserServices.program : null;
+    const tsChecker = tsProgram ? tsProgram.getTypeChecker() : null;
+    const esTreeNodeToTSNodeMap = parserServices && "esTreeNodeToTSNodeMap" in parserServices ? parserServices.esTreeNodeToTSNodeMap : null;
+    if (!tsChecker || !esTreeNodeToTSNodeMap) {
+      return {};
+    }
+    const stringify = (type) => tsChecker.typeToString(type, undefined, ts2.TypeFormatFlags.NoTruncation | ts2.TypeFormatFlags.UseAliasDefinedOutsideCurrentScope);
+    return {
+      VariableDeclarator(node) {
+        if (node.id.type !== "Identifier")
+          return;
+        if (!node.id.typeAnnotation)
+          return;
+        if (!node.init)
+          return;
+        if (!ALLOWED_INIT_TYPES.has(node.init.type))
+          return;
+        const annotationASTNode = node.id.typeAnnotation.typeAnnotation;
+        const annotationTSNode = esTreeNodeToTSNodeMap.get(annotationASTNode);
+        const initTSNode = esTreeNodeToTSNodeMap.get(node.init);
+        if (!annotationTSNode || !initTSNode)
+          return;
+        if (!ts2.isTypeNode(annotationTSNode))
+          return;
+        const annotationType = tsChecker.getTypeFromTypeNode(annotationTSNode);
+        const initType = tsChecker.getTypeAtLocation(initTSNode);
+        const aliasSymbol = ts2.isTypeReferenceNode(annotationTSNode) ? tsChecker.getSymbolAtLocation(annotationTSNode.typeName) : undefined;
+        if (aliasSymbol && aliasSymbol.flags & ts2.SymbolFlags.TypeAlias && initType.aliasSymbol !== aliasSymbol) {
+          return;
+        }
+        const bothAny = (annotationType.flags & ts2.TypeFlags.Any) !== 0 && (initType.flags & ts2.TypeFlags.Any) !== 0;
+        if (bothAny)
+          return;
+        if (annotationType.aliasSymbol !== initType.aliasSymbol)
+          return;
+        if (stringify(annotationType) !== stringify(initType))
+          return;
+        const annotationNode = node.id.typeAnnotation;
+        context.report({
+          fix(fixer) {
+            return fixer.removeRange(annotationNode.range);
+          },
+          messageId: "redundantTypeAnnotation",
+          node: annotationNode
+        });
+      }
+    };
+  },
+  defaultOptions: [],
+  meta: {
+    docs: {
+      description: "Disallow type annotations on variable declarations whose initializer already has the same inferred type."
+    },
+    fixable: "code",
+    messages: {
+      redundantTypeAnnotation: "Type annotation is redundant \u2014 the initializer already has this type. Remove the annotation and let TypeScript infer it."
+    },
+    schema: [],
+    type: "suggestion"
+  }
+};
+
 // src/rules/no-unnecessary-div.ts
 import { AST_NODE_TYPES as AST_NODE_TYPES4 } from "@typescript-eslint/utils";
 var noUnnecessaryDiv = {
@@ -3545,11 +3694,8 @@ var findOwnDeclaration = (program, name) => {
     if (stmt.type === "ExportNamedDeclaration" && stmt.declaration && isLocalDeclaration(stmt.declaration) && declarationName(stmt.declaration) === name) {
       return { alreadyExported: true, decl: stmt.declaration };
     }
-    if (stmt.type === "ExportDefaultDeclaration" && stmt.declaration.type !== "Identifier" && isLocalDeclaration(stmt.declaration) && declarationName(stmt.declaration) === name) {
-      return {
-        alreadyExported: true,
-        decl: stmt.declaration
-      };
+    if (stmt.type === "ExportDefaultDeclaration" && isLocalDeclaration(stmt.declaration) && declarationName(stmt.declaration) === name) {
+      return { alreadyExported: true, decl: stmt.declaration };
     }
     if (isLocalDeclaration(stmt) && declarationName(stmt) === name) {
       return { alreadyExported: false, decl: stmt };
@@ -3642,11 +3788,12 @@ var src_default = {
     "min-var-length": minVarLength,
     "no-button-navigation": noButtonNavigation,
     "no-explicit-return-type": noExplicitReturnTypes,
-    "no-inline-prop-types": noInlinePropTypes,
+    "no-inline-object-types": noInlineObjectTypes,
     "no-multi-style-objects": noMultiStyleObjects,
     "no-nested-jsx-return": noNestedJSXReturn,
     "no-nondeterministic-render": noNondeterministicRender,
     "no-or-none-component": noOrNoneComponent,
+    "no-redundant-type-annotation": noRedundantTypeAnnotation,
     "no-transition-cssproperties": noTransitionCSSProperties,
     "no-unnecessary-div": noUnnecessaryDiv,
     "no-unnecessary-key": noUnnecessaryKey,

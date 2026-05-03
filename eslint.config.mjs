@@ -7,7 +7,7 @@ import tseslint from "typescript-eslint";
 import absolutePlugin from "./dist/index.js";
 
 export default defineConfig([
-	{ ignores: ["dist/**", "node_modules/**", ".absolutejs/**"] },
+	{ ignores: ["dist/**", "node_modules/**", ".absolutejs/**", ".claude/**"] },
 
 	pluginJs.configs.recommended,
 
@@ -92,7 +92,12 @@ export default defineConfig([
 		}
 	},
 	{
-		files: ["eslint.config.mjs", "package.json", "tsconfig.json"],
+		files: [
+			"eslint.config.mjs",
+			"package.json",
+			"**/tsconfig.json",
+			".prettierrc.json"
+		],
 		rules: {
 			"@typescript-eslint/no-unused-expressions": "off"
 		}

@@ -16,8 +16,9 @@ import { minVarLength } from "./rules/min-var-length";
 import { maxDepthExtended } from "./rules/max-depth-extended";
 import { springNamingConvention } from "./rules/spring-naming-convention";
 import { inlineStyleLimit } from "./rules/inline-style-limit";
-import { noInlinePropTypes } from "./rules/no-inline-prop-types";
+import { noInlineObjectTypes } from "./rules/no-inline-object-types";
 import { noNondeterministicRender } from "./rules/no-nondeterministic-render";
+import { noRedundantTypeAnnotation } from "./rules/no-redundant-type-annotation";
 import { noUnnecessaryDiv } from "./rules/no-unnecessary-div";
 import { preferInlineExports } from "./rules/prefer-inline-exports";
 
@@ -31,11 +32,12 @@ export default {
 		"min-var-length": minVarLength,
 		"no-button-navigation": noButtonNavigation,
 		"no-explicit-return-type": noExplicitReturnTypes,
-		"no-inline-prop-types": noInlinePropTypes,
+		"no-inline-object-types": noInlineObjectTypes,
 		"no-multi-style-objects": noMultiStyleObjects,
 		"no-nested-jsx-return": noNestedJSXReturn,
 		"no-nondeterministic-render": noNondeterministicRender,
 		"no-or-none-component": noOrNoneComponent,
+		"no-redundant-type-annotation": noRedundantTypeAnnotation,
 		"no-transition-cssproperties": noTransitionCSSProperties,
 		"no-unnecessary-div": noUnnecessaryDiv,
 		"no-unnecessary-key": noUnnecessaryKey,

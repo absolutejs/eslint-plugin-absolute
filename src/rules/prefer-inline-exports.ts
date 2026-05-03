@@ -49,10 +49,7 @@ const declarationName = (decl: LocalDeclaration) => {
 	return decl.id.name;
 };
 
-const findOwnDeclaration = (
-	program: TSESTree.Program,
-	name: string
-): { decl: LocalDeclaration; alreadyExported: boolean } | null => {
+const findOwnDeclaration = (program: TSESTree.Program, name: string) => {
 	for (const stmt of program.body) {
 		if (
 			stmt.type === "ExportNamedDeclaration" &&
@@ -65,14 +62,10 @@ const findOwnDeclaration = (
 
 		if (
 			stmt.type === "ExportDefaultDeclaration" &&
-			stmt.declaration.type !== "Identifier" &&
-			isLocalDeclaration(stmt.declaration as TSESTree.Node) &&
-			declarationName(stmt.declaration as LocalDeclaration) === name
+			isLocalDeclaration(stmt.declaration) &&
+			declarationName(stmt.declaration) === name
 		) {
-			return {
-				alreadyExported: true,
-				decl: stmt.declaration as LocalDeclaration
-			};
+			return { alreadyExported: true, decl: stmt.declaration };
 		}
 
 		if (isLocalDeclaration(stmt) && declarationName(stmt) === name) {
