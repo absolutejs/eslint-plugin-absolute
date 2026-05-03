@@ -1,26 +1,83 @@
 // @bun
-// src/rules/no-nested-jsx-return.ts
+// src/rules/angular-one-feature-per-file.ts
 import { AST_NODE_TYPES } from "@typescript-eslint/utils";
+var FEATURE_DECORATOR_NAMES = new Set([
+  "Component",
+  "Directive",
+  "Injectable",
+  "NgModule",
+  "Pipe"
+]);
+var getDecoratorName = (decorator) => {
+  const { expression } = decorator;
+  if (expression.type === AST_NODE_TYPES.CallExpression && expression.callee.type === AST_NODE_TYPES.Identifier) {
+    return expression.callee.name;
+  }
+  if (expression.type === AST_NODE_TYPES.Identifier) {
+    return expression.name;
+  }
+  return null;
+};
+var isFeatureClass = (node) => {
+  if (!node.decorators || node.decorators.length === 0)
+    return false;
+  return node.decorators.some((decorator) => {
+    const name = getDecoratorName(decorator);
+    return name !== null && FEATURE_DECORATOR_NAMES.has(name);
+  });
+};
+var angularOneFeaturePerFile = {
+  create(context) {
+    const seenFeatures = [];
+    return {
+      ClassDeclaration(node) {
+        if (!isFeatureClass(node))
+          return;
+        seenFeatures.push(node);
+        if (seenFeatures.length === 1)
+          return;
+        context.report({
+          messageId: "multiFeature",
+          node: node.id ?? node
+        });
+      }
+    };
+  },
+  defaultOptions: [],
+  meta: {
+    docs: {
+      description: 'Disallow defining more than one Angular feature class (@Component, @Directive, @Pipe, @Injectable, @NgModule) per file. Mirrors the Angular Style Guide\'s Single Responsibility / Rule of One. Test and Storybook files legitimately define stub/host classes alongside the subject under test \u2014 disable this rule for those files via an ESLint override (e.g., `{ files: ["**/*.spec.ts", "**/*.stories.ts"], rules: { "absolute/angular-one-feature-per-file": "off" } }`).'
+    },
+    messages: {
+      multiFeature: "Only one Angular feature class is allowed per file. Move this class into its own file (Angular Style Guide: Single Responsibility / Rule of One)."
+    },
+    schema: [],
+    type: "problem"
+  }
+};
+
+// src/rules/no-nested-jsx-return.ts
+import { AST_NODE_TYPES as AST_NODE_TYPES2 } from "@typescript-eslint/utils";
 var noNestedJSXReturn = {
   create(context) {
-    const isJSX = (node) => node !== null && node !== undefined && (node.type === AST_NODE_TYPES.JSXElement || node.type === AST_NODE_TYPES.JSXFragment);
+    const isJSX = (node) => node !== null && node !== undefined && (node.type === AST_NODE_TYPES2.JSXElement || node.type === AST_NODE_TYPES2.JSXFragment);
     const getLeftmostJSXIdentifier = (name) => {
       let current = name;
-      while (current.type === AST_NODE_TYPES.JSXMemberExpression) {
+      while (current.type === AST_NODE_TYPES2.JSXMemberExpression) {
         current = current.object;
       }
-      if (current.type === AST_NODE_TYPES.JSXIdentifier) {
+      if (current.type === AST_NODE_TYPES2.JSXIdentifier) {
         return current;
       }
       return null;
     };
     const isJSXComponentElement = (node) => {
-      if (!node || node.type !== AST_NODE_TYPES.JSXElement) {
+      if (!node || node.type !== AST_NODE_TYPES2.JSXElement) {
         return false;
       }
       const opening = node.openingElement;
       const nameNode = opening.name;
-      if (nameNode.type === AST_NODE_TYPES.JSXIdentifier) {
+      if (nameNode.type === AST_NODE_TYPES2.JSXIdentifier) {
         return /^[A-Z]/.test(nameNode.name);
       }
       const leftmost = getLeftmostJSXIdentifier(nameNode);
@@ -31,7 +88,7 @@ var noNestedJSXReturn = {
     };
     const hasNoMeaningfulChildren = (children) => {
       const filtered = children.filter((child) => {
-        if (child.type === AST_NODE_TYPES.JSXText) {
+        if (child.type === AST_NODE_TYPES2.JSXText) {
           return child.value.trim() !== "";
         }
         return true;
@@ -42,7 +99,7 @@ var noNestedJSXReturn = {
       if (!isJSX(node))
         return false;
       const children = node.children.filter((child2) => {
-        if (child2.type === AST_NODE_TYPES.JSXText) {
+        if (child2.type === AST_NODE_TYPES2.JSXText) {
           return child2.value.trim() !== "";
         }
         return true;
@@ -57,7 +114,7 @@ var noNestedJSXReturn = {
       if (!child) {
         return false;
       }
-      if (child.type === AST_NODE_TYPES.JSXElement || child.type === AST_NODE_TYPES.JSXFragment) {
+      if (child.type === AST_NODE_TYPES2.JSXElement || child.type === AST_NODE_TYPES2.JSXFragment) {
         return hasNoMeaningfulChildren(child.children);
       }
       return true;
@@ -2209,7 +2266,7 @@ var sortExports = {
 };
 
 // src/rules/localize-react-props.ts
-import { AST_NODE_TYPES as AST_NODE_TYPES2 } from "@typescript-eslint/utils";
+import { AST_NODE_TYPES as AST_NODE_TYPES3 } from "@typescript-eslint/utils";
 var localizeReactProps = {
   create(context) {
     const candidateVariables = [];
@@ -2221,20 +2278,20 @@ var localizeReactProps = {
     };
     const getRightmostJSXIdentifier = (name) => {
       let current = name;
-      while (current.type === AST_NODE_TYPES2.JSXMemberExpression) {
+      while (current.type === AST_NODE_TYPES3.JSXMemberExpression) {
         current = current.property;
       }
-      if (current.type === AST_NODE_TYPES2.JSXIdentifier) {
+      if (current.type === AST_NODE_TYPES3.JSXIdentifier) {
         return current;
       }
       return null;
     };
     const getLeftmostJSXIdentifier = (name) => {
       let current = name;
-      while (current.type === AST_NODE_TYPES2.JSXMemberExpression) {
+      while (current.type === AST_NODE_TYPES3.JSXMemberExpression) {
         current = current.object;
       }
-      if (current.type === AST_NODE_TYPES2.JSXIdentifier) {
+      if (current.type === AST_NODE_TYPES3.JSXIdentifier) {
         return current;
       }
       return null;
@@ -2244,7 +2301,7 @@ var localizeReactProps = {
         return "";
       }
       const nameNode = jsxElement.openingElement.name;
-      if (nameNode.type === AST_NODE_TYPES2.JSXIdentifier) {
+      if (nameNode.type === AST_NODE_TYPES3.JSXIdentifier) {
         return nameNode.name;
       }
       const rightmost = getRightmostJSXIdentifier(nameNode);
@@ -2253,12 +2310,12 @@ var localizeReactProps = {
       }
       return "";
     };
-    const isUseStateCall = (node) => node !== null && node.type === AST_NODE_TYPES2.CallExpression && node.callee !== null && (node.callee.type === AST_NODE_TYPES2.Identifier && node.callee.name === "useState" || node.callee.type === AST_NODE_TYPES2.MemberExpression && node.callee.property !== null && node.callee.property.type === AST_NODE_TYPES2.Identifier && node.callee.property.name === "useState");
-    const isHookCall = (node) => node !== null && node.type === AST_NODE_TYPES2.CallExpression && node.callee !== null && node.callee.type === AST_NODE_TYPES2.Identifier && /^use[A-Z]/.test(node.callee.name) && node.callee.name !== "useState";
+    const isUseStateCall = (node) => node !== null && node.type === AST_NODE_TYPES3.CallExpression && node.callee !== null && (node.callee.type === AST_NODE_TYPES3.Identifier && node.callee.name === "useState" || node.callee.type === AST_NODE_TYPES3.MemberExpression && node.callee.property !== null && node.callee.property.type === AST_NODE_TYPES3.Identifier && node.callee.property.name === "useState");
+    const isHookCall = (node) => node !== null && node.type === AST_NODE_TYPES3.CallExpression && node.callee !== null && node.callee.type === AST_NODE_TYPES3.Identifier && /^use[A-Z]/.test(node.callee.name) && node.callee.name !== "useState";
     const getJSXAncestor = (node) => {
       let current = node.parent;
       while (current) {
-        if (current.type === AST_NODE_TYPES2.JSXElement) {
+        if (current.type === AST_NODE_TYPES3.JSXElement) {
           return current;
         }
         current = current.parent;
@@ -2267,14 +2324,14 @@ var localizeReactProps = {
     };
     const getTagNameFromOpening = (openingElement) => {
       const nameNode = openingElement.name;
-      if (nameNode.type === AST_NODE_TYPES2.JSXIdentifier) {
+      if (nameNode.type === AST_NODE_TYPES3.JSXIdentifier) {
         return nameNode.name;
       }
       const rightmost = getRightmostJSXIdentifier(nameNode);
       return rightmost ? rightmost.name : null;
     };
     const isProviderOrContext = (tagName) => tagName.endsWith("Provider") || tagName.endsWith("Context");
-    const isValueAttributeOnProvider = (node) => node.type === AST_NODE_TYPES2.JSXAttribute && node.name && node.name.type === AST_NODE_TYPES2.JSXIdentifier && node.name.name === "value" && node.parent && node.parent.type === AST_NODE_TYPES2.JSXOpeningElement && (() => {
+    const isValueAttributeOnProvider = (node) => node.type === AST_NODE_TYPES3.JSXAttribute && node.name && node.name.type === AST_NODE_TYPES3.JSXIdentifier && node.name.name === "value" && node.parent && node.parent.type === AST_NODE_TYPES3.JSXOpeningElement && (() => {
       const tagName = getTagNameFromOpening(node.parent);
       return tagName !== null && isProviderOrContext(tagName);
     })();
@@ -2293,7 +2350,7 @@ var localizeReactProps = {
         return false;
       }
       const nameNode = jsxElement.openingElement.name;
-      if (nameNode.type === AST_NODE_TYPES2.JSXIdentifier) {
+      if (nameNode.type === AST_NODE_TYPES3.JSXIdentifier) {
         return /^[A-Z]/.test(nameNode.name);
       }
       const leftmost = getLeftmostJSXIdentifier(nameNode);
@@ -2302,7 +2359,7 @@ var localizeReactProps = {
     const getComponentFunction = (node) => {
       let current = node;
       while (current) {
-        if (current.type === AST_NODE_TYPES2.FunctionDeclaration || current.type === AST_NODE_TYPES2.FunctionExpression || current.type === AST_NODE_TYPES2.ArrowFunctionExpression) {
+        if (current.type === AST_NODE_TYPES3.FunctionDeclaration || current.type === AST_NODE_TYPES3.FunctionExpression || current.type === AST_NODE_TYPES3.ArrowFunctionExpression) {
           return current;
         }
         current = current.parent;
@@ -2374,11 +2431,11 @@ var localizeReactProps = {
       return false;
     };
     const processUseStateDeclarator = (node) => {
-      if (!node.init || !isUseStateCall(node.init) || node.id.type !== AST_NODE_TYPES2.ArrayPattern || node.id.elements.length < 2) {
+      if (!node.init || !isUseStateCall(node.init) || node.id.type !== AST_NODE_TYPES3.ArrayPattern || node.id.elements.length < 2) {
         return false;
       }
       const [stateElem, setterElem] = node.id.elements;
-      if (!stateElem || stateElem.type !== AST_NODE_TYPES2.Identifier || !setterElem || setterElem.type !== AST_NODE_TYPES2.Identifier) {
+      if (!stateElem || stateElem.type !== AST_NODE_TYPES3.Identifier || !setterElem || setterElem.type !== AST_NODE_TYPES3.Identifier) {
         return false;
       }
       const stateVarName = stateElem.name;
@@ -2402,7 +2459,7 @@ var localizeReactProps = {
       return true;
     };
     const processGeneralVariable = (node, componentFunction) => {
-      if (!node.id || node.id.type !== AST_NODE_TYPES2.Identifier) {
+      if (!node.id || node.id.type !== AST_NODE_TYPES3.Identifier) {
         return;
       }
       const varName = node.id.name;
@@ -2454,7 +2511,7 @@ var localizeReactProps = {
         const componentFunction = getComponentFunction(node);
         if (!componentFunction || !componentFunction.body)
           return;
-        if (node.init && node.id && node.id.type === AST_NODE_TYPES2.Identifier && node.init.type === AST_NODE_TYPES2.CallExpression && isHookCall(node.init)) {
+        if (node.init && node.id && node.id.type === AST_NODE_TYPES3.Identifier && node.init.type === AST_NODE_TYPES3.CallExpression && isHookCall(node.init)) {
           const hookSet = getHookSet(componentFunction);
           hookSet.add(node.id.name);
         }
@@ -3445,29 +3502,29 @@ var noInlineObjectTypes = {
 };
 
 // src/rules/no-nondeterministic-render.ts
-import { AST_NODE_TYPES as AST_NODE_TYPES3 } from "@typescript-eslint/utils";
+import { AST_NODE_TYPES as AST_NODE_TYPES4 } from "@typescript-eslint/utils";
 var BANNED_TEMPLATE_PATTERN = /\bMath\.random\s*\(|\bDate\.now\s*\(|\bnew\s+Date\s*\(\s*\)|\bcrypto\.randomUUID\s*\(|\bperformance\.now\s*\(/;
-var isIdentifier2 = (node, name) => node?.type === AST_NODE_TYPES3.Identifier && node.name === name;
-var isStaticMemberCall = (node, objectName, propertyName) => node.callee.type === AST_NODE_TYPES3.MemberExpression && !node.callee.computed && isIdentifier2(node.callee.object, objectName) && isIdentifier2(node.callee.property, propertyName);
+var isIdentifier2 = (node, name) => node?.type === AST_NODE_TYPES4.Identifier && node.name === name;
+var isStaticMemberCall = (node, objectName, propertyName) => node.callee.type === AST_NODE_TYPES4.MemberExpression && !node.callee.computed && isIdentifier2(node.callee.object, objectName) && isIdentifier2(node.callee.property, propertyName);
 var getPropertyName2 = (node) => {
   const { key } = node;
-  if (key.type === AST_NODE_TYPES3.Identifier)
+  if (key.type === AST_NODE_TYPES4.Identifier)
     return key.name;
-  if (key.type === AST_NODE_TYPES3.Literal && typeof key.value === "string") {
+  if (key.type === AST_NODE_TYPES4.Literal && typeof key.value === "string") {
     return key.value;
   }
   return null;
 };
 var isComponentDecorator = (decorator) => {
   const { expression } = decorator;
-  return expression.type === AST_NODE_TYPES3.CallExpression && isIdentifier2(expression.callee, "Component");
+  return expression.type === AST_NODE_TYPES4.CallExpression && isIdentifier2(expression.callee, "Component");
 };
-var isAngularComponentClass = (node) => node.type === AST_NODE_TYPES3.ClassDeclaration && (node.decorators ?? []).some(isComponentDecorator);
+var isAngularComponentClass = (node) => node.type === AST_NODE_TYPES4.ClassDeclaration && (node.decorators ?? []).some(isComponentDecorator);
 var getTemplateText = (node) => {
-  if (node.type === AST_NODE_TYPES3.Literal && typeof node.value === "string") {
+  if (node.type === AST_NODE_TYPES4.Literal && typeof node.value === "string") {
     return node.value;
   }
-  if (node.type === AST_NODE_TYPES3.TemplateLiteral) {
+  if (node.type === AST_NODE_TYPES4.TemplateLiteral) {
     return node.quasis.map((quasi) => quasi.value.cooked ?? "").join("");
   }
   return null;
@@ -3484,10 +3541,10 @@ var getEnclosingAngularComponentClass = (node) => {
 var getEnclosingPropertyDefinition = (node) => {
   let current = node.parent;
   while (current) {
-    if (current.type === AST_NODE_TYPES3.PropertyDefinition) {
+    if (current.type === AST_NODE_TYPES4.PropertyDefinition) {
       return current;
     }
-    if (current.type === AST_NODE_TYPES3.MethodDefinition || current.type === AST_NODE_TYPES3.FunctionDeclaration || current.type === AST_NODE_TYPES3.FunctionExpression || current.type === AST_NODE_TYPES3.ArrowFunctionExpression) {
+    if (current.type === AST_NODE_TYPES4.MethodDefinition || current.type === AST_NODE_TYPES4.FunctionDeclaration || current.type === AST_NODE_TYPES4.FunctionExpression || current.type === AST_NODE_TYPES4.ArrowFunctionExpression) {
       return null;
     }
     current = current.parent;
@@ -3625,15 +3682,15 @@ var noRedundantTypeAnnotation = {
 };
 
 // src/rules/no-unnecessary-div.ts
-import { AST_NODE_TYPES as AST_NODE_TYPES4 } from "@typescript-eslint/utils";
+import { AST_NODE_TYPES as AST_NODE_TYPES5 } from "@typescript-eslint/utils";
 var noUnnecessaryDiv = {
   create(context) {
     const isDivElement = (node) => {
       const nameNode = node.openingElement.name;
-      return nameNode.type === AST_NODE_TYPES4.JSXIdentifier && nameNode.name === "div";
+      return nameNode.type === AST_NODE_TYPES5.JSXIdentifier && nameNode.name === "div";
     };
     const isMeaningfulChild = (child) => {
-      if (child.type === AST_NODE_TYPES4.JSXText) {
+      if (child.type === AST_NODE_TYPES5.JSXText) {
         return child.value.trim() !== "";
       }
       return true;
@@ -3652,7 +3709,7 @@ var noUnnecessaryDiv = {
         if (!onlyChild) {
           return;
         }
-        if (onlyChild.type === AST_NODE_TYPES4.JSXElement) {
+        if (onlyChild.type === AST_NODE_TYPES5.JSXElement) {
           context.report({
             messageId: "unnecessaryDivWrapper",
             node
@@ -3780,6 +3837,7 @@ var preferInlineExports = {
 // src/index.ts
 var src_default = {
   rules: {
+    "angular-one-feature-per-file": angularOneFeaturePerFile,
     "explicit-object-types": explicitObjectTypes,
     "inline-style-limit": inlineStyleLimit,
     "localize-react-props": localizeReactProps,

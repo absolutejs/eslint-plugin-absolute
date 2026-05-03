@@ -1,7 +1,7 @@
 {
 	"configHash": "o3xdo5w2pf33",
 	"files": {
-		"src/index.ts": "1q3vuvtdlxc9y",
+		"src/index.ts": "1lbivwvf96fpv",
 		"src/rules/max-depth-extended.ts": "2ul37wgx3yvcv",
 		"src/rules/no-nondeterministic-render.ts": "21gucdi46ovr",
 		"src/rules/localize-react-props.ts": "3ppalzcs98voy",
@@ -20,6 +20,7 @@
 		"src/rules/no-nested-jsx-return.ts": "1ymjb5qvis9rb",
 		"src/rules/no-multi-style-objects.ts": "s9bz9ogm4dh4",
 		"src/rules/max-jsx-nesting.ts": "3lqpaqeidpag3",
+		"src/rules/angular-one-feature-per-file.ts": "30fg2yb2da0rs",
 		"src/rules/no-or-none-component.ts": "2ti01en7igtwx",
 		"src/rules/no-transition-cssproperties.ts": "1k6oft0c4om3p",
 		"src/rules/no-explicit-return-types.ts": "3jzjvzyoqh7je",
@@ -36,6 +37,7 @@
 		"tests/no-transition-cssproperties.test.ts": "2b9g9fc7bk7sg",
 		"tests/explicit-object-types.test.ts": "l33972ddywdm",
 		"tests/localize-react-props.test.ts": "1mvzkrqu484ls",
+		"tests/angular-one-feature-per-file.test.ts": "29vojpfl4tpr5",
 		"tests/min-var-length.test.ts": "2sza9qi3shthk",
 		"tests/sort-keys-fixable.test.ts": "20e3d0qe754od",
 		"tests/max-depth-extended.test.ts": "1gtuzrhd19l2q",
@@ -51,7 +53,7 @@
 		"tests/fixtures/file.ts": "121drd7vu4xgr",
 		"eslint.config.mjs": "2be6gt2ox47cc",
 		"tsconfig.json": "jviy56mvnw8r",
-		"package.json": "27y6ic42uists",
+		"package.json": "1b2vox8nyn3mw",
 		"tests/fixtures/tsconfig.json": "1f31j6n1h4oyk"
 	}
 }

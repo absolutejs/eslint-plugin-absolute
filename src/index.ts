@@ -1,3 +1,4 @@
+import { angularOneFeaturePerFile } from "./rules/angular-one-feature-per-file";
 import { noNestedJSXReturn } from "./rules/no-nested-jsx-return";
 import { explicitObjectTypes } from "./rules/explicit-object-types";
 import { sortKeysFixable } from "./rules/sort-keys-fixable";
@@ -24,6 +25,7 @@ import { preferInlineExports } from "./rules/prefer-inline-exports";
 
 export default {
 	rules: {
+		"angular-one-feature-per-file": angularOneFeaturePerFile,
 		"explicit-object-types": explicitObjectTypes,
 		"inline-style-limit": inlineStyleLimit,
 		"localize-react-props": localizeReactProps,
