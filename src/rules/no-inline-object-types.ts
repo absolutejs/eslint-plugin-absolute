@@ -1,4 +1,5 @@
-import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+import { TSESTree } from "@typescript-eslint/utils";
+import { createRule } from "../createRule";
 
 type Options = [{ minProperties?: number }];
 type MessageIds = "inlineObjectType";
@@ -82,7 +83,7 @@ const deriveNameFromAncestors = (node: TSESTree.Node) => {
 	return "T";
 };
 
-export const noInlineObjectTypes: TSESLint.RuleModule<MessageIds, Options> = {
+export const noInlineObjectTypes = createRule<Options, MessageIds>({
 	create(context) {
 		const [options] = context.options;
 		const minProperties = options?.minProperties ?? DEFAULT_MIN_PROPERTIES;
@@ -188,5 +189,6 @@ export const noInlineObjectTypes: TSESLint.RuleModule<MessageIds, Options> = {
 			}
 		],
 		type: "suggestion"
-	}
-};
+	},
+	name: "no-inline-object-types"
+});

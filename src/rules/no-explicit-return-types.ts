@@ -1,4 +1,5 @@
-import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+import { TSESTree } from "@typescript-eslint/utils";
+import { createRule } from "../createRule";
 
 type Options = [];
 type MessageIds = "noExplicitReturnType";
@@ -8,7 +9,7 @@ type AnyFunctionNode =
 	| TSESTree.FunctionExpression
 	| TSESTree.ArrowFunctionExpression;
 
-export const noExplicitReturnTypes: TSESLint.RuleModule<MessageIds, Options> = {
+export const noExplicitReturnTypes = createRule<Options, MessageIds>({
 	create(context) {
 		const hasSingleObjectReturn = (body: TSESTree.BlockStatement) => {
 			const returnStatements = body.body.filter(
@@ -79,5 +80,6 @@ export const noExplicitReturnTypes: TSESLint.RuleModule<MessageIds, Options> = {
 		},
 		schema: [],
 		type: "suggestion"
-	}
-};
+	},
+	name: "no-explicit-return-type"
+});

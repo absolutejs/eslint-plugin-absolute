@@ -1,9 +1,10 @@
-import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+import { TSESTree } from "@typescript-eslint/utils";
+import { createRule } from "../createRule";
 
 type Options = [number?];
 type MessageIds = "tooDeep";
 
-export const maxDepthExtended: TSESLint.RuleModule<MessageIds, Options> = {
+export const maxDepthExtended = createRule<Options, MessageIds>({
 	create(context) {
 		const [option] = context.options;
 		const maxDepth = typeof option === "number" ? option : 1;
@@ -149,5 +150,6 @@ export const maxDepthExtended: TSESLint.RuleModule<MessageIds, Options> = {
 			}
 		],
 		type: "suggestion"
-	}
-};
+	},
+	name: "max-depth-extended"
+});

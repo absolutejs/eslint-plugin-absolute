@@ -1,4 +1,5 @@
-import { AST_NODE_TYPES, TSESLint, TSESTree } from "@typescript-eslint/utils";
+import { AST_NODE_TYPES, TSESTree } from "@typescript-eslint/utils";
+import { createRule } from "../createRule";
 
 type Options = [];
 type MessageIds = "multiFeature";
@@ -40,10 +41,7 @@ const isFeatureClass = (node: TSESTree.ClassDeclaration) => {
 	});
 };
 
-export const angularOneFeaturePerFile: TSESLint.RuleModule<
-	MessageIds,
-	Options
-> = {
+export const angularOneFeaturePerFile = createRule<Options, MessageIds>({
 	create(context) {
 		const seenFeatures: TSESTree.ClassDeclaration[] = [];
 
@@ -71,5 +69,6 @@ export const angularOneFeaturePerFile: TSESLint.RuleModule<
 		},
 		schema: [],
 		type: "problem"
-	}
-};
+	},
+	name: "angular-one-feature-per-file"
+});

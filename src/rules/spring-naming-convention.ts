@@ -1,4 +1,5 @@
 import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+import { createRule } from "../createRule";
 
 type Options = [];
 type MessageIds =
@@ -87,74 +88,73 @@ const checkUseSprings = (
 	}
 };
 
-export const springNamingConvention: TSESLint.RuleModule<MessageIds, Options> =
-	{
-		create(context) {
-			return {
-				VariableDeclarator(node: TSESTree.VariableDeclarator) {
-					const { init } = node;
+export const springNamingConvention = createRule<Options, MessageIds>({
+	create(context) {
+		return {
+			VariableDeclarator(node: TSESTree.VariableDeclarator) {
+				const { init } = node;
 
-					if (
-						!init ||
-						init.type !== "CallExpression" ||
-						init.callee.type !== "Identifier"
-					) {
-						return;
-					}
-
-					const hookName = init.callee.name;
-					if (hookName !== "useSpring" && hookName !== "useSprings") {
-						return;
-					}
-
-					if (node.id.type !== "ArrayPattern") {
-						return;
-					}
-
-					const { elements } = node.id;
-					if (elements.length < 2) {
-						return;
-					}
-
-					const [firstElem, secondElem] = elements;
-
-					if (
-						!firstElem ||
-						firstElem.type !== "Identifier" ||
-						!secondElem ||
-						secondElem.type !== "Identifier"
-					) {
-						return;
-					}
-
-					if (hookName === "useSpring") {
-						checkUseSpring(context, firstElem, secondElem);
-						return;
-					}
-
-					if (hookName === "useSprings") {
-						checkUseSprings(context, firstElem, secondElem);
-					}
+				if (
+					!init ||
+					init.type !== "CallExpression" ||
+					init.callee.type !== "Identifier"
+				) {
+					return;
 				}
-			};
+
+				const hookName = init.callee.name;
+				if (hookName !== "useSpring" && hookName !== "useSprings") {
+					return;
+				}
+
+				if (node.id.type !== "ArrayPattern") {
+					return;
+				}
+
+				const { elements } = node.id;
+				if (elements.length < 2) {
+					return;
+				}
+
+				const [firstElem, secondElem] = elements;
+
+				if (
+					!firstElem ||
+					firstElem.type !== "Identifier" ||
+					!secondElem ||
+					secondElem.type !== "Identifier"
+				) {
+					return;
+				}
+
+				if (hookName === "useSpring") {
+					checkUseSpring(context, firstElem, secondElem);
+					return;
+				}
+
+				if (hookName === "useSprings") {
+					checkUseSprings(context, firstElem, secondElem);
+				}
+			}
+		};
+	},
+	defaultOptions: [],
+	meta: {
+		docs: {
+			description:
+				"Enforce correct naming for useSpring and useSprings hook destructuring"
 		},
-		defaultOptions: [],
-		meta: {
-			docs: {
-				description:
-					"Enforce correct naming for useSpring and useSprings hook destructuring"
-			},
-			messages: {
-				firstMustEndWithSprings:
-					"The first variable must end with 'Springs'.",
-				firstMustHaveBase:
-					"The first variable must have a non-empty name before 'Springs'.",
-				pluralRequired:
-					"The first variable for useSprings should be plural (ending with 's') before 'Springs'.",
-				secondMustMatch:
-					"The second variable must be named '{{expected}}'."
-			},
-			schema: [],
-			type: "problem"
-		}
-	};
+		messages: {
+			firstMustEndWithSprings:
+				"The first variable must end with 'Springs'.",
+			firstMustHaveBase:
+				"The first variable must have a non-empty name before 'Springs'.",
+			pluralRequired:
+				"The first variable for useSprings should be plural (ending with 's') before 'Springs'.",
+			secondMustMatch: "The second variable must be named '{{expected}}'."
+		},
+		schema: [],
+		type: "problem"
+	},
+	name: "spring-naming-convention"
+});

@@ -1,4 +1,5 @@
-import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+import { TSESTree } from "@typescript-eslint/utils";
+import { createRule } from "../createRule";
 import * as ts from "typescript";
 
 type Options = [];
@@ -17,10 +18,7 @@ const ALLOWED_INIT_TYPES: ReadonlySet<string> = new Set([
 	"TSAsExpression"
 ]);
 
-export const noRedundantTypeAnnotation: TSESLint.RuleModule<
-	MessageIds,
-	Options
-> = {
+export const noRedundantTypeAnnotation = createRule<Options, MessageIds>({
 	create(context) {
 		const { sourceCode } = context;
 		const parserServices = sourceCode.parserServices ?? null;
@@ -47,6 +45,80 @@ export const noRedundantTypeAnnotation: TSESLint.RuleModule<
 					ts.TypeFormatFlags.UseAliasDefinedOutsideCurrentScope
 			);
 
+		// Does `typeNode` reference the named type parameter anywhere within it
+		// (`S`, `S[]`, `Promise<S>`, `(v) => v is S`, …)?
+		const referencesTypeParam = (typeNode: ts.Node, name: string) => {
+			let found = false;
+			const visit = (node: ts.Node) => {
+				if (found) return;
+				if (
+					ts.isTypeReferenceNode(node) &&
+					ts.isIdentifier(node.typeName) &&
+					node.typeName.text === name
+				) {
+					found = true;
+
+					return;
+				}
+				ts.forEachChild(node, visit);
+			};
+			visit(typeNode);
+
+			return found;
+		};
+
+		// A generic call/new whose result type the variable's annotation can
+		// steer via contextual inference. That happens when a type parameter is
+		// NOT determined by any argument — it appears in no parameter type — so
+		// it's solved from the contextual annotation (or a default). Example:
+		// `querySelector<E extends Element = Element>(s: string): E | null`
+		// fixes `E` from `const el: HTMLInputElement | null = …`; remove the
+		// annotation and `E` falls back to `Element`, changing the type, so the
+		// annotation isn't redundant. By contrast a type parameter that appears
+		// in a parameter (e.g. `filter<S>(p: (v) => v is S): S[]`) is inferred
+		// from the argument, not the annotation, so those stay checkable.
+		// Explicit `foo<T>()` type arguments can't be steered at all.
+		const leansOnContextualInference = (initNode: ts.Node) => {
+			const callLike =
+				ts.isCallExpression(initNode) || ts.isNewExpression(initNode)
+					? initNode
+					: null;
+			if (!callLike) return false;
+			if (callLike.typeArguments && callLike.typeArguments.length > 0) {
+				return false;
+			}
+
+			const resolved = tsChecker.getResolvedSignature(callLike);
+			const declaration = resolved?.declaration;
+			if (declaration && !ts.isJSDocSignature(declaration)) {
+				const typeParams = declaration.typeParameters;
+				if (!typeParams || typeParams.length === 0) return false;
+
+				return typeParams.some(
+					(typeParam) =>
+						!declaration.parameters.some(
+							(parameter) =>
+								parameter.type !== undefined &&
+								referencesTypeParam(
+									parameter.type,
+									typeParam.name.text
+								)
+						)
+				);
+			}
+
+			// No analyzable signature declaration — fall back to the
+			// conservative check: any generic call signature is steerable.
+			const calleeType = tsChecker.getTypeAtLocation(callLike.expression);
+			const signatures = ts.isNewExpression(callLike)
+				? calleeType.getConstructSignatures()
+				: calleeType.getCallSignatures();
+
+			return signatures.some(
+				(signature) => (signature.getTypeParameters()?.length ?? 0) > 0
+			);
+		};
+
 		return {
 			VariableDeclarator(node: TSESTree.VariableDeclarator) {
 				if (node.id.type !== "Identifier") return;
@@ -60,6 +132,7 @@ export const noRedundantTypeAnnotation: TSESLint.RuleModule<
 				const initTSNode = esTreeNodeToTSNodeMap.get(node.init);
 				if (!annotationTSNode || !initTSNode) return;
 				if (!ts.isTypeNode(annotationTSNode)) return;
+				if (leansOnContextualInference(initTSNode)) return;
 
 				const annotationType =
 					tsChecker.getTypeFromTypeNode(annotationTSNode);
@@ -118,5 +191,6 @@ export const noRedundantTypeAnnotation: TSESLint.RuleModule<
 		},
 		schema: [],
 		type: "suggestion"
-	}
-};
+	},
+	name: "no-redundant-type-annotation"
+});

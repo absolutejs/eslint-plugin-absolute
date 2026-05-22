@@ -28,6 +28,13 @@ ruleTester.run("no-redundant-type-annotation", noRedundantTypeAnnotation, {
 			output: `function bar(): number { return 1; }\nconst foo = bar();`
 		},
 		{
+			code: `const xs: string[] = ["a", "b"].filter((s): s is string => s.length > 0);`,
+			errors: [{ messageId: "redundantTypeAnnotation" }],
+			filename,
+			name: "generic whose type param is inferred from an argument is still flagged",
+			output: `const xs = ["a", "b"].filter((s): s is string => s.length > 0);`
+		},
+		{
 			code: `class Foo {}\nconst foo: Foo = new Foo();`,
 			errors: [{ messageId: "redundantTypeAnnotation" }],
 			filename,
@@ -71,6 +78,22 @@ ruleTester.run("no-redundant-type-annotation", noRedundantTypeAnnotation, {
 		}
 	],
 	valid: [
+		// A generic call whose return-position type param is inferred from the
+		// annotation: the types match only *because* of the annotation, so it's
+		// not redundant (removing it would change the inferred type).
+		{
+			code: `declare function pick<E = string>(s: string): E | null;\nconst v: number | null = pick("x");`,
+			filename,
+			name: "generic call inferring its type param from the annotation"
+		},
+		{
+			// A complex selector (not a literal tag) resolves to querySelector's
+			// generic `(s: string): E | null` overload, where `E` is fixed by the
+			// annotation — removing it would widen to `Element`.
+			code: `const el: HTMLInputElement | null = document.querySelector("input[name='x']");`,
+			filename,
+			name: "querySelector generic inferred from the annotation"
+		},
 		// Literal-widening case — the annotation does work, don't flag.
 		{
 			code: `const foo: string = "hello";`,

@@ -1,4 +1,5 @@
-import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+import { TSESTree } from "@typescript-eslint/utils";
+import { createRule } from "../createRule";
 import * as ts from "typescript";
 
 /**
@@ -284,7 +285,7 @@ const hasDuplicatePropertyNames = (
 	);
 };
 
-export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
+export const sortKeysFixable = createRule<Options, MessageIds>({
 	create(context) {
 		const { sourceCode } = context;
 		const [option] = context.options;
@@ -2516,5 +2517,6 @@ export const sortKeysFixable: TSESLint.RuleModule<MessageIds, Options> = {
 			}
 		],
 		type: "suggestion"
-	}
-};
+	},
+	name: "sort-keys-fixable"
+});

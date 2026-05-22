@@ -9,6 +9,7 @@
  */
 
 import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+import { createRule } from "../createRule";
 
 type Options = [];
 type MessageIds = "forbiddenTransition";
@@ -41,10 +42,7 @@ const checkPropForTransition = (
 	}
 };
 
-export const noTransitionCSSProperties: TSESLint.RuleModule<
-	MessageIds,
-	Options
-> = {
+export const noTransitionCSSProperties = createRule<Options, MessageIds>({
 	create(context) {
 		const { sourceCode } = context;
 
@@ -127,5 +125,6 @@ export const noTransitionCSSProperties: TSESLint.RuleModule<
 		},
 		schema: [], // no options,
 		type: "problem"
-	}
-};
+	},
+	name: "no-transition-cssproperties"
+});

@@ -1,4 +1,5 @@
-import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+import { TSESTree } from "@typescript-eslint/utils";
+import { createRule } from "../createRule";
 
 type Options = [number];
 type MessageIds = "tooDeeplyNested";
@@ -6,7 +7,7 @@ type MessageIds = "tooDeeplyNested";
 const isJSXAncestor = (node: TSESTree.Node) =>
 	node.type === "JSXElement" || node.type === "JSXFragment";
 
-export const maxJSXNesting: TSESLint.RuleModule<MessageIds, Options> = {
+export const maxJSXNesting = createRule<Options, MessageIds>({
 	create(context) {
 		const [option] = context.options;
 		const maxAllowed = typeof option === "number" ? option : 1;
@@ -55,5 +56,6 @@ export const maxJSXNesting: TSESLint.RuleModule<MessageIds, Options> = {
 			}
 		],
 		type: "suggestion"
-	}
-};
+	},
+	name: "max-jsxnesting"
+});

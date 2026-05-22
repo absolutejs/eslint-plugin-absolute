@@ -1,9 +1,10 @@
-import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+import { TSESTree } from "@typescript-eslint/utils";
+import { createRule } from "../createRule";
 
 type Options = [];
 type MessageIds = "moveToFile";
 
-export const seperateStyleFiles: TSESLint.RuleModule<MessageIds, Options> = {
+export const seperateStyleFiles = createRule<Options, MessageIds>({
 	create(context) {
 		// Only run this rule on .tsx or .jsx files.
 		const { filename } = context;
@@ -75,5 +76,6 @@ export const seperateStyleFiles: TSESLint.RuleModule<MessageIds, Options> = {
 		},
 		schema: [],
 		type: "suggestion"
-	}
-};
+	},
+	name: "seperate-style-files"
+});

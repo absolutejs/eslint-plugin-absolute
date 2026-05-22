@@ -20,6 +20,7 @@ import { inlineStyleLimit } from "./rules/inline-style-limit";
 import { noInlineObjectTypes } from "./rules/no-inline-object-types";
 import { noNondeterministicRender } from "./rules/no-nondeterministic-render";
 import { noRedundantTypeAnnotation } from "./rules/no-redundant-type-annotation";
+import { noTrivialAlias } from "./rules/no-trivial-alias";
 import { noUnnecessaryDiv } from "./rules/no-unnecessary-div";
 import { preferInlineExports } from "./rules/prefer-inline-exports";
 
@@ -41,6 +42,7 @@ export default {
 		"no-or-none-component": noOrNoneComponent,
 		"no-redundant-type-annotation": noRedundantTypeAnnotation,
 		"no-transition-cssproperties": noTransitionCSSProperties,
+		"no-trivial-alias": noTrivialAlias,
 		"no-unnecessary-div": noUnnecessaryDiv,
 		"no-unnecessary-key": noUnnecessaryKey,
 		"no-useless-function": noUselessFunction,

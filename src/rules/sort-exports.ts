@@ -1,4 +1,5 @@
-import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+import { TSESTree } from "@typescript-eslint/utils";
+import { createRule } from "../createRule";
 
 /**
  * @fileoverview Enforce that top-level export declarations are sorted.
@@ -245,7 +246,7 @@ const getImmediateDependencyNames = (node: TSESTree.ExportNamedDeclaration) => {
 	return names;
 };
 
-export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
+export const sortExports = createRule<Options, MessageIds>({
 	create(context) {
 		const { sourceCode } = context;
 		const [option] = context.options;
@@ -577,5 +578,6 @@ export const sortExports: TSESLint.RuleModule<MessageIds, Options> = {
 			}
 		],
 		type: "suggestion"
-	}
-};
+	},
+	name: "sort-exports"
+});

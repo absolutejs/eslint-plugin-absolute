@@ -1,9 +1,10 @@
-import { TSESLint, TSESTree, AST_NODE_TYPES } from "@typescript-eslint/utils";
+import { TSESTree, AST_NODE_TYPES } from "@typescript-eslint/utils";
+import { createRule } from "../createRule";
 
 type Options = [];
 type MessageIds = "unnecessaryDivWrapper";
 
-export const noUnnecessaryDiv: TSESLint.RuleModule<MessageIds, Options> = {
+export const noUnnecessaryDiv = createRule<Options, MessageIds>({
 	create(context) {
 		const isDivElement = (node: TSESTree.JSXElement) => {
 			const nameNode = node.openingElement.name;
@@ -61,5 +62,6 @@ export const noUnnecessaryDiv: TSESLint.RuleModule<MessageIds, Options> = {
 		},
 		schema: [],
 		type: "suggestion"
-	}
-};
+	},
+	name: "no-unnecessary-div"
+});

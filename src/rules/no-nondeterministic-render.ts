@@ -1,4 +1,5 @@
-import { AST_NODE_TYPES, TSESLint, TSESTree } from "@typescript-eslint/utils";
+import { AST_NODE_TYPES, TSESTree } from "@typescript-eslint/utils";
+import { createRule } from "../createRule";
 
 type Options = [];
 type MessageIds = "nondeterministicField" | "nondeterministicTemplate";
@@ -99,10 +100,7 @@ const isBannedCall = (node: TSESTree.CallExpression) =>
 	isStaticMemberCall(node, "crypto", "randomUUID") ||
 	isStaticMemberCall(node, "performance", "now");
 
-export const noNondeterministicRender: TSESLint.RuleModule<
-	MessageIds,
-	Options
-> = {
+export const noNondeterministicRender = createRule<Options, MessageIds>({
 	create(context) {
 		const reportField = (node: TSESTree.Node) => {
 			if (!isInAngularFieldInitializer(node)) return;
@@ -159,5 +157,6 @@ export const noNondeterministicRender: TSESLint.RuleModule<
 		},
 		schema: [],
 		type: "problem"
-	}
-};
+	},
+	name: "no-nondeterministic-render"
+});

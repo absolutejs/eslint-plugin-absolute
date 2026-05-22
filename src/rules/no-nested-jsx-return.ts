@@ -1,4 +1,5 @@
-import { TSESLint, TSESTree, AST_NODE_TYPES } from "@typescript-eslint/utils";
+import { TSESTree, AST_NODE_TYPES } from "@typescript-eslint/utils";
+import { createRule } from "../createRule";
 
 /**
  * @fileoverview Disallow nested functions that return non-component, non-singular JSX
@@ -16,7 +17,7 @@ type AnyFunctionNode =
 	| TSESTree.FunctionExpression
 	| TSESTree.ArrowFunctionExpression;
 
-export const noNestedJSXReturn: TSESLint.RuleModule<MessageIds, Options> = {
+export const noNestedJSXReturn = createRule<Options, MessageIds>({
 	create(context) {
 		// Returns true if the node is a JSX element or fragment.
 		const isJSX = (
@@ -201,5 +202,6 @@ export const noNestedJSXReturn: TSESLint.RuleModule<MessageIds, Options> = {
 		},
 		schema: [],
 		type: "problem"
-	}
-};
+	},
+	name: "no-nested-jsx-return"
+});

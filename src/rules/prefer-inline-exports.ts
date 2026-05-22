@@ -1,4 +1,5 @@
 import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+import { createRule } from "../createRule";
 
 /**
  * Flag `export { foo }` (no `from`, no rename) when `foo` is a local
@@ -76,7 +77,7 @@ const findOwnDeclaration = (program: TSESTree.Program, name: string) => {
 	return null;
 };
 
-export const preferInlineExports: TSESLint.RuleModule<MessageIds, Options> = {
+export const preferInlineExports = createRule<Options, MessageIds>({
 	create(context) {
 		const { sourceCode } = context;
 
@@ -178,5 +179,6 @@ export const preferInlineExports: TSESLint.RuleModule<MessageIds, Options> = {
 		},
 		schema: [],
 		type: "suggestion"
-	}
-};
+	},
+	name: "prefer-inline-exports"
+});

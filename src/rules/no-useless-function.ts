@@ -1,9 +1,10 @@
-import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+import { TSESTree } from "@typescript-eslint/utils";
+import { createRule } from "../createRule";
 
 type Options = [];
 type MessageIds = "uselessFunction";
 
-export const noUselessFunction: TSESLint.RuleModule<MessageIds, Options> = {
+export const noUselessFunction = createRule<Options, MessageIds>({
 	create(context) {
 		const isCallbackFunction = (node: TSESTree.ArrowFunctionExpression) => {
 			const { parent } = node;
@@ -52,5 +53,6 @@ export const noUselessFunction: TSESLint.RuleModule<MessageIds, Options> = {
 		},
 		schema: [],
 		type: "suggestion"
-	}
-};
+	},
+	name: "no-useless-function"
+});

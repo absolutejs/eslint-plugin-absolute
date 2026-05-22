@@ -1,4 +1,5 @@
-import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+import { TSESTree } from "@typescript-eslint/utils";
+import { createRule } from "../createRule";
 
 /**
  * @fileoverview Disallow grouping CSS style objects in a single export.
@@ -20,7 +21,7 @@ const getPropertyName = (prop: TSESTree.Property) => {
 	return null;
 };
 
-export const noMultiStyleObjects: TSESLint.RuleModule<MessageIds, Options> = {
+export const noMultiStyleObjects = createRule<Options, MessageIds>({
 	create(context) {
 		/**
 		 * Checks if the given ObjectExpression node contains multiple properties
@@ -76,5 +77,6 @@ export const noMultiStyleObjects: TSESLint.RuleModule<MessageIds, Options> = {
 		},
 		schema: [], // no options,
 		type: "problem"
-	}
-};
+	},
+	name: "no-multi-style-objects"
+});

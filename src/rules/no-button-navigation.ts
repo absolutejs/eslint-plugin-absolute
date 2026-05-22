@@ -1,4 +1,5 @@
-import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+import { TSESTree } from "@typescript-eslint/utils";
+import { createRule } from "../createRule";
 
 type Options = [];
 type MessageIds = "noButtonNavigation";
@@ -10,7 +11,7 @@ type HandlerState = {
 	sawAllowedLocationRead: boolean;
 };
 
-export const noButtonNavigation: TSESLint.RuleModule<MessageIds, Options> = {
+export const noButtonNavigation = createRule<Options, MessageIds>({
 	create(context) {
 		const handlerStack: HandlerState[] = [];
 
@@ -266,5 +267,6 @@ export const noButtonNavigation: TSESLint.RuleModule<MessageIds, Options> = {
 		},
 		schema: [],
 		type: "suggestion"
-	}
-};
+	},
+	name: "no-button-navigation"
+});

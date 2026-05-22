@@ -1,4 +1,5 @@
-import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+import { TSESTree } from "@typescript-eslint/utils";
+import { createRule } from "../createRule";
 
 type MinVarLengthOption = {
 	minLength?: number;
@@ -67,7 +68,7 @@ const collectParamNames = (params: TSESTree.Parameter[]) => {
 	return names;
 };
 
-export const minVarLength: TSESLint.RuleModule<MessageIds, Options> = {
+export const minVarLength = createRule<Options, MessageIds>({
 	create(context) {
 		const { sourceCode } = context;
 		const [options] = context.options;
@@ -356,5 +357,6 @@ export const minVarLength: TSESLint.RuleModule<MessageIds, Options> = {
 			}
 		],
 		type: "problem"
-	}
-};
+	},
+	name: "min-var-length"
+});

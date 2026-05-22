@@ -1,9 +1,10 @@
-import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+import { TSESTree } from "@typescript-eslint/utils";
+import { createRule } from "../createRule";
 
 type Options = [];
 type MessageIds = "useLogicalAnd";
 
-export const noOrNoneComponent: TSESLint.RuleModule<MessageIds, Options> = {
+export const noOrNoneComponent = createRule<Options, MessageIds>({
 	create(context) {
 		return {
 			ConditionalExpression(node: TSESTree.ConditionalExpression) {
@@ -57,7 +58,8 @@ export const noOrNoneComponent: TSESLint.RuleModule<MessageIds, Options> = {
 		},
 		schema: [],
 		type: "suggestion"
-	}
-};
+	},
+	name: "no-or-none-component"
+});
 
 // TODO : Add a fix function to this rule, it needs a deep unconflicting fix becasue of react/jsx-no-leaked-render, it needs to explicitly be === something like that

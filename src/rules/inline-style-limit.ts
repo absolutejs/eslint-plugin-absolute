@@ -1,11 +1,12 @@
-import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+import { TSESTree } from "@typescript-eslint/utils";
+import { createRule } from "../createRule";
 
 const DEFAULT_MAX_KEYS = 3;
 
 type Options = [number | { maxKeys?: number }];
 type MessageIds = "extractStyle";
 
-export const inlineStyleLimit: TSESLint.RuleModule<MessageIds, Options> = {
+export const inlineStyleLimit = createRule<Options, MessageIds>({
 	create(context) {
 		const [option] = context.options;
 		// If a number is passed directly, use it as maxKeys; otherwise, extract maxKeys from the object (default to 3)
@@ -84,5 +85,6 @@ export const inlineStyleLimit: TSESLint.RuleModule<MessageIds, Options> = {
 			}
 		],
 		type: "suggestion"
-	}
-};
+	},
+	name: "inline-style-limit"
+});

@@ -1,6 +1,12 @@
 // @bun
 // src/rules/angular-one-feature-per-file.ts
 import { AST_NODE_TYPES } from "@typescript-eslint/utils";
+
+// src/createRule.ts
+import { ESLintUtils } from "@typescript-eslint/utils";
+var createRule = ESLintUtils.RuleCreator((name) => `https://absolutejs.com/documentation/eslint/${name}`);
+
+// src/rules/angular-one-feature-per-file.ts
 var FEATURE_DECORATOR_NAMES = new Set([
   "Component",
   "Directive",
@@ -26,7 +32,7 @@ var isFeatureClass = (node) => {
     return name !== null && FEATURE_DECORATOR_NAMES.has(name);
   });
 };
-var angularOneFeaturePerFile = {
+var angularOneFeaturePerFile = createRule({
   create(context) {
     const seenFeatures = [];
     return {
@@ -53,12 +59,13 @@ var angularOneFeaturePerFile = {
     },
     schema: [],
     type: "problem"
-  }
-};
+  },
+  name: "angular-one-feature-per-file"
+});
 
 // src/rules/no-nested-jsx-return.ts
 import { AST_NODE_TYPES as AST_NODE_TYPES2 } from "@typescript-eslint/utils";
-var noNestedJSXReturn = {
+var noNestedJSXReturn = createRule({
   create(context) {
     const isJSX = (node) => node !== null && node !== undefined && (node.type === AST_NODE_TYPES2.JSXElement || node.type === AST_NODE_TYPES2.JSXFragment);
     const getLeftmostJSXIdentifier = (name) => {
@@ -190,11 +197,12 @@ var noNestedJSXReturn = {
     },
     schema: [],
     type: "problem"
-  }
-};
+  },
+  name: "no-nested-jsx-return"
+});
 
 // src/rules/explicit-object-types.ts
-var explicitObjectTypes = {
+var explicitObjectTypes = createRule({
   create(context) {
     const isObjectLiteral = (node) => node !== null && node !== undefined && node.type === "ObjectExpression";
     return {
@@ -238,8 +246,9 @@ var explicitObjectTypes = {
     },
     schema: [],
     type: "problem"
-  }
-};
+  },
+  name: "explicit-object-types"
+});
 
 // src/rules/sort-keys-fixable.ts
 import * as ts from "typescript";
@@ -437,7 +446,7 @@ var hasDuplicatePropertyNames = (properties) => {
   });
   return [...kindsByName.values()].some((kinds) => kinds.length > 1 && !isAccessorPairOnly(kinds));
 };
-var sortKeysFixable = {
+var sortKeysFixable = createRule({
   create(context) {
     const { sourceCode } = context;
     const [option] = context.options;
@@ -1616,8 +1625,9 @@ ${indent}`;
       }
     ],
     type: "suggestion"
-  }
-};
+  },
+  name: "sort-keys-fixable"
+});
 
 // src/rules/no-transition-cssproperties.ts
 var getKeyName = (prop) => {
@@ -1641,7 +1651,7 @@ var checkPropForTransition = (context, prop) => {
     });
   }
 };
-var noTransitionCSSProperties = {
+var noTransitionCSSProperties = createRule({
   create(context) {
     const { sourceCode } = context;
     const isCSSPropertiesType = (typeAnnotation) => {
@@ -1689,11 +1699,12 @@ var noTransitionCSSProperties = {
     },
     schema: [],
     type: "problem"
-  }
-};
+  },
+  name: "no-transition-cssproperties"
+});
 
 // src/rules/no-explicit-return-types.ts
-var noExplicitReturnTypes = {
+var noExplicitReturnTypes = createRule({
   create(context) {
     const hasSingleObjectReturn = (body) => {
       const returnStatements = body.body.filter((stmt) => stmt.type === "ReturnStatement");
@@ -1736,12 +1747,13 @@ var noExplicitReturnTypes = {
     },
     schema: [],
     type: "suggestion"
-  }
-};
+  },
+  name: "no-explicit-return-type"
+});
 
 // src/rules/max-jsx-nesting.ts
 var isJSXAncestor = (node) => node.type === "JSXElement" || node.type === "JSXFragment";
-var maxJSXNesting = {
+var maxJSXNesting = createRule({
   create(context) {
     const [option] = context.options;
     const maxAllowed = typeof option === "number" ? option : 1;
@@ -1782,11 +1794,12 @@ var maxJSXNesting = {
       }
     ],
     type: "suggestion"
-  }
-};
+  },
+  name: "max-jsxnesting"
+});
 
 // src/rules/seperate-style-files.ts
-var seperateStyleFiles = {
+var seperateStyleFiles = createRule({
   create(context) {
     const { filename } = context;
     if (!filename.endsWith(".tsx") && !filename.endsWith(".jsx")) {
@@ -1837,8 +1850,9 @@ var seperateStyleFiles = {
     },
     schema: [],
     type: "suggestion"
-  }
-};
+  },
+  name: "seperate-style-files"
+});
 
 // src/rules/no-unnecessary-key.ts
 var isMapCallExpression = (node) => {
@@ -1848,7 +1862,7 @@ var isMapCallExpression = (node) => {
   const { property } = node.callee;
   return property.type === "Identifier" && property.name === "map" || property.type === "Literal" && property.value === "map";
 };
-var noUnnecessaryKey = {
+var noUnnecessaryKey = createRule({
   create(context) {
     const getAncestors = (node) => {
       const ancestors = [];
@@ -1892,8 +1906,9 @@ var noUnnecessaryKey = {
     },
     schema: [],
     type: "problem"
-  }
-};
+  },
+  name: "no-unnecessary-key"
+});
 
 // src/rules/sort-exports.ts
 var SORT_BEFORE2 = Number.parseInt("-1", 10);
@@ -2036,7 +2051,7 @@ var getImmediateDependencyNames = (node) => {
   }
   return names;
 };
-var sortExports = {
+var sortExports = createRule({
   create(context) {
     const { sourceCode } = context;
     const [option] = context.options;
@@ -2262,12 +2277,13 @@ var sortExports = {
       }
     ],
     type: "suggestion"
-  }
-};
+  },
+  name: "sort-exports"
+});
 
 // src/rules/localize-react-props.ts
 import { AST_NODE_TYPES as AST_NODE_TYPES3 } from "@typescript-eslint/utils";
-var localizeReactProps = {
+var localizeReactProps = createRule({
   create(context) {
     const candidateVariables = [];
     const getSingleSetElement = (set) => {
@@ -2533,11 +2549,12 @@ var localizeReactProps = {
     },
     schema: [],
     type: "suggestion"
-  }
-};
+  },
+  name: "localize-react-props"
+});
 
 // src/rules/no-or-none-component.ts
-var noOrNoneComponent = {
+var noOrNoneComponent = createRule({
   create(context) {
     return {
       ConditionalExpression(node) {
@@ -2571,11 +2588,12 @@ var noOrNoneComponent = {
     },
     schema: [],
     type: "suggestion"
-  }
-};
+  },
+  name: "no-or-none-component"
+});
 
 // src/rules/no-button-navigation.ts
-var noButtonNavigation = {
+var noButtonNavigation = createRule({
   create(context) {
     const handlerStack = [];
     const getCurrentHandler = () => {
@@ -2751,8 +2769,9 @@ var noButtonNavigation = {
     },
     schema: [],
     type: "suggestion"
-  }
-};
+  },
+  name: "no-button-navigation"
+});
 
 // src/rules/no-multi-style-objects.ts
 var getPropertyName = (prop) => {
@@ -2765,7 +2784,7 @@ var getPropertyName = (prop) => {
   }
   return null;
 };
-var noMultiStyleObjects = {
+var noMultiStyleObjects = createRule({
   create(context) {
     const checkObjectExpression = (node) => {
       if (!node.properties.length) {
@@ -2810,11 +2829,12 @@ var noMultiStyleObjects = {
     },
     schema: [],
     type: "problem"
-  }
-};
+  },
+  name: "no-multi-style-objects"
+});
 
 // src/rules/no-useless-function.ts
-var noUselessFunction = {
+var noUselessFunction = createRule({
   create(context) {
     const isCallbackFunction = (node) => {
       const { parent } = node;
@@ -2852,8 +2872,9 @@ var noUselessFunction = {
     },
     schema: [],
     type: "suggestion"
-  }
-};
+  },
+  name: "no-useless-function"
+});
 
 // src/rules/min-var-length.ts
 var extractIdentifiersFromPattern = (pattern, identifiers = []) => {
@@ -2893,7 +2914,7 @@ var collectParamNames = (params) => {
   });
   return names;
 };
-var minVarLength = {
+var minVarLength = createRule({
   create(context) {
     const { sourceCode } = context;
     const [options] = context.options;
@@ -3067,11 +3088,12 @@ var minVarLength = {
       }
     ],
     type: "problem"
-  }
-};
+  },
+  name: "min-var-length"
+});
 
 // src/rules/max-depth-extended.ts
-var maxDepthExtended = {
+var maxDepthExtended = createRule({
   create(context) {
     const [option] = context.options;
     const maxDepth = typeof option === "number" ? option : 1;
@@ -3189,8 +3211,9 @@ var maxDepthExtended = {
       }
     ],
     type: "suggestion"
-  }
-};
+  },
+  name: "max-depth-extended"
+});
 
 // src/rules/spring-naming-convention.ts
 var SPRINGS_SUFFIX = "Springs";
@@ -3255,7 +3278,7 @@ var checkUseSprings = (context, firstElem, secondElem) => {
     });
   }
 };
-var springNamingConvention = {
+var springNamingConvention = createRule({
   create(context) {
     return {
       VariableDeclarator(node) {
@@ -3301,12 +3324,13 @@ var springNamingConvention = {
     },
     schema: [],
     type: "problem"
-  }
-};
+  },
+  name: "spring-naming-convention"
+});
 
 // src/rules/inline-style-limit.ts
 var DEFAULT_MAX_KEYS = 3;
-var inlineStyleLimit = {
+var inlineStyleLimit = createRule({
   create(context) {
     const [option] = context.options;
     const maxKeys = typeof option === "number" ? option : option && option.maxKeys || DEFAULT_MAX_KEYS;
@@ -3358,8 +3382,9 @@ var inlineStyleLimit = {
       }
     ],
     type: "suggestion"
-  }
-};
+  },
+  name: "inline-style-limit"
+});
 
 // src/rules/no-inline-object-types.ts
 var DEFAULT_MIN_PROPERTIES = 2;
@@ -3417,7 +3442,7 @@ var deriveNameFromAncestors = (node) => {
   }
   return "T";
 };
-var noInlineObjectTypes = {
+var noInlineObjectTypes = createRule({
   create(context) {
     const [options] = context.options;
     const minProperties = options?.minProperties ?? DEFAULT_MIN_PROPERTIES;
@@ -3498,8 +3523,9 @@ var noInlineObjectTypes = {
       }
     ],
     type: "suggestion"
-  }
-};
+  },
+  name: "no-inline-object-types"
+});
 
 // src/rules/no-nondeterministic-render.ts
 import { AST_NODE_TYPES as AST_NODE_TYPES4 } from "@typescript-eslint/utils";
@@ -3558,7 +3584,7 @@ var isInAngularFieldInitializer = (node) => {
   return getEnclosingAngularComponentClass(propertyDefinition) !== null;
 };
 var isBannedCall = (node) => isStaticMemberCall(node, "Math", "random") || isStaticMemberCall(node, "Date", "now") || isStaticMemberCall(node, "crypto", "randomUUID") || isStaticMemberCall(node, "performance", "now");
-var noNondeterministicRender = {
+var noNondeterministicRender = createRule({
   create(context) {
     const reportField = (node) => {
       if (!isInAngularFieldInitializer(node))
@@ -3603,8 +3629,9 @@ var noNondeterministicRender = {
     },
     schema: [],
     type: "problem"
-  }
-};
+  },
+  name: "no-nondeterministic-render"
+});
 
 // src/rules/no-redundant-type-annotation.ts
 import * as ts2 from "typescript";
@@ -3615,7 +3642,7 @@ var ALLOWED_INIT_TYPES = new Set([
   "NewExpression",
   "TSAsExpression"
 ]);
-var noRedundantTypeAnnotation = {
+var noRedundantTypeAnnotation = createRule({
   create(context) {
     const { sourceCode } = context;
     const parserServices = sourceCode.parserServices ?? null;
@@ -3626,6 +3653,39 @@ var noRedundantTypeAnnotation = {
       return {};
     }
     const stringify = (type) => tsChecker.typeToString(type, undefined, ts2.TypeFormatFlags.NoTruncation | ts2.TypeFormatFlags.UseAliasDefinedOutsideCurrentScope);
+    const referencesTypeParam = (typeNode, name) => {
+      let found = false;
+      const visit = (node) => {
+        if (found)
+          return;
+        if (ts2.isTypeReferenceNode(node) && ts2.isIdentifier(node.typeName) && node.typeName.text === name) {
+          found = true;
+          return;
+        }
+        ts2.forEachChild(node, visit);
+      };
+      visit(typeNode);
+      return found;
+    };
+    const leansOnContextualInference = (initNode) => {
+      const callLike = ts2.isCallExpression(initNode) || ts2.isNewExpression(initNode) ? initNode : null;
+      if (!callLike)
+        return false;
+      if (callLike.typeArguments && callLike.typeArguments.length > 0) {
+        return false;
+      }
+      const resolved = tsChecker.getResolvedSignature(callLike);
+      const declaration = resolved?.declaration;
+      if (declaration && !ts2.isJSDocSignature(declaration)) {
+        const typeParams = declaration.typeParameters;
+        if (!typeParams || typeParams.length === 0)
+          return false;
+        return typeParams.some((typeParam) => !declaration.parameters.some((parameter) => parameter.type !== undefined && referencesTypeParam(parameter.type, typeParam.name.text)));
+      }
+      const calleeType = tsChecker.getTypeAtLocation(callLike.expression);
+      const signatures = ts2.isNewExpression(callLike) ? calleeType.getConstructSignatures() : calleeType.getCallSignatures();
+      return signatures.some((signature) => (signature.getTypeParameters()?.length ?? 0) > 0);
+    };
     return {
       VariableDeclarator(node) {
         if (node.id.type !== "Identifier")
@@ -3642,6 +3702,8 @@ var noRedundantTypeAnnotation = {
         if (!annotationTSNode || !initTSNode)
           return;
         if (!ts2.isTypeNode(annotationTSNode))
+          return;
+        if (leansOnContextualInference(initTSNode))
           return;
         const annotationType = tsChecker.getTypeFromTypeNode(annotationTSNode);
         const initType = tsChecker.getTypeAtLocation(initTSNode);
@@ -3678,12 +3740,97 @@ var noRedundantTypeAnnotation = {
     },
     schema: [],
     type: "suggestion"
+  },
+  name: "no-redundant-type-annotation"
+});
+
+// src/rules/no-trivial-alias.ts
+var isBareTypeReference = (node) => {
+  if (node.type === "TSTypeReference") {
+    return !node.typeArguments || node.typeArguments.params.length === 0;
+  }
+  switch (node.type) {
+    case "TSStringKeyword":
+    case "TSNumberKeyword":
+    case "TSBooleanKeyword":
+    case "TSNullKeyword":
+    case "TSUndefinedKeyword":
+    case "TSVoidKeyword":
+    case "TSAnyKeyword":
+    case "TSUnknownKeyword":
+    case "TSNeverKeyword":
+    case "TSBigIntKeyword":
+    case "TSSymbolKeyword":
+    case "TSObjectKeyword":
+      return true;
+    default:
+      return false;
   }
 };
+var isBareIdentifierInit = (init) => init.type === "Identifier";
+var isConstSource = (context, id) => {
+  const scope = context.sourceCode.getScope(id);
+  const variable = scope.references.find((ref) => ref.identifier === id)?.resolved;
+  if (!variable || variable.defs.length === 0)
+    return false;
+  return variable.defs.every((def) => {
+    if (def.type !== "Variable")
+      return false;
+    const { parent } = def;
+    if (!parent || parent.type !== "VariableDeclaration")
+      return false;
+    return parent.kind === "const";
+  });
+};
+var noTrivialAlias = createRule({
+  create(context) {
+    return {
+      TSTypeAliasDeclaration(node) {
+        if (!isBareTypeReference(node.typeAnnotation))
+          return;
+        context.report({
+          data: { name: node.id.name },
+          messageId: "trivialTypeAlias",
+          node
+        });
+      },
+      VariableDeclarator(node) {
+        if (node.id.type !== "Identifier")
+          return;
+        if (node.id.typeAnnotation)
+          return;
+        if (!node.init)
+          return;
+        if (!isBareIdentifierInit(node.init))
+          return;
+        if (!isConstSource(context, node.init))
+          return;
+        context.report({
+          data: { name: node.id.name },
+          messageId: "trivialConstAlias",
+          node
+        });
+      }
+    };
+  },
+  defaultOptions: [],
+  meta: {
+    docs: {
+      description: "Disallow identity aliases that rename a type or value without transforming it \u2014 `type X = Y` and `const x = y`. Pick one name and use it everywhere."
+    },
+    messages: {
+      trivialConstAlias: "`{{name}}` is a trivial rename of another binding. Use the original at the consumer instead \u2014 duplicate aliases drift when one side is updated and the other isn't.",
+      trivialTypeAlias: "`{{name}}` is a pure rename of another type. Use the original type at the consumer instead \u2014 duplicate aliases drift when one side is updated and the other isn't."
+    },
+    schema: [],
+    type: "suggestion"
+  },
+  name: "no-trivial-alias"
+});
 
 // src/rules/no-unnecessary-div.ts
 import { AST_NODE_TYPES as AST_NODE_TYPES5 } from "@typescript-eslint/utils";
-var noUnnecessaryDiv = {
+var noUnnecessaryDiv = createRule({
   create(context) {
     const isDivElement = (node) => {
       const nameNode = node.openingElement.name;
@@ -3728,8 +3875,9 @@ var noUnnecessaryDiv = {
     },
     schema: [],
     type: "suggestion"
-  }
-};
+  },
+  name: "no-unnecessary-div"
+});
 
 // src/rules/prefer-inline-exports.ts
 var isLocalDeclaration = (node) => node.type === "VariableDeclaration" || node.type === "FunctionDeclaration" || node.type === "ClassDeclaration" || node.type === "TSTypeAliasDeclaration" || node.type === "TSInterfaceDeclaration" || node.type === "TSEnumDeclaration";
@@ -3760,7 +3908,7 @@ var findOwnDeclaration = (program, name) => {
   }
   return null;
 };
-var preferInlineExports = {
+var preferInlineExports = createRule({
   create(context) {
     const { sourceCode } = context;
     const program = sourceCode.ast;
@@ -3831,8 +3979,9 @@ var preferInlineExports = {
     },
     schema: [],
     type: "suggestion"
-  }
-};
+  },
+  name: "prefer-inline-exports"
+});
 
 // src/index.ts
 var src_default = {
@@ -3853,6 +4002,7 @@ var src_default = {
     "no-or-none-component": noOrNoneComponent,
     "no-redundant-type-annotation": noRedundantTypeAnnotation,
     "no-transition-cssproperties": noTransitionCSSProperties,
+    "no-trivial-alias": noTrivialAlias,
     "no-unnecessary-div": noUnnecessaryDiv,
     "no-unnecessary-key": noUnnecessaryKey,
     "no-useless-function": noUselessFunction,

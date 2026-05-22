@@ -1,4 +1,5 @@
 import { TSESLint, TSESTree, AST_NODE_TYPES } from "@typescript-eslint/utils";
+import { createRule } from "../createRule";
 
 type Options = [];
 type MessageIds = "stateAndSetterToChild" | "variableToChild";
@@ -19,7 +20,7 @@ type CandidateVariable = {
 	componentName: string;
 };
 
-export const localizeReactProps: TSESLint.RuleModule<MessageIds, Options> = {
+export const localizeReactProps = createRule<Options, MessageIds>({
 	create(context) {
 		// A list of candidate variables for reporting (for general variables only).
 		const candidateVariables: CandidateVariable[] = [];
@@ -450,5 +451,6 @@ export const localizeReactProps: TSESLint.RuleModule<MessageIds, Options> = {
 		},
 		schema: [],
 		type: "suggestion"
-	}
-};
+	},
+	name: "localize-react-props"
+});

@@ -8,8 +8,8 @@
 		"@typescript-eslint/rule-tester": "8.56.0",
 		"@typescript-eslint/utils": "8.56.0",
 		"eslint": "10",
+		"knip": "6.11.0",
 		"prettier": "3.8.1",
-		"ts-prune": "0.10.3",
 		"typescript": "5.9.3",
 		"typescript-eslint": "8.56.0"
 	},
@@ -34,11 +34,11 @@
 		"build": "rm -rf dist && bun build src/index.ts --outdir dist --splitting --target=bun --external eslint --external @typescript-eslint/utils --external typescript",
 		"format": "absolutejs prettier --write",
 		"lint": "bun run build && bun run absolutejs eslint",
-		"prune": "ts-prune --error",
+		"knip": "knip",
 		"release": "bun run format && bun run build && bun publish",
 		"test": "bun test tests/",
 		"typecheck": "bun run tsc --noEmit"
 	},
 	"type": "module",
-	"version": "0.9.0"
+	"version": "0.11.0-beta.2"
 }

@@ -1,9 +1,10 @@
-import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+import { TSESTree } from "@typescript-eslint/utils";
+import { createRule } from "../createRule";
 
 type Options = [];
 type MessageIds = "objectLiteralNeedsType" | "arrayOfObjectLiteralsNeedsType";
 
-export const explicitObjectTypes: TSESLint.RuleModule<MessageIds, Options> = {
+export const explicitObjectTypes = createRule<Options, MessageIds>({
 	create(context) {
 		/**
 		 * Returns true if the node is an object literal.
@@ -71,5 +72,6 @@ export const explicitObjectTypes: TSESLint.RuleModule<MessageIds, Options> = {
 		},
 		schema: [],
 		type: "problem"
-	}
-};
+	},
+	name: "explicit-object-types"
+});

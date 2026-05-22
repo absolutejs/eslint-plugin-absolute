@@ -7,7 +7,8 @@
  * Note: This rule does not auto-fix.
  */
 
-import { TSESLint, TSESTree } from "@typescript-eslint/utils";
+import { TSESTree } from "@typescript-eslint/utils";
+import { createRule } from "../createRule";
 
 type Options = [];
 type MessageIds = "unnecessaryKey";
@@ -27,7 +28,7 @@ const isMapCallExpression = (node: TSESTree.Node) => {
 	);
 };
 
-export const noUnnecessaryKey: TSESLint.RuleModule<MessageIds, Options> = {
+export const noUnnecessaryKey = createRule<Options, MessageIds>({
 	create(context) {
 		// Polyfill for context.getAncestors if it's not available.
 		const getAncestors = (node: TSESTree.Node) => {
@@ -107,5 +108,6 @@ export const noUnnecessaryKey: TSESLint.RuleModule<MessageIds, Options> = {
 		},
 		schema: [],
 		type: "problem"
-	}
-};
+	},
+	name: "no-unnecessary-key"
+});
