@@ -82,7 +82,7 @@ export const noImportMetaPath = createRule<Options, MessageIds>({
 	meta: {
 		docs: {
 			description:
-				"Disallow deriving filesystem paths from a module's own location (`import.meta.dir`/`dirname`/`filename`, `fileURLToPath(import.meta.url)`). They move when the server is bundled, so paths break in `absolute start`. Anchor to `projectRoot` from @absolutejs/absolute or `process.cwd()`."
+				"Disallow deriving filesystem paths from a module's own location (`import.meta.dir`/`dirname`/`filename`, `fileURLToPath(import.meta.url)`). They move when the server is bundled, so paths break in `absolute start`. Anchor to `projectRoot` from @absolutejs/absolute or `process.cwd()`. This targets application server code; a library locating its OWN shipped assets is a legitimate exception (projectRoot is the consuming app's root, not the package's location) — turn the rule off for those files via an override."
 		},
 		messages: {
 			importMetaPath:
