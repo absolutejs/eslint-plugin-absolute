@@ -20,6 +20,7 @@ import { inlineStyleLimit } from "./rules/inline-style-limit";
 import { noInlineObjectTypes } from "./rules/no-inline-object-types";
 import { noNondeterministicRender } from "./rules/no-nondeterministic-render";
 import { noRedundantTypeAnnotation } from "./rules/no-redundant-type-annotation";
+import { noImportMetaPath } from "./rules/no-import-meta-path";
 import { noTrivialAlias } from "./rules/no-trivial-alias";
 import { noUnnecessaryDiv } from "./rules/no-unnecessary-div";
 import { preferInlineExports } from "./rules/prefer-inline-exports";
@@ -35,6 +36,7 @@ export default {
 		"min-var-length": minVarLength,
 		"no-button-navigation": noButtonNavigation,
 		"no-explicit-return-type": noExplicitReturnTypes,
+		"no-import-meta-path": noImportMetaPath,
 		"no-inline-object-types": noInlineObjectTypes,
 		"no-multi-style-objects": noMultiStyleObjects,
 		"no-nested-jsx-return": noNestedJSXReturn,
