@@ -218,6 +218,23 @@ const visitImmediateReferences = (
 	visit(node);
 };
 
+// Decorators written before `export` (e.g. Angular's `@Component`) are attached
+// to the inner declaration and live OUTSIDE the ExportNamedDeclaration's range,
+// so they must be accounted for explicitly when reading or moving an export.
+const getDeclarationDecorators = (
+	declaration: TSESTree.Node | null | undefined
+): readonly TSESTree.Decorator[] => {
+	if (
+		declaration &&
+		"decorators" in declaration &&
+		Array.isArray(declaration.decorators)
+	) {
+		return declaration.decorators;
+	}
+
+	return [];
+};
+
 const getImmediateDependencyNames = (node: TSESTree.ExportNamedDeclaration) => {
 	const names = new Set<string>();
 	const { declaration } = node;
@@ -240,6 +257,9 @@ const getImmediateDependencyNames = (node: TSESTree.ExportNamedDeclaration) => {
 
 	if (declaration.type === "ClassDeclaration") {
 		visitImmediateReferences(declaration.superClass, addName);
+		getDeclarationDecorators(declaration).forEach((decorator) =>
+			visitImmediateReferences(decorator, addName)
+		);
 		declaration.body.body.forEach(addClassElementDependencies);
 	}
 
@@ -272,9 +292,17 @@ export const sortExports = createRule<Options, MessageIds>({
 				? option.variablesBeforeFunctions
 				: false;
 
+		const getNodeStart = (node: TSESTree.ExportNamedDeclaration) =>
+			getDeclarationDecorators(node.declaration).reduce(
+				(start, decorator) => Math.min(start, decorator.range[0]),
+				node.range[0]
+			);
+
+		const getNodeText = (node: TSESTree.ExportNamedDeclaration) =>
+			sourceCode.getText().slice(getNodeStart(node), node.range[1]);
+
 		const generateExportText = (node: TSESTree.ExportNamedDeclaration) =>
-			sourceCode
-				.getText(node)
+			getNodeText(node)
 				.trim()
 				.replace(/\s*;?\s*$/, ";");
 
@@ -356,7 +384,7 @@ export const sortExports = createRule<Options, MessageIds>({
 						isFunction: isFunctionExport(node),
 						name,
 						node,
-						text: sourceCode.getText(node)
+						text: getNodeText(node)
 					};
 					return item;
 				})
@@ -492,7 +520,7 @@ export const sortExports = createRule<Options, MessageIds>({
 						.map((item) => generateExportText(item.node))
 						.join("\n");
 
-					const [rangeStart] = firstNode.range;
+					const rangeStart = getNodeStart(firstNode);
 					const [, rangeEnd] = lastNode.range;
 
 					const fullText = sourceCode.getText();

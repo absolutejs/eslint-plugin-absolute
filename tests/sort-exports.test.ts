@@ -264,4 +264,21 @@ tsRuleTester.run("sort-exports (type exports)", sortExports, {
 	]
 });
 
+tsRuleTester.run("sort-exports (decorated classes)", sortExports, {
+	invalid: [
+		{
+			code: `@Dec("b")\nexport class Beta {}\n@Dec("a")\nexport class Alpha {}`,
+			errors: [{ messageId: "alphabetical" }],
+			name: "decorated class exports are reordered together with their decorators",
+			output: `@Dec("a")\nexport class Alpha {};\n@Dec("b")\nexport class Beta {};`
+		}
+	],
+	valid: [
+		{
+			code: `@Dec("z")\nexport class Zed {}\n@Dec(Zed)\nexport class Alpha {}`,
+			name: "does not reorder when a decorator references a later export (forward reference)"
+		}
+	]
+});
+
 console.log("sort-exports: All tests passed!");

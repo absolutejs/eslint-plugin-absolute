@@ -2032,6 +2032,12 @@ var visitImmediateReferences = (node, onReference) => {
   };
   visit(node);
 };
+var getDeclarationDecorators = (declaration) => {
+  if (declaration && "decorators" in declaration && Array.isArray(declaration.decorators)) {
+    return declaration.decorators;
+  }
+  return [];
+};
 var getImmediateDependencyNames = (node) => {
   const names = new Set;
   const { declaration } = node;
@@ -2047,6 +2053,7 @@ var getImmediateDependencyNames = (node) => {
   }
   if (declaration.type === "ClassDeclaration") {
     visitImmediateReferences(declaration.superClass, addName);
+    getDeclarationDecorators(declaration).forEach((decorator) => visitImmediateReferences(decorator, addName));
     declaration.body.body.forEach(addClassElementDependencies);
   }
   return names;
@@ -2060,7 +2067,9 @@ var sortExports = createRule({
     const natural = option && typeof option.natural === "boolean" ? option.natural : false;
     const minKeys = option && typeof option.minKeys === "number" ? option.minKeys : 2;
     const variablesBeforeFunctions = option && typeof option.variablesBeforeFunctions === "boolean" ? option.variablesBeforeFunctions : false;
-    const generateExportText = (node) => sourceCode.getText(node).trim().replace(/\s*;?\s*$/, ";");
+    const getNodeStart = (node) => getDeclarationDecorators(node.declaration).reduce((start, decorator) => Math.min(start, decorator.range[0]), node.range[0]);
+    const getNodeText = (node) => sourceCode.getText().slice(getNodeStart(node), node.range[1]);
+    const generateExportText = (node) => getNodeText(node).trim().replace(/\s*;?\s*$/, ";");
     const compareStrings = (strLeft, strRight) => {
       let left = strLeft;
       let right = strRight;
@@ -2115,7 +2124,7 @@ var sortExports = createRule({
         isFunction: isFunctionExport(node),
         name,
         node,
-        text: sourceCode.getText(node)
+        text: getNodeText(node)
       };
       return item;
     }).filter((item) => item !== null);
@@ -2208,7 +2217,7 @@ var sortExports = createRule({
           }
           const sortedText = sortedItems.map((item) => generateExportText(item.node)).join(`
 `);
-          const [rangeStart] = firstNode.range;
+          const rangeStart = getNodeStart(firstNode);
           const [, rangeEnd] = lastNode.range;
           const fullText = sourceCode.getText();
           const originalText = fullText.slice(rangeStart, rangeEnd);
@@ -3744,6 +3753,65 @@ var noRedundantTypeAnnotation = createRule({
   name: "no-redundant-type-annotation"
 });
 
+// src/rules/no-import-meta-path.ts
+var FILESYSTEM_PATH_PROPERTIES = new Set(["dir", "dirname", "filename"]);
+var isImportMeta = (node) => node.type === "MetaProperty" && node.meta.name === "import" && node.property.name === "meta";
+var importMetaProperty = (node) => {
+  if (!isImportMeta(node.object))
+    return null;
+  if (node.computed || node.property.type !== "Identifier")
+    return null;
+  return node.property.name;
+};
+var calleeName = (callee) => {
+  if (callee.type === "Identifier")
+    return callee.name;
+  if (callee.type === "MemberExpression" && callee.property.type === "Identifier") {
+    return callee.property.name;
+  }
+  return null;
+};
+var noImportMetaPath = createRule({
+  create(context) {
+    return {
+      CallExpression(node) {
+        if (calleeName(node.callee) !== "fileURLToPath")
+          return;
+        const urlArgument = node.arguments.find((argument) => argument.type === "MemberExpression" && importMetaProperty(argument) === "url");
+        if (urlArgument) {
+          context.report({
+            messageId: "importMetaUrl",
+            node: urlArgument
+          });
+        }
+      },
+      MemberExpression(node) {
+        const property = importMetaProperty(node);
+        if (property && FILESYSTEM_PATH_PROPERTIES.has(property)) {
+          context.report({
+            data: { property },
+            messageId: "importMetaPath",
+            node
+          });
+        }
+      }
+    };
+  },
+  defaultOptions: [],
+  meta: {
+    docs: {
+      description: "Disallow deriving filesystem paths from a module's own location (`import.meta.dir`/`dirname`/`filename`, `fileURLToPath(import.meta.url)`). They move when the server is bundled, so paths break in `absolute start`. Anchor to `projectRoot` from @absolutejs/absolute or `process.cwd()`. This targets application server code; a library locating its OWN shipped assets is a legitimate exception (projectRoot is the consuming app's root, not the package's location) \u2014 turn the rule off for those files via an override."
+    },
+    messages: {
+      importMetaPath: "`import.meta.{{property}}` resolves this module's own location, which is your src/ tree in `absolute dev` but the bundled dist/ in `absolute start` \u2014 module-relative paths silently break in production. Anchor runtime/data paths to `projectRoot` from @absolutejs/absolute (or `process.cwd()`).",
+      importMetaUrl: "`fileURLToPath(import.meta.url)` derives a filesystem path from this module's own location, which moves when the server is bundled (src/ in `absolute dev`, dist/ in `absolute start`) \u2014 so the path silently breaks in production. Anchor runtime/data paths to `projectRoot` from @absolutejs/absolute (or `process.cwd()`)."
+    },
+    schema: [],
+    type: "problem"
+  },
+  name: "no-import-meta-path"
+});
+
 // src/rules/no-trivial-alias.ts
 var isBareTypeReference = (node) => {
   if (node.type === "TSTypeReference") {
@@ -3995,6 +4063,7 @@ var src_default = {
     "min-var-length": minVarLength,
     "no-button-navigation": noButtonNavigation,
     "no-explicit-return-type": noExplicitReturnTypes,
+    "no-import-meta-path": noImportMetaPath,
     "no-inline-object-types": noInlineObjectTypes,
     "no-multi-style-objects": noMultiStyleObjects,
     "no-nested-jsx-return": noNestedJSXReturn,
