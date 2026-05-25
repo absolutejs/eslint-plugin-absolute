@@ -32,6 +32,7 @@
 	},
 	"scripts": {
 		"build": "rm -rf dist && bun build src/index.ts --outdir dist --splitting --target=bun --external eslint --external @typescript-eslint/utils --external typescript",
+		"config": "absolute config",
 		"format": "absolutejs prettier --write",
 		"lint": "bun run build && bun run absolutejs eslint",
 		"knip": "knip",
