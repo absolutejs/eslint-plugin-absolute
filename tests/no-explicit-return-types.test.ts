@@ -57,6 +57,18 @@ ruleTester.run("no-explicit-return-types", noExplicitReturnTypes, {
 		{
 			code: `function foo(): Obj { if (x) return { a: 1 }; return { b: 2 }; }`,
 			name: "multiple returns but only one direct return in block body (allowed)"
+		},
+		{
+			code: `const serializeValue = (value: unknown): string => { if (Array.isArray(value)) return value.map(serializeValue).join(","); return String(value); };`,
+			name: "recursive arrow assigned to const (self-reference requires annotation)"
+		},
+		{
+			code: `function walk(node: Node): number { return node.children.reduce((sum, child) => sum + walk(child), 0); }`,
+			name: "recursive function declaration (self-reference requires annotation)"
+		},
+		{
+			code: `const fact = function go(n: number): number { return n <= 1 ? 1 : n * go(n - 1); };`,
+			name: "recursive named function expression (self-reference requires annotation)"
 		}
 	]
 });
