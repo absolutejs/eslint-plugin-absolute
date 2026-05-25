@@ -4,7 +4,7 @@ import { AST_NODE_TYPES } from "@typescript-eslint/utils";
 
 // src/createRule.ts
 import { ESLintUtils } from "@typescript-eslint/utils";
-var createRule = ESLintUtils.RuleCreator((name) => `https://absolutejs.com/documentation/eslint/${name}`);
+var createRule = ESLintUtils.RuleCreator((name) => `https://absolutejs.com/documentation/eslint-${name}`);
 
 // src/rules/angular-one-feature-per-file.ts
 var FEATURE_DECORATOR_NAMES = new Set([
@@ -1714,6 +1714,32 @@ var noExplicitReturnTypes = createRule({
       const [returnStmt] = returnStatements;
       return returnStmt?.argument?.type === "ObjectExpression";
     };
+    const getOwnName = (node) => {
+      if (node.id)
+        return node.id.name;
+      const { parent } = node;
+      if (parent.type === "VariableDeclarator" && parent.id.type === "Identifier") {
+        return parent.id.name;
+      }
+      return;
+    };
+    const getDeclaringNode = (node) => {
+      if (node.id)
+        return node;
+      const { parent } = node;
+      if (parent.type === "VariableDeclarator")
+        return parent.parent;
+      return node;
+    };
+    const referencesOwnName = (node) => {
+      const ownName = getOwnName(node);
+      if (!ownName)
+        return false;
+      const variable = context.sourceCode.getDeclaredVariables(getDeclaringNode(node)).find((candidate) => candidate.name === ownName);
+      if (!variable)
+        return false;
+      return variable.references.some((reference) => reference.identifier.range[0] >= node.range[0] && reference.identifier.range[1] <= node.range[1]);
+    };
     return {
       "FunctionDeclaration, FunctionExpression, ArrowFunctionExpression"(node) {
         const { returnType } = node;
@@ -1728,6 +1754,9 @@ var noExplicitReturnTypes = createRule({
           return;
         }
         if (node.body && node.body.type === "BlockStatement" && hasSingleObjectReturn(node.body)) {
+          return;
+        }
+        if (referencesOwnName(node)) {
           return;
         }
         context.report({
