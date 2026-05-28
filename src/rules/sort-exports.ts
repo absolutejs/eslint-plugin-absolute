@@ -223,7 +223,7 @@ const visitImmediateReferences = (
 // so they must be accounted for explicitly when reading or moving an export.
 const getDeclarationDecorators = (
 	declaration: TSESTree.Node | null | undefined
-): readonly TSESTree.Decorator[] => {
+) => {
 	if (
 		declaration &&
 		"decorators" in declaration &&

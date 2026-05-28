@@ -898,7 +898,6 @@ export const sortKeysFixable = createRule<Options, MessageIds>({
 			return null;
 		};
 
-		// eslint-disable-next-line absolute/no-explicit-return-type
 		const getTsCalleePath = (callee: ts.Expression): string | null => {
 			if (ts.isParenthesizedExpression(callee)) {
 				return getTsCalleePath(callee.expression);
@@ -1213,7 +1212,6 @@ export const sortKeysFixable = createRule<Options, MessageIds>({
 		const isPureTsExpression = (
 			node: ts.Node | undefined,
 			stableLocals: ReadonlySet<string>
-			// eslint-disable-next-line absolute/no-explicit-return-type
 		): boolean => {
 			if (!node) {
 				return false;
@@ -1375,7 +1373,6 @@ export const sortKeysFixable = createRule<Options, MessageIds>({
 		// matching against the pureImports allowlist. Returns null if the
 		// callee is dynamic (computed access, calls, etc.) and can't be
 		// expressed as a simple path.
-		// eslint-disable-next-line absolute/no-explicit-return-type
 		const getCalleePath = (node: TSESTree.Node): string | null => {
 			if (node.type === "Identifier") {
 				return node.name;
@@ -1509,7 +1506,6 @@ export const sortKeysFixable = createRule<Options, MessageIds>({
 		//   - Function-returning factories (`Validators.minLength(1)`)     → yes
 		//     (constructing a fresh closure is itself an encapsulated op)
 		//   - Primitives, void                                             → no
-		// eslint-disable-next-line absolute/no-explicit-return-type
 		const isObjectLikeType = (type: ts.Type): boolean => {
 			if (
 				type.flags &

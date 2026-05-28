@@ -42,6 +42,7 @@ export default defineConfig([
 				{ allowedVars: ["_", "id"], minLength: 3 }
 			],
 			"absolute/no-explicit-return-type": "error",
+			"absolute/no-useless-catch": "error",
 			"absolute/no-useless-function": "error",
 			"absolute/sort-exports": [
 				"error",
@@ -94,6 +95,7 @@ export default defineConfig([
 	{
 		files: [
 			"eslint.config.mjs",
+			"knip.json",
 			"package.json",
 			"**/tsconfig.json",
 			".prettierrc.json"

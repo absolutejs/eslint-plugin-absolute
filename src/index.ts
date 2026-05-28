@@ -12,6 +12,7 @@ import { localizeReactProps } from "./rules/localize-react-props";
 import { noOrNoneComponent } from "./rules/no-or-none-component";
 import { noButtonNavigation } from "./rules/no-button-navigation";
 import { noMultiStyleObjects } from "./rules/no-multi-style-objects";
+import { noUselessCatch } from "./rules/no-useless-catch";
 import { noUselessFunction } from "./rules/no-useless-function";
 import { minVarLength } from "./rules/min-var-length";
 import { maxDepthExtended } from "./rules/max-depth-extended";
@@ -47,6 +48,7 @@ export default {
 		"no-trivial-alias": noTrivialAlias,
 		"no-unnecessary-div": noUnnecessaryDiv,
 		"no-unnecessary-key": noUnnecessaryKey,
+		"no-useless-catch": noUselessCatch,
 		"no-useless-function": noUselessFunction,
 		"prefer-inline-exports": preferInlineExports,
 		"seperate-style-files": seperateStyleFiles,

@@ -69,7 +69,7 @@ const isConstSource = (
 	if (!variable || variable.defs.length === 0) return false;
 	return variable.defs.every((def) => {
 		if (def.type !== "Variable") return false;
-		const {parent} = def;
+		const { parent } = def;
 		if (!parent || parent.type !== "VariableDeclaration") return false;
 		return parent.kind === "const";
 	});

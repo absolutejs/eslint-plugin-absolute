@@ -8,7 +8,7 @@ type MessageIds = "importMetaPath" | "importMetaUrl";
 // module's own location: Bun's `dir`, Node's `dirname`/`filename`.
 const FILESYSTEM_PATH_PROPERTIES = new Set(["dir", "dirname", "filename"]);
 
-const isImportMeta = (node: TSESTree.Node): boolean =>
+const isImportMeta = (node: TSESTree.Node) =>
 	node.type === "MetaProperty" &&
 	node.meta.name === "import" &&
 	node.property.name === "meta";
@@ -16,14 +16,14 @@ const isImportMeta = (node: TSESTree.Node): boolean =>
 /**
  * For a member access `import.meta.<x>`, returns `<x>`; otherwise null.
  */
-const importMetaProperty = (node: TSESTree.MemberExpression): string | null => {
+const importMetaProperty = (node: TSESTree.MemberExpression) => {
 	if (!isImportMeta(node.object)) return null;
 	if (node.computed || node.property.type !== "Identifier") return null;
 
 	return node.property.name;
 };
 
-const calleeName = (callee: TSESTree.Node): string | null => {
+const calleeName = (callee: TSESTree.Node) => {
 	if (callee.type === "Identifier") return callee.name;
 	if (
 		callee.type === "MemberExpression" &&
