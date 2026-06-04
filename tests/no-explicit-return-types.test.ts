@@ -31,6 +31,16 @@ ruleTester.run("no-explicit-return-types", noExplicitReturnTypes, {
 			code: `function foo(): void { return; }`,
 			errors: [{ messageId: "noExplicitReturnType" }],
 			name: "return with no argument and explicit void return type"
+		},
+		{
+			code: `const identity = <T>(value: T): T => value;`,
+			errors: [{ messageId: "noExplicitReturnType" }],
+			name: "type param used in params and return is inferable (still flagged)"
+		},
+		{
+			code: `const first = <T>(values: T[]): T => values[0];`,
+			errors: [{ messageId: "noExplicitReturnType" }],
+			name: "type param used in a parameter type is inferable (still flagged)"
 		}
 	],
 	valid: [
@@ -69,6 +79,18 @@ ruleTester.run("no-explicit-return-types", noExplicitReturnTypes, {
 		{
 			code: `const fact = function go(n: number): number { return n <= 1 ? 1 : n * go(n - 1); };`,
 			name: "recursive named function expression (self-reference requires annotation)"
+		},
+		{
+			code: `const asArray = <T>(value: unknown): T[] => (Array.isArray(value) ? value : []);`,
+			name: "type param only in return type cannot be inferred (annotation required)"
+		},
+		{
+			code: `function asSet<T>(value: unknown): Set<T> { return new Set(); }`,
+			name: "function declaration with return-only type param (annotation required)"
+		},
+		{
+			code: `const toRecord = <T>(value: unknown): Record<string, T> => JSON.parse(String(value));`,
+			name: "return-only type param nested in a generic (annotation required)"
 		}
 	]
 });

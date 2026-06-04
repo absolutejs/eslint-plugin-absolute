@@ -47,6 +47,70 @@ export const noExplicitReturnTypes = createRule<Options, MessageIds>({
 			return node;
 		};
 
+		// Collect the names of every type referenced (via TSTypeReference)
+		// anywhere inside an AST subtree — e.g. `T`, `T[]`, `Foo<T>`,
+		// `keyof T` all surface the identifier `T`.
+		const collectTypeReferenceNames = (root: unknown) => {
+			const names = new Set<string>();
+			const visit = (value: unknown) => {
+				if (!value || typeof value !== "object") {
+					return;
+				}
+				if (Array.isArray(value)) {
+					value.forEach(visit);
+
+					return;
+				}
+				const candidate = value as { type?: unknown };
+				if (typeof candidate.type !== "string") {
+					return;
+				}
+				const astNode = value as TSESTree.Node;
+				if (
+					astNode.type === "TSTypeReference" &&
+					astNode.typeName.type === "Identifier"
+				) {
+					names.add(astNode.typeName.name);
+				}
+				for (const key of Object.keys(astNode)) {
+					if (key === "parent") {
+						continue;
+					}
+					visit((astNode as unknown as Record<string, unknown>)[key]);
+				}
+			};
+			visit(root);
+
+			return names;
+		};
+
+		// A type parameter used ONLY in the return-type annotation (and
+		// nowhere in the parameter list) cannot be inferred — the annotation
+		// is the function's contract, e.g. `<T>(value: unknown): T[]` consumed
+		// as `asArray<string>(x)`. Stripping it would orphan the type
+		// parameter or force a (banned) assertion, so the annotation is
+		// required — not stylistic.
+		const hasReturnOnlyTypeParameter = (node: AnyFunctionNode) => {
+			const declaredTypeParams = node.typeParameters?.params;
+			if (!declaredTypeParams || declaredTypeParams.length === 0) {
+				return false;
+			}
+
+			const returnTypeNames = collectTypeReferenceNames(node.returnType);
+			const parameterTypeNames = new Set<string>();
+			for (const parameter of node.params) {
+				for (const name of collectTypeReferenceNames(parameter)) {
+					parameterTypeNames.add(name);
+				}
+			}
+
+			return declaredTypeParams.some(
+				(typeParam) =>
+					returnTypeNames.has(typeParam.name.name) &&
+					!parameterTypeNames.has(typeParam.name.name)
+			);
+		};
+
 		// A function that references its own name in its body is recursive.
 		// TypeScript cannot infer a return type that depends on the function's
 		// own result (TS7023), so the annotation is required — not stylistic.
@@ -109,6 +173,13 @@ export const noExplicitReturnTypes = createRule<Options, MessageIds>({
 					return;
 				}
 
+				// Allow generics whose type parameter only appears in the
+				// return type — inference cannot reproduce it, so the
+				// annotation is the contract (e.g. `<T>(v: unknown): T[]`).
+				if (hasReturnOnlyTypeParameter(node)) {
+					return;
+				}
+
 				// Otherwise, report an error.
 				context.report({
 					messageId: "noExplicitReturnType",
@@ -121,7 +192,7 @@ export const noExplicitReturnTypes = createRule<Options, MessageIds>({
 	meta: {
 		docs: {
 			description:
-				"Disallow explicit return type annotations on functions, except when using type predicates for type guards or inline object literal returns (e.g., style objects)."
+				"Disallow explicit return type annotations on functions, except when the annotation is load-bearing: type predicates for type guards, inline object literal returns (e.g., style objects), recursive functions, or generics whose type parameter appears only in the return type."
 		},
 		messages: {
 			noExplicitReturnType:

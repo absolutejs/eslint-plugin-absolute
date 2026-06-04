@@ -243,6 +243,14 @@ ruleTester.run("sort-exports", sortExports, {
 					variablesBeforeFunctions: true
 				}
 			]
+		},
+		{
+			code: `export const zebra = makeZebra();\nexport const alpha = items.map((item) => zebra(item));`,
+			name: "forward dependency through a .map() callback (runs at init) skips sorting"
+		},
+		{
+			code: `export const zebra = 1;\nexport const alpha = (() => zebra + 1)();`,
+			name: "forward dependency through an IIFE (runs at init) skips sorting"
 		}
 	]
 });

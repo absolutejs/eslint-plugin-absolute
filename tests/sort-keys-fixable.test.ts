@@ -65,7 +65,53 @@ ruleTester.run("sort-keys-fixable", sortKeysFixable, {
 		{
 			code: `const obj = { ...rest, b: 1, a: 2 };`,
 			errors: [{ messageId: "unsorted" }],
-			name: "spread element disables autofix"
+			name: "spread segments the object; the post-spread segment sorts (literals)",
+			output: `const obj = { ...rest, a: 2, b: 1 };`
+		},
+		{
+			code: `const obj = { b: 1, a: 2, ...rest };`,
+			errors: [{ messageId: "unsorted" }],
+			name: "trailing spread: the pre-spread segment sorts",
+			output: `const obj = { a: 2, b: 1, ...rest };`
+		},
+		{
+			code: `const obj = { d: 4, c: 3, ...rest, b: 2, a: 1 };`,
+			errors: [{ messageId: "unsorted" }, { messageId: "unsorted" }],
+			name: "mid spread: both segments sort independently, spread stays put",
+			output: `const obj = { c: 3, d: 4, ...rest, a: 1, b: 2 };`
+		},
+		{
+			code: `const obj = { z: 1, y: 2, ...a, ...b, q: 3, p: 4 };`,
+			errors: [{ messageId: "unsorted" }, { messageId: "unsorted" }],
+			name: "multiple spreads: each segment sorts, spreads never cross",
+			output: `const obj = { y: 2, z: 1, ...a, ...b, p: 4, q: 3 };`
+		},
+		{
+			code: `const obj = { ...base, flush: () => 1, append: () => 2 };`,
+			errors: [{ messageId: "unsorted" }],
+			name: "post-spread segment with function-literal values sorts (pure to construct)",
+			output: `const obj = { ...base, append: () => 2, flush: () => 1 };`
+		},
+		{
+			code: `const obj = { ...rest, b: 1, a: foo() };`,
+			errors: [{ messageId: "unsorted" }],
+			name: "segment with a single impure value still sorts",
+			output: `const obj = { ...rest, a: foo(), b: 1 };`
+		},
+		{
+			code: `const obj = { ...rest, b: foo(), a: bar() };`,
+			errors: [{ messageId: "unsorted" }],
+			name: "segment with two impure values reports but is NOT fixed"
+		},
+		{
+			code: `const obj = { ...rest, [x]: 1, b: 2, a: 3 };`,
+			errors: [{ messageId: "unsorted" }, { messageId: "unsorted" }],
+			name: "computed key still disables the fix globally, even across a spread"
+		},
+		{
+			code: `const obj = { ...rest, b: 1, a: 2, b: 3 };`,
+			errors: [{ messageId: "unsorted" }],
+			name: "duplicate key still disables the fix globally, even across a spread"
 		},
 		{
 			code: `const obj = { b: 1, a: 2, a: 3 };`,
@@ -649,6 +695,18 @@ const component = {
 		{
 			code: `const obj = { a: 1, b: 2, c: 3 };`,
 			name: "already sorted, no comments"
+		},
+		{
+			code: `const obj = { z: 1, ...rest, a: 2 };`,
+			name: "keys on opposite sides of a spread are not compared (can't be reordered)"
+		},
+		{
+			code: `const obj = { a: 1, b: 2, ...rest, c: 3, d: 4 };`,
+			name: "each spread-delimited segment already sorted"
+		},
+		{
+			code: `const obj = { ...a, b: 1, ...c, d: 2 };`,
+			name: "single-key segments between spreads have nothing to sort"
 		},
 		{
 			code: `const obj = {

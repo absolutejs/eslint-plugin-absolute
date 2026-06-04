@@ -179,7 +179,38 @@ const visitImmediateReferences = (
 			case "FunctionDeclaration":
 			case "FunctionExpression":
 			case "ArrowFunctionExpression":
+				// A bare function literal only creates a closure here — its body
+				// is deferred until called, so it adds no init-time dependency.
+				// Bodies are entered only via an invoking call below.
 				return;
+			case "CallExpression":
+			case "NewExpression": {
+				// The callee runs now (a literal callee is an IIFE) and each
+				// argument may be invoked synchronously by the callee
+				// (.map/.filter/.forEach/.reduce/Array.from/…). We can't prove a
+				// call is synchronous, so treat both conservatively as init-time:
+				// over-counting a dependency only makes the export sort bail out
+				// (safe), never reorder across a real initialization dependency.
+				const runAtInit = (
+					invoked: TSESTree.Node | null | undefined
+				) => {
+					if (!invoked) {
+						return;
+					}
+					if (
+						invoked.type === "FunctionDeclaration" ||
+						invoked.type === "FunctionExpression" ||
+						invoked.type === "ArrowFunctionExpression"
+					) {
+						visit(invoked.body);
+						return;
+					}
+					visit(invoked);
+				};
+				runAtInit(current.callee);
+				current.arguments.forEach(runAtInit);
+				return;
+			}
 			case "MemberExpression":
 				visit(current.object);
 				if (current.computed) {

@@ -2017,6 +2017,31 @@ export const sortKeysFixable = createRule<Options, MessageIds>({
 			return prevEnd;
 		};
 
+		// Shared property comparator — the single source of truth for both the
+		// "is this segment already sorted?" check and the fixer's reorder, so the
+		// fix can never produce output the sortedness check would re-flag.
+		const compareProps = (
+			left: TSESTree.Property,
+			right: TSESTree.Property
+		) => {
+			if (variablesBeforeFunctions) {
+				const leftIsFunc = isFunctionProperty(left);
+				const rightIsFunc = isFunctionProperty(right);
+				if (leftIsFunc !== rightIsFunc) {
+					return leftIsFunc ? 1 : SORT_BEFORE;
+				}
+			}
+
+			let res = compareKeys(
+				getPropertyKeyName(left),
+				getPropertyKeyName(right)
+			);
+			if (order === "desc") {
+				res = -res;
+			}
+			return res;
+		};
+
 		/**
 		 * Build the sorted text from the fixable properties while preserving
 		 * comments and formatting.
@@ -2063,24 +2088,9 @@ export const sortKeysFixable = createRule<Options, MessageIds>({
 			}
 
 			// Sort the chunks
-			const sorted = chunks.slice().sort((left, right) => {
-				if (variablesBeforeFunctions) {
-					const leftIsFunc = isFunctionProperty(left.prop);
-					const rightIsFunc = isFunctionProperty(right.prop);
-					if (leftIsFunc !== rightIsFunc) {
-						return leftIsFunc ? 1 : SORT_BEFORE;
-					}
-				}
-
-				const leftKey = getPropertyKeyName(left.prop);
-				const rightKey = getPropertyKeyName(right.prop);
-
-				let res = compareKeys(leftKey, rightKey);
-				if (order === "desc") {
-					res = -res;
-				}
-				return res;
-			});
+			const sorted = chunks
+				.slice()
+				.sort((left, right) => compareProps(left.prop, right.prop));
 
 			// Detect separator: check if the object is multiline by comparing
 			// the first and last property lines. If multiline, use the
@@ -2119,15 +2129,6 @@ export const sortKeysFixable = createRule<Options, MessageIds>({
 				.join("");
 		};
 
-		const getFixableProps = (node: TSESTree.ObjectExpression) =>
-			node.properties.filter(
-				(prop): prop is TSESTree.Property =>
-					prop.type === "Property" &&
-					!prop.computed &&
-					(prop.key.type === "Identifier" ||
-						prop.key.type === "Literal")
-			);
-
 		/**
 		 * Checks an ObjectExpression node for unsorted keys.
 		 * Reports an error on each out-of-order key.
@@ -2140,25 +2141,44 @@ export const sortKeysFixable = createRule<Options, MessageIds>({
 				return;
 			}
 
+			// Spread elements partition the object into independent segments — a
+			// segment is a maximal run of consecutive Property nodes. Sorting only
+			// ever happens WITHIN a segment, so a key can never cross a spread
+			// (which would change which value wins). Each segment is sorted on its
+			// own; the spreads stay exactly where they are.
+			const segments: TSESTree.Property[][] = [];
+			let currentSegment: TSESTree.Property[] = [];
+			for (const prop of node.properties) {
+				if (prop.type === "Property") {
+					currentSegment.push(prop);
+					continue;
+				}
+				if (currentSegment.length > 0) {
+					segments.push(currentSegment);
+					currentSegment = [];
+				}
+			}
+			if (currentSegment.length > 0) {
+				segments.push(currentSegment);
+			}
+
+			// Global fix blockers (rare, kept deliberately conservative): a
+			// computed key, a non-Identifier/Literal key, or a real duplicate
+			// disables the fix for the whole object. Spreads do NOT block — they
+			// only segment (handled above).
 			let autoFixable = true;
 
 			const keys: KeyInfo[] = node.properties.map((prop) => {
-				let keyName: string | null = null;
-				let isFunc = false;
-
 				if (prop.type !== "Property") {
-					autoFixable = false;
-					return {
-						isFunction: isFunc,
-						keyName,
-						node: prop
-					};
+					// SpreadElement — a segment boundary, never a sortable key.
+					return { isFunction: false, keyName: null, node: prop };
 				}
 
 				if (prop.computed) {
 					autoFixable = false;
 				}
 
+				let keyName: string | null = null;
 				if (prop.key.type === "Identifier") {
 					keyName = prop.key.name;
 				} else if (prop.key.type === "Literal") {
@@ -2168,12 +2188,8 @@ export const sortKeysFixable = createRule<Options, MessageIds>({
 					autoFixable = false;
 				}
 
-				if (isFunctionProperty(prop)) {
-					isFunc = true;
-				}
-
 				return {
-					isFunction: isFunc,
+					isFunction: isFunctionProperty(prop),
 					keyName,
 					node: prop
 				};
@@ -2183,23 +2199,26 @@ export const sortKeysFixable = createRule<Options, MessageIds>({
 				autoFixable = false;
 			}
 
-			// Reordering object literal properties is safe when at most one
-			// value has side effects: JS evaluates property values in source
-			// order, so if only one value is impure it gets called exactly
-			// once regardless of position, and its execution order relative
-			// to anything outside the literal is unchanged. Two or more
-			// impure values would have their execution order swapped.
-			if (autoFixable) {
-				const impureCount = keys.filter(
-					(key) =>
-						key.node.type === "Property" &&
+			// Reordering a segment's properties is safe when at most one of its
+			// values has side effects: JS evaluates property values in source
+			// order, so a single impure value runs exactly once regardless of
+			// position. Two or more would have their execution order swapped.
+			// Judged PER SEGMENT — a spread pins the values on either side of it,
+			// so each segment's evaluation order is independent of the others.
+			const isSegmentFixable = (segment: TSESTree.Property[]) =>
+				segment.filter(
+					(prop) =>
 						!isPureRuntimeExpression(
-							key.node.value,
-							getStableLocalsForNode(key.node)
+							prop.value,
+							getStableLocalsForNode(prop)
 						)
-				).length;
-				autoFixable = impureCount <= 1;
-			}
+				).length <= 1;
+
+			const isSegmentSorted = (segment: TSESTree.Property[]) =>
+				segment.every(
+					(prop, idx) =>
+						idx === 0 || compareProps(segment[idx - 1]!, prop) <= 0
+				);
 
 			let fixProvided = false;
 
@@ -2207,45 +2226,45 @@ export const sortKeysFixable = createRule<Options, MessageIds>({
 				context.report({
 					fix: shouldFix
 						? (fixer) => {
-								const fixableProps = getFixableProps(node);
-								if (fixableProps.length < minKeys) {
-									return null;
-								}
+								// One replacement per fixable, unsorted segment;
+								// segments are non-overlapping (spreads sit
+								// between them and are never touched).
+								const fixes = segments
+									.filter(
+										(segment) =>
+											segment.length >= minKeys &&
+											isSegmentFixable(segment) &&
+											!isSegmentSorted(segment)
+									)
+									.map((segment) => {
+										const [firstProp] = segment;
+										const lastProp =
+											segment[segment.length - 1]!;
+										const firstLeading = getLeadingComments(
+											firstProp!,
+											null
+										);
+										const [firstLeadingComment] =
+											firstLeading;
+										const rangeStart = firstLeadingComment
+											? firstLeadingComment.range[0]
+											: firstProp!.range[0];
+										const lastTrailing =
+											getTrailingComments(lastProp, null);
+										const rangeEnd =
+											lastTrailing.length > 0
+												? lastTrailing[
+														lastTrailing.length - 1
+													]!.range[1]
+												: lastProp.range[1];
 
-								const [firstProp] = fixableProps;
-								const lastProp =
-									fixableProps[fixableProps.length - 1];
+										return fixer.replaceTextRange(
+											[rangeStart, rangeEnd],
+											buildSortedText(segment, rangeStart)
+										);
+									});
 
-								if (!firstProp || !lastProp) {
-									return null;
-								}
-
-								const firstLeading = getLeadingComments(
-									firstProp,
-									null
-								);
-								const [firstLeadingComment] = firstLeading;
-								const rangeStart = firstLeadingComment
-									? firstLeadingComment.range[0]
-									: firstProp.range[0];
-								const lastTrailing = getTrailingComments(
-									lastProp,
-									null
-								);
-								const rangeEnd =
-									lastTrailing.length > 0
-										? lastTrailing[lastTrailing.length - 1]!
-												.range[1]
-										: lastProp.range[1];
-								const sortedText = buildSortedText(
-									fixableProps,
-									rangeStart
-								);
-
-								return fixer.replaceTextRange(
-									[rangeStart, rangeEnd],
-									sortedText
-								);
+								return fixes.length > 0 ? fixes : null;
 							}
 						: null,
 					messageId: "unsorted",

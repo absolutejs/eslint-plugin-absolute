@@ -1343,6 +1343,20 @@ var sortKeysFixable = createRule({
       }
       return prevEnd;
     };
+    const compareProps = (left, right) => {
+      if (variablesBeforeFunctions) {
+        const leftIsFunc = isFunctionProperty(left);
+        const rightIsFunc = isFunctionProperty(right);
+        if (leftIsFunc !== rightIsFunc) {
+          return leftIsFunc ? 1 : SORT_BEFORE;
+        }
+      }
+      let res = compareKeys(getPropertyKeyName(left), getPropertyKeyName(right));
+      if (order === "desc") {
+        res = -res;
+      }
+      return res;
+    };
     const buildSortedText = (fixableProps, rangeStart) => {
       const chunks = [];
       for (let idx = 0;idx < fixableProps.length; idx++) {
@@ -1357,22 +1371,7 @@ var sortKeysFixable = createRule({
         const text = sourceCode.text.slice(chunkStart, fullEnd);
         chunks.push({ prop, text });
       }
-      const sorted = chunks.slice().sort((left, right) => {
-        if (variablesBeforeFunctions) {
-          const leftIsFunc = isFunctionProperty(left.prop);
-          const rightIsFunc = isFunctionProperty(right.prop);
-          if (leftIsFunc !== rightIsFunc) {
-            return leftIsFunc ? 1 : SORT_BEFORE;
-          }
-        }
-        const leftKey = getPropertyKeyName(left.prop);
-        const rightKey = getPropertyKeyName(right.prop);
-        let res = compareKeys(leftKey, rightKey);
-        if (order === "desc") {
-          res = -res;
-        }
-        return res;
-      });
+      const sorted = chunks.slice().sort((left, right) => compareProps(left.prop, right.prop));
       const firstPropLine = fixableProps[0].loc.start.line;
       const lastPropLine = fixableProps[fixableProps.length - 1].loc.start.line;
       const isMultiline = firstPropLine !== lastPropLine;
@@ -1396,26 +1395,34 @@ ${indent}`;
         return separator + stripped;
       }).join("");
     };
-    const getFixableProps = (node) => node.properties.filter((prop) => prop.type === "Property" && !prop.computed && (prop.key.type === "Identifier" || prop.key.type === "Literal"));
     const checkObjectExpression = (node) => {
       if (node.properties.length < minKeys) {
         return;
       }
+      const segments = [];
+      let currentSegment = [];
+      for (const prop of node.properties) {
+        if (prop.type === "Property") {
+          currentSegment.push(prop);
+          continue;
+        }
+        if (currentSegment.length > 0) {
+          segments.push(currentSegment);
+          currentSegment = [];
+        }
+      }
+      if (currentSegment.length > 0) {
+        segments.push(currentSegment);
+      }
       let autoFixable = true;
       const keys = node.properties.map((prop) => {
-        let keyName = null;
-        let isFunc = false;
         if (prop.type !== "Property") {
-          autoFixable = false;
-          return {
-            isFunction: isFunc,
-            keyName,
-            node: prop
-          };
+          return { isFunction: false, keyName: null, node: prop };
         }
         if (prop.computed) {
           autoFixable = false;
         }
+        let keyName = null;
         if (prop.key.type === "Identifier") {
           keyName = prop.key.name;
         } else if (prop.key.type === "Literal") {
@@ -1424,11 +1431,8 @@ ${indent}`;
         } else {
           autoFixable = false;
         }
-        if (isFunctionProperty(prop)) {
-          isFunc = true;
-        }
         return {
-          isFunction: isFunc,
+          isFunction: isFunctionProperty(prop),
           keyName,
           node: prop
         };
@@ -1436,30 +1440,23 @@ ${indent}`;
       if (hasDuplicatePropertyNames(node.properties)) {
         autoFixable = false;
       }
-      if (autoFixable) {
-        const impureCount = keys.filter((key) => key.node.type === "Property" && !isPureRuntimeExpression(key.node.value, getStableLocalsForNode(key.node))).length;
-        autoFixable = impureCount <= 1;
-      }
+      const isSegmentFixable = (segment) => segment.filter((prop) => !isPureRuntimeExpression(prop.value, getStableLocalsForNode(prop))).length <= 1;
+      const isSegmentSorted = (segment) => segment.every((prop, idx) => idx === 0 || compareProps(segment[idx - 1], prop) <= 0);
       let fixProvided = false;
       const createReportWithFix = (curr, shouldFix) => {
         context.report({
           fix: shouldFix ? (fixer) => {
-            const fixableProps = getFixableProps(node);
-            if (fixableProps.length < minKeys) {
-              return null;
-            }
-            const [firstProp] = fixableProps;
-            const lastProp = fixableProps[fixableProps.length - 1];
-            if (!firstProp || !lastProp) {
-              return null;
-            }
-            const firstLeading = getLeadingComments(firstProp, null);
-            const [firstLeadingComment] = firstLeading;
-            const rangeStart = firstLeadingComment ? firstLeadingComment.range[0] : firstProp.range[0];
-            const lastTrailing = getTrailingComments(lastProp, null);
-            const rangeEnd = lastTrailing.length > 0 ? lastTrailing[lastTrailing.length - 1].range[1] : lastProp.range[1];
-            const sortedText = buildSortedText(fixableProps, rangeStart);
-            return fixer.replaceTextRange([rangeStart, rangeEnd], sortedText);
+            const fixes = segments.filter((segment) => segment.length >= minKeys && isSegmentFixable(segment) && !isSegmentSorted(segment)).map((segment) => {
+              const [firstProp] = segment;
+              const lastProp = segment[segment.length - 1];
+              const firstLeading = getLeadingComments(firstProp, null);
+              const [firstLeadingComment] = firstLeading;
+              const rangeStart = firstLeadingComment ? firstLeadingComment.range[0] : firstProp.range[0];
+              const lastTrailing = getTrailingComments(lastProp, null);
+              const rangeEnd = lastTrailing.length > 0 ? lastTrailing[lastTrailing.length - 1].range[1] : lastProp.range[1];
+              return fixer.replaceTextRange([rangeStart, rangeEnd], buildSortedText(segment, rangeStart));
+            });
+            return fixes.length > 0 ? fixes : null;
           } : null,
           messageId: "unsorted",
           node: curr.node.type === "Property" ? curr.node.key : curr.node
@@ -1731,6 +1728,48 @@ var noExplicitReturnTypes = createRule({
         return parent.parent;
       return node;
     };
+    const collectTypeReferenceNames = (root) => {
+      const names = new Set;
+      const visit = (value) => {
+        if (!value || typeof value !== "object") {
+          return;
+        }
+        if (Array.isArray(value)) {
+          value.forEach(visit);
+          return;
+        }
+        const candidate = value;
+        if (typeof candidate.type !== "string") {
+          return;
+        }
+        const astNode = value;
+        if (astNode.type === "TSTypeReference" && astNode.typeName.type === "Identifier") {
+          names.add(astNode.typeName.name);
+        }
+        for (const key of Object.keys(astNode)) {
+          if (key === "parent") {
+            continue;
+          }
+          visit(astNode[key]);
+        }
+      };
+      visit(root);
+      return names;
+    };
+    const hasReturnOnlyTypeParameter = (node) => {
+      const declaredTypeParams = node.typeParameters?.params;
+      if (!declaredTypeParams || declaredTypeParams.length === 0) {
+        return false;
+      }
+      const returnTypeNames = collectTypeReferenceNames(node.returnType);
+      const parameterTypeNames = new Set;
+      for (const parameter of node.params) {
+        for (const name of collectTypeReferenceNames(parameter)) {
+          parameterTypeNames.add(name);
+        }
+      }
+      return declaredTypeParams.some((typeParam) => returnTypeNames.has(typeParam.name.name) && !parameterTypeNames.has(typeParam.name.name));
+    };
     const referencesOwnName = (node) => {
       const ownName = getOwnName(node);
       if (!ownName)
@@ -1759,6 +1798,9 @@ var noExplicitReturnTypes = createRule({
         if (referencesOwnName(node)) {
           return;
         }
+        if (hasReturnOnlyTypeParameter(node)) {
+          return;
+        }
         context.report({
           messageId: "noExplicitReturnType",
           node: returnType
@@ -1769,7 +1811,7 @@ var noExplicitReturnTypes = createRule({
   defaultOptions: [],
   meta: {
     docs: {
-      description: "Disallow explicit return type annotations on functions, except when using type predicates for type guards or inline object literal returns (e.g., style objects)."
+      description: "Disallow explicit return type annotations on functions, except when the annotation is load-bearing: type predicates for type guards, inline object literal returns (e.g., style objects), recursive functions, or generics whose type parameter appears only in the return type."
     },
     messages: {
       noExplicitReturnType: "Explicit return types are disallowed; rely on TypeScript's inference instead."
@@ -2026,6 +2068,22 @@ var visitImmediateReferences = (node, onReference) => {
       case "FunctionExpression":
       case "ArrowFunctionExpression":
         return;
+      case "CallExpression":
+      case "NewExpression": {
+        const runAtInit = (invoked) => {
+          if (!invoked) {
+            return;
+          }
+          if (invoked.type === "FunctionDeclaration" || invoked.type === "FunctionExpression" || invoked.type === "ArrowFunctionExpression") {
+            visit(invoked.body);
+            return;
+          }
+          visit(invoked);
+        };
+        runAtInit(current.callee);
+        current.arguments.forEach(runAtInit);
+        return;
+      }
       case "MemberExpression":
         visit(current.object);
         if (current.computed) {
@@ -2948,29 +3006,40 @@ var noUselessCatch = createRule({
 // src/rules/no-useless-function.ts
 var noUselessFunction = createRule({
   create(context) {
-    const isCallbackFunction = (node) => {
-      const { parent } = node;
-      if (!parent || parent.type !== "CallExpression") {
+    const isStaticObjectLiteral = (object) => object.properties.every((property) => {
+      if (property.type !== "Property" || property.computed) {
         return false;
       }
-      for (const arg of parent.arguments) {
-        if (arg === node) {
+      const { value } = property;
+      return value.type === "Literal" || value.type === "TemplateLiteral" && value.expressions.length === 0;
+    });
+    const isWithinCallArgument = (node) => {
+      let child = node;
+      let current = node.parent;
+      while (current) {
+        if (current.type === "CallExpression" && current.arguments.some((argument) => argument === child)) {
           return true;
         }
+        child = current;
+        current = current.parent;
       }
       return false;
     };
     return {
       ArrowFunctionExpression(node) {
-        if (node.params.length === 0 && node.body && node.body.type === "ObjectExpression") {
-          if (isCallbackFunction(node)) {
-            return;
-          }
-          context.report({
-            messageId: "uselessFunction",
-            node
-          });
+        if (node.params.length !== 0 || !node.body || node.body.type !== "ObjectExpression") {
+          return;
         }
+        if (!isStaticObjectLiteral(node.body)) {
+          return;
+        }
+        if (isWithinCallArgument(node)) {
+          return;
+        }
+        context.report({
+          messageId: "uselessFunction",
+          node
+        });
       }
     };
   },

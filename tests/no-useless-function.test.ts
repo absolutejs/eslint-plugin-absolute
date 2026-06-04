@@ -36,6 +36,26 @@ ruleTester.run("no-useless-function", noUselessFunction, {
 		{
 			code: `someFunc(x, () => ({ a: 1 }));`,
 			name: "arrow as second argument (callback)"
+		},
+		{
+			code: `const fn = () => ({ a: someVar });`,
+			name: "factory capturing a variable (deferred evaluation)"
+		},
+		{
+			code: `const fn = () => ({ a: config.value });`,
+			name: "factory reading live state via member access"
+		},
+		{
+			code: `const stats = () => ({ bytes, n: buffer.length });`,
+			name: "factory of fresh mutable values (shorthand + member)"
+		},
+		{
+			code: `const make = () => ({ run: helper });`,
+			name: "object with a function-reference value is a real factory"
+		},
+		{
+			code: `mock.module("p", () => ({ getStore: () => ({}) }));`,
+			name: "method/stub nested inside a call-argument object"
 		}
 	]
 });
