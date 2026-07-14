@@ -20,7 +20,8 @@ ruleTester.run("heading-order", headingOrder, {
 			code: `<template><section><h3>Generated assets</h3></section></template>`,
 			errors: [{ messageId: "firstHeadingTooDeep" }],
 			filename: "GeneratedAssets.vue",
-			name: "first heading cannot start below h2"
+			name: "configured section heading cannot start below h2",
+			options: [{ maxFirstLevel: 2 }]
 		},
 		{
 			code: `<template><main><h1>Resources</h1><h3>Shared</h3></main></template>`,
@@ -68,7 +69,13 @@ ruleTester.run("heading-order", headingOrder, {
 			code: `const value = 1;`,
 			filename: "plain.ts",
 			name: "non-Vue files are ignored"
+		},
+		{
+			code: `<template><h4>Nested widget</h4></template>`,
+			filename: "NestedWidget.vue",
+			name: "reusable components may start at a contextual heading level"
 		}
+
 	]
 });
 

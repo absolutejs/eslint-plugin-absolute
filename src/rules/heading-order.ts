@@ -1,7 +1,7 @@
 import type { AST } from "vue-eslint-parser";
 import { createRule } from "../createRule";
 
-const DEFAULT_MAX_FIRST_LEVEL = 2;
+const DEFAULT_MAX_FIRST_LEVEL = 6;
 const HEADING_NAME_PATTERN = /^h([1-6])$/;
 
 type HeadingOrderOption = {
@@ -74,7 +74,7 @@ export const headingOrder = createRule<Options, MessageIds>({
 	meta: {
 		docs: {
 			description:
-				"Require Vue templates to start at h1 or h2 and prevent heading levels from being skipped."
+				"Prevent skipped heading levels in Vue templates, with an optional limit for the first heading."
 		},
 		messages: {
 			firstHeadingTooDeep:

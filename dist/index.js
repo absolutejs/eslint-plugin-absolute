@@ -64,7 +64,7 @@ var angularOneFeaturePerFile = createRule({
 });
 
 // src/rules/heading-order.ts
-var DEFAULT_MAX_FIRST_LEVEL = 2;
+var DEFAULT_MAX_FIRST_LEVEL = 6;
 var HEADING_NAME_PATTERN = /^h([1-6])$/;
 var headingLevel = (node) => {
   const match = HEADING_NAME_PATTERN.exec(node.rawName.toLowerCase());
@@ -114,7 +114,7 @@ var headingOrder = createRule({
   defaultOptions: [{ maxFirstLevel: DEFAULT_MAX_FIRST_LEVEL }],
   meta: {
     docs: {
-      description: "Require Vue templates to start at h1 or h2 and prevent heading levels from being skipped."
+      description: "Prevent skipped heading levels in Vue templates, with an optional limit for the first heading."
     },
     messages: {
       firstHeadingTooDeep: "The first heading is h{{actual}}. Start this template at h{{maximum}} or higher so it can join a valid document outline.",
