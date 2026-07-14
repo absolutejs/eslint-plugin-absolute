@@ -4298,12 +4298,176 @@ var preferInlineExports = createRule({
   name: "prefer-inline-exports"
 });
 
+// src/utils/buttonAccessibility.ts
+var BUTTON_OPEN_PATTERN = /<button\b/giu;
+var BUTTON_CLOSE = "</button";
+var MATERIAL_ICON_OPEN_PATTERN = /<(?:i|span)\b(?=[^>]*(?:class|className)\s*=\s*(?:"[^"]*\bmaterial-icons(?:-[\w-]+)?\b[^"]*"|'[^']*\bmaterial-icons(?:-[\w-]+)?\b[^']*'|\{["'`][^}"'`]*\bmaterial-icons(?:-[\w-]+)?\b[^}"'`]*["'`]\}))[^>]*>/giu;
+var MATERIAL_ICON_ELEMENT_PATTERN = /<(i|span)\b(?=[^>]*(?:class|className)\s*=\s*(?:"[^"]*\bmaterial-icons(?:-[\w-]+)?\b[^"]*"|'[^']*\bmaterial-icons(?:-[\w-]+)?\b[^']*'|\{["'`][^}"'`]*\bmaterial-icons(?:-[\w-]+)?\b[^}"'`]*["'`]\}))[^>]*>[\s\S]*?<\/\1\s*>/giu;
+var ACCESSIBLE_NAME_PATTERN = /(?:^|\s)(?::|v-bind:|\[attr\.)?aria-(?:label|labelledby)(?:\])?\s*=/iu;
+var ARIA_HIDDEN_TRUE_PATTERN = /(?:^|\s)(?::|v-bind:|\[attr\.)?aria-hidden(?:\])?\s*=\s*(?:"true"|'true'|\{true\}|"\{\{true\}\}")/iu;
+var TAG_PATTERN = /<[^>]*>/gu;
+var COMMENT_PATTERN = /<!--(?:[\s\S]*?)-->/gu;
+var HTML_ENTITY_PATTERN = /&(?:nbsp|#160|#xA0);/giu;
+var READABLE_PATTERN = /[\p{L}\p{N}]/u;
+var NOT_FOUND = -1;
+var tagEnd = (source, start) => {
+  let quote = null;
+  let braceDepth = 0;
+  for (let index = start;index < source.length; index += 1) {
+    const character = source[index];
+    if (quote) {
+      if (character === quote && source[index - 1] !== "\\")
+        quote = null;
+      continue;
+    }
+    if (character === "'" || character === '"' || character === "`") {
+      quote = character;
+      continue;
+    }
+    if (character === "{")
+      braceDepth += 1;
+    else if (character === "}" && braceDepth > 0)
+      braceDepth -= 1;
+    else if (character === ">" && braceDepth === 0)
+      return index;
+  }
+  return NOT_FOUND;
+};
+var hasReadableContent = (inner) => {
+  const withoutIcons = inner.replace(MATERIAL_ICON_ELEMENT_PATTERN, "");
+  const text = withoutIcons.replace(COMMENT_PATTERN, "").replace(TAG_PATTERN, "").replace(HTML_ENTITY_PATTERN, "").trim();
+  return READABLE_PATTERN.test(text);
+};
+var exposedIcons = (inner, innerOffset) => {
+  const icons = [];
+  for (const match of inner.matchAll(MATERIAL_ICON_OPEN_PATTERN)) {
+    const [opening] = match;
+    if (ARIA_HIDDEN_TRUE_PATTERN.test(opening))
+      continue;
+    const start = innerOffset + (match.index ?? 0);
+    icons.push({ openingEnd: start + opening.length - 1, start });
+  }
+  return icons;
+};
+var scanButtonAccessibility = (source) => {
+  const findings = [];
+  for (const match of source.matchAll(BUTTON_OPEN_PATTERN)) {
+    const buttonStart = match.index ?? 0;
+    const openingEnd = tagEnd(source, buttonStart);
+    if (openingEnd < 0)
+      continue;
+    const opening = source.slice(buttonStart, openingEnd + 1);
+    const selfClosing = /\/\s*>$/u.test(opening);
+    const closeStart = selfClosing ? openingEnd + 1 : source.toLowerCase().indexOf(BUTTON_CLOSE, openingEnd + 1);
+    const innerEnd = closeStart < 0 ? openingEnd + 1 : closeStart;
+    const inner = source.slice(openingEnd + 1, innerEnd);
+    findings.push({
+      buttonStart,
+      exposedIcons: exposedIcons(inner, openingEnd + 1),
+      missingAccessibleName: !ACCESSIBLE_NAME_PATTERN.test(opening) && !hasReadableContent(inner)
+    });
+  }
+  return findings;
+};
+
+// src/rules/button-icon-is-hidden.ts
+var reportExposedIcon = (context, icon) => {
+  const start = context.sourceCode.getLocFromIndex(icon.start);
+  context.report({
+    fix: (fixer) => fixer.insertTextBeforeRange([icon.openingEnd, icon.openingEnd], ' aria-hidden="true"'),
+    loc: { end: start, start },
+    messageId: "iconNotHidden"
+  });
+};
+var buttonIconIsHidden = createRule({
+  create(context) {
+    return {
+      Program() {
+        scanButtonAccessibility(context.sourceCode.text).flatMap((finding) => finding.exposedIcons).forEach((icon) => reportExposedIcon(context, icon));
+      }
+    };
+  },
+  defaultOptions: [],
+  meta: {
+    docs: {
+      description: "Require Material Icons inside buttons to be hidden from assistive technology across frontend template syntaxes."
+    },
+    fixable: "code",
+    messages: {
+      iconNotHidden: 'Material Icons inside buttons are decorative. Add aria-hidden="true" so assistive technology reads the button action instead of the icon ligature.'
+    },
+    schema: [],
+    type: "problem"
+  },
+  name: "button-icon-is-hidden"
+});
+
+// src/rules/icon-button-has-accessible-name.ts
+var iconButtonHasAccessibleName = createRule({
+  create(context) {
+    return {
+      Program() {
+        for (const finding of scanButtonAccessibility(context.sourceCode.text)) {
+          if (!finding.missingAccessibleName)
+            continue;
+          const start = context.sourceCode.getLocFromIndex(finding.buttonStart);
+          context.report({
+            loc: { end: start, start },
+            messageId: "missingAccessibleName"
+          });
+        }
+      }
+    };
+  },
+  defaultOptions: [],
+  meta: {
+    docs: {
+      description: "Require icon-only buttons to have an aria-label or aria-labelledby across frontend template syntaxes."
+    },
+    messages: {
+      missingAccessibleName: "Icon-only buttons need a descriptive aria-label or aria-labelledby. A title or raw icon name is not an accessible action name."
+    },
+    schema: [],
+    type: "problem"
+  },
+  name: "icon-button-has-accessible-name"
+});
+
+// src/processors/template-source.ts
+var WRAPPER_LINES = 1;
+var templateSourceProcessor = {
+  meta: { name: "template-source", version: "1" },
+  postprocess(messageLists) {
+    return (messageLists[0] ?? []).map((message) => ({
+      ...message,
+      endLine: message.endLine === undefined ? undefined : Math.max(1, message.endLine - WRAPPER_LINES),
+      line: Math.max(1, (message.line ?? 1) - WRAPPER_LINES)
+    }));
+  },
+  preprocess(text, filename) {
+    return [
+      {
+        filename: `${filename}.js`,
+        text: `/*
+${text.replaceAll("*/", "* /")}
+*/`
+      }
+    ];
+  },
+  supportsAutofix: false
+};
+
 // src/index.ts
 var src_default = {
+  processors: {
+    "template-source": templateSourceProcessor
+  },
   rules: {
     "angular-one-feature-per-file": angularOneFeaturePerFile,
+    "button-icon-is-hidden": buttonIconIsHidden,
     "explicit-object-types": explicitObjectTypes,
     "heading-order": headingOrder,
+    "icon-button-has-accessible-name": iconButtonHasAccessibleName,
     "inline-style-limit": inlineStyleLimit,
     "localize-react-props": localizeReactProps,
     "max-depth-extended": maxDepthExtended,

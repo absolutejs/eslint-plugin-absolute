@@ -26,12 +26,20 @@ import { noImportMetaPath } from "./rules/no-import-meta-path";
 import { noTrivialAlias } from "./rules/no-trivial-alias";
 import { noUnnecessaryDiv } from "./rules/no-unnecessary-div";
 import { preferInlineExports } from "./rules/prefer-inline-exports";
+import { buttonIconIsHidden } from "./rules/button-icon-is-hidden";
+import { iconButtonHasAccessibleName } from "./rules/icon-button-has-accessible-name";
+import { templateSourceProcessor } from "./processors/template-source";
 
 export default {
+	processors: {
+		"template-source": templateSourceProcessor
+	},
 	rules: {
 		"angular-one-feature-per-file": angularOneFeaturePerFile,
+		"button-icon-is-hidden": buttonIconIsHidden,
 		"explicit-object-types": explicitObjectTypes,
 		"heading-order": headingOrder,
+		"icon-button-has-accessible-name": iconButtonHasAccessibleName,
 		"inline-style-limit": inlineStyleLimit,
 		"localize-react-props": localizeReactProps,
 		"max-depth-extended": maxDepthExtended,
