@@ -63,6 +63,81 @@ var angularOneFeaturePerFile = createRule({
   name: "angular-one-feature-per-file"
 });
 
+// src/rules/heading-order.ts
+var DEFAULT_MAX_FIRST_LEVEL = 2;
+var HEADING_NAME_PATTERN = /^h([1-6])$/;
+var headingLevel = (node) => {
+  const match = HEADING_NAME_PATTERN.exec(node.rawName.toLowerCase());
+  if (!match)
+    return null;
+  const [, level] = match;
+  return level ? Number(level) : null;
+};
+var headingOrder = createRule({
+  create(context) {
+    const [options] = context.options;
+    const maxFirstLevel = options?.maxFirstLevel ?? DEFAULT_MAX_FIRST_LEVEL;
+    const { parserServices } = context.sourceCode;
+    if (!parserServices || !("defineTemplateBodyVisitor" in parserServices) || typeof parserServices.defineTemplateBodyVisitor !== "function") {
+      return {};
+    }
+    let previousLevel = null;
+    return parserServices.defineTemplateBodyVisitor({
+      VElement(node) {
+        const currentLevel = headingLevel(node);
+        if (currentLevel === null)
+          return;
+        if (previousLevel === null && currentLevel > maxFirstLevel) {
+          context.report({
+            data: {
+              actual: currentLevel,
+              maximum: maxFirstLevel
+            },
+            loc: node.loc,
+            messageId: "firstHeadingTooDeep"
+          });
+        }
+        if (previousLevel !== null && currentLevel > previousLevel + 1) {
+          context.report({
+            data: {
+              actual: currentLevel,
+              previous: previousLevel
+            },
+            loc: node.loc,
+            messageId: "skippedHeadingLevel"
+          });
+        }
+        previousLevel = currentLevel;
+      }
+    });
+  },
+  defaultOptions: [{ maxFirstLevel: DEFAULT_MAX_FIRST_LEVEL }],
+  meta: {
+    docs: {
+      description: "Require Vue templates to start at h1 or h2 and prevent heading levels from being skipped."
+    },
+    messages: {
+      firstHeadingTooDeep: "The first heading is h{{actual}}. Start this template at h{{maximum}} or higher so it can join a valid document outline.",
+      skippedHeadingLevel: "Heading order skips from h{{previous}} to h{{actual}}. Use the next sequential heading level."
+    },
+    schema: [
+      {
+        additionalProperties: false,
+        properties: {
+          maxFirstLevel: {
+            maximum: 6,
+            minimum: 1,
+            type: "integer"
+          }
+        },
+        type: "object"
+      }
+    ],
+    type: "problem"
+  },
+  name: "heading-order"
+});
+
 // src/rules/no-nested-jsx-return.ts
 import { AST_NODE_TYPES as AST_NODE_TYPES2 } from "@typescript-eslint/utils";
 var noNestedJSXReturn = createRule({
@@ -4228,6 +4303,7 @@ var src_default = {
   rules: {
     "angular-one-feature-per-file": angularOneFeaturePerFile,
     "explicit-object-types": explicitObjectTypes,
+    "heading-order": headingOrder,
     "inline-style-limit": inlineStyleLimit,
     "localize-react-props": localizeReactProps,
     "max-depth-extended": maxDepthExtended,

@@ -1,4 +1,5 @@
 import { angularOneFeaturePerFile } from "./rules/angular-one-feature-per-file";
+import { headingOrder } from "./rules/heading-order";
 import { noNestedJSXReturn } from "./rules/no-nested-jsx-return";
 import { explicitObjectTypes } from "./rules/explicit-object-types";
 import { sortKeysFixable } from "./rules/sort-keys-fixable";
@@ -30,6 +31,7 @@ export default {
 	rules: {
 		"angular-one-feature-per-file": angularOneFeaturePerFile,
 		"explicit-object-types": explicitObjectTypes,
+		"heading-order": headingOrder,
 		"inline-style-limit": inlineStyleLimit,
 		"localize-react-props": localizeReactProps,
 		"max-depth-extended": maxDepthExtended,
