@@ -14,7 +14,8 @@ ruleTester.run("icon-button-has-accessible-name", iconButtonHasAccessibleName, {
 		{
 			code: `const template = '<button title="Send"><span class="material-icons">send</span></button>';`,
 			errors: [{ messageId: "missingAccessibleName" }],
-			name: "title and raw ligature are rejected"
+			name: "title and raw ligature are rejected",
+			output: `const template = '<button title="Send" aria-label="Send"><span class="material-icons">send</span></button>';`
 		}
 	],
 	valid: [

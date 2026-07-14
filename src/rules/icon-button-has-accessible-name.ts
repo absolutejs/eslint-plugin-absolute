@@ -15,7 +15,18 @@ export const iconButtonHasAccessibleName = createRule<Options, MessageIds>({
 					const start = context.sourceCode.getLocFromIndex(
 						finding.buttonStart
 					);
+					const insertion = finding.accessibleNameInsertion;
 					context.report({
+						fix: insertion
+							? (fixer) =>
+									fixer.insertTextBeforeRange(
+										[
+											finding.buttonOpeningEnd,
+											finding.buttonOpeningEnd
+										],
+										insertion
+									)
+							: undefined,
 						loc: { end: start, start },
 						messageId: "missingAccessibleName"
 					});
@@ -29,6 +40,7 @@ export const iconButtonHasAccessibleName = createRule<Options, MessageIds>({
 			description:
 				"Require icon-only buttons to have an aria-label or aria-labelledby across frontend template syntaxes."
 		},
+		fixable: "code",
 		messages: {
 			missingAccessibleName:
 				"Icon-only buttons need a descriptive aria-label or aria-labelledby. A title or raw icon name is not an accessible action name."

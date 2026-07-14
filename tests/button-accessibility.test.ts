@@ -54,5 +54,17 @@ describe("cross-framework button accessibility scanner", () => {
 		);
 
 		expect(finding?.missingAccessibleName).toBe(true);
+		expect(finding?.accessibleNameInsertion).toBe(
+			' aria-label="Send message"'
+		);
+	});
+
+	test("ignores button examples in styles and comments", () => {
+		const findings = scanButtonAccessibility(`<style>
+/* A <button> became a <div>. */
+</style>
+<!-- <button><span class="material-icons">close</span></button> -->`);
+
+		expect(findings).toEqual([]);
 	});
 });

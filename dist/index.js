@@ -4301,6 +4301,8 @@ var preferInlineExports = createRule({
 // src/utils/buttonAccessibility.ts
 var BUTTON_OPEN_PATTERN = /<button\b/giu;
 var BUTTON_CLOSE = "</button";
+var BLOCK_COMMENT_PATTERN = /\/\*[\s\S]*?\*\//gu;
+var HTML_COMMENT_SOURCE_PATTERN = /<!--[\s\S]*?-->/gu;
 var MATERIAL_ICON_OPEN_PATTERN = /<(?:i|span)\b(?=[^>]*(?:class|className)\s*=\s*(?:"[^"]*\bmaterial-icons(?:-[\w-]+)?\b[^"]*"|'[^']*\bmaterial-icons(?:-[\w-]+)?\b[^']*'|\{["'`][^}"'`]*\bmaterial-icons(?:-[\w-]+)?\b[^}"'`]*["'`]\}))[^>]*>/giu;
 var MATERIAL_ICON_ELEMENT_PATTERN = /<(i|span)\b(?=[^>]*(?:class|className)\s*=\s*(?:"[^"]*\bmaterial-icons(?:-[\w-]+)?\b[^"]*"|'[^']*\bmaterial-icons(?:-[\w-]+)?\b[^']*'|\{["'`][^}"'`]*\bmaterial-icons(?:-[\w-]+)?\b[^}"'`]*["'`]\}))[^>]*>[\s\S]*?<\/\1\s*>/giu;
 var ACCESSIBLE_NAME_PATTERN = /(?:^|\s)(?::|v-bind:|\[attr\.)?aria-(?:label|labelledby)(?:\])?\s*=/iu;
@@ -4309,7 +4311,23 @@ var TAG_PATTERN = /<[^>]*>/gu;
 var COMMENT_PATTERN = /<!--(?:[\s\S]*?)-->/gu;
 var HTML_ENTITY_PATTERN = /&(?:nbsp|#160|#xA0);/giu;
 var READABLE_PATTERN = /[\p{L}\p{N}]/u;
+var TEMPLATE_PROCESSOR_PREFIX = `/* absolute-template-source
+`;
+var STYLE_BLOCK_PATTERN = /<style\b[^>]*>[\s\S]*?<\/style\s*>/giu;
+var TITLE_PATTERN = /(?:^|\s)((?::|v-bind:)?title)\s*=\s*("[^"]*"|'[^']*')/iu;
 var NOT_FOUND = -1;
+var preserveLines = (value) => value.replace(/[^\n]/gu, " ");
+var maskIgnoredSource = (source) => (source.startsWith(TEMPLATE_PROCESSOR_PREFIX) ? source : source.replace(BLOCK_COMMENT_PATTERN, preserveLines)).replace(STYLE_BLOCK_PATTERN, preserveLines).replace(HTML_COMMENT_SOURCE_PATTERN, preserveLines);
+var accessibleNameInsertion = (opening) => {
+  const match = TITLE_PATTERN.exec(opening);
+  if (!match)
+    return null;
+  const [, titleName, titleValue] = match;
+  if (!titleName || !titleValue)
+    return null;
+  const attributeName = titleName.startsWith(":") || titleName.startsWith("v-bind:") ? ":aria-label" : "aria-label";
+  return ` ${attributeName}=${titleValue}`;
+};
 var tagEnd = (source, start) => {
   let quote = null;
   let braceDepth = 0;
@@ -4351,7 +4369,7 @@ var exposedIcons = (inner, innerOffset) => {
 };
 var scanButtonAccessibility = (source) => {
   const findings = [];
-  for (const match of source.matchAll(BUTTON_OPEN_PATTERN)) {
+  for (const match of maskIgnoredSource(source).matchAll(BUTTON_OPEN_PATTERN)) {
     const buttonStart = match.index ?? 0;
     const openingEnd = tagEnd(source, buttonStart);
     if (openingEnd < 0)
@@ -4362,6 +4380,8 @@ var scanButtonAccessibility = (source) => {
     const innerEnd = closeStart < 0 ? openingEnd + 1 : closeStart;
     const inner = source.slice(openingEnd + 1, innerEnd);
     findings.push({
+      accessibleNameInsertion: accessibleNameInsertion(opening),
+      buttonOpeningEnd: openingEnd,
       buttonStart,
       exposedIcons: exposedIcons(inner, openingEnd + 1),
       missingAccessibleName: !ACCESSIBLE_NAME_PATTERN.test(opening) && !hasReadableContent(inner)
@@ -4411,7 +4431,12 @@ var iconButtonHasAccessibleName = createRule({
           if (!finding.missingAccessibleName)
             continue;
           const start = context.sourceCode.getLocFromIndex(finding.buttonStart);
+          const insertion = finding.accessibleNameInsertion;
           context.report({
+            fix: insertion ? (fixer) => fixer.insertTextBeforeRange([
+              finding.buttonOpeningEnd,
+              finding.buttonOpeningEnd
+            ], insertion) : undefined,
             loc: { end: start, start },
             messageId: "missingAccessibleName"
           });
@@ -4424,6 +4449,7 @@ var iconButtonHasAccessibleName = createRule({
     docs: {
       description: "Require icon-only buttons to have an aria-label or aria-labelledby across frontend template syntaxes."
     },
+    fixable: "code",
     messages: {
       missingAccessibleName: "Icon-only buttons need a descriptive aria-label or aria-labelledby. A title or raw icon name is not an accessible action name."
     },
@@ -4435,6 +4461,8 @@ var iconButtonHasAccessibleName = createRule({
 
 // src/processors/template-source.ts
 var WRAPPER_LINES = 1;
+var BLOCK_COMMENT_PATTERN2 = /\/\*[\s\S]*?\*\//gu;
+var preserveLines2 = (value) => value.replace(/[^\n]/gu, " ");
 var templateSourceProcessor = {
   meta: { name: "template-source", version: "1" },
   postprocess(messageLists) {
@@ -4448,8 +4476,8 @@ var templateSourceProcessor = {
     return [
       {
         filename: `${filename}.js`,
-        text: `/*
-${text.replaceAll("*/", "* /")}
+        text: `/* absolute-template-source
+${text.replace(BLOCK_COMMENT_PATTERN2, preserveLines2)}
 */`
       }
     ];

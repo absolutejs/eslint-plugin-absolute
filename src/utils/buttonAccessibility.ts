@@ -1,5 +1,7 @@
 const BUTTON_OPEN_PATTERN = /<button\b/giu;
 const BUTTON_CLOSE = "</button";
+const BLOCK_COMMENT_PATTERN = /\/\*[\s\S]*?\*\//gu;
+const HTML_COMMENT_SOURCE_PATTERN = /<!--[\s\S]*?-->/gu;
 const MATERIAL_ICON_OPEN_PATTERN =
 	/<(?:i|span)\b(?=[^>]*(?:class|className)\s*=\s*(?:"[^"]*\bmaterial-icons(?:-[\w-]+)?\b[^"]*"|'[^']*\bmaterial-icons(?:-[\w-]+)?\b[^']*'|\{["'`][^}"'`]*\bmaterial-icons(?:-[\w-]+)?\b[^}"'`]*["'`]\}))[^>]*>/giu;
 const MATERIAL_ICON_ELEMENT_PATTERN =
@@ -12,14 +14,42 @@ const TAG_PATTERN = /<[^>]*>/gu;
 const COMMENT_PATTERN = /<!--(?:[\s\S]*?)-->/gu;
 const HTML_ENTITY_PATTERN = /&(?:nbsp|#160|#xA0);/giu;
 const READABLE_PATTERN = /[\p{L}\p{N}]/u;
+const TEMPLATE_PROCESSOR_PREFIX = "/* absolute-template-source\n";
+const STYLE_BLOCK_PATTERN = /<style\b[^>]*>[\s\S]*?<\/style\s*>/giu;
+const TITLE_PATTERN = /(?:^|\s)((?::|v-bind:)?title)\s*=\s*("[^"]*"|'[^']*')/iu;
 const NOT_FOUND = -1;
 
 type ExposedIcon = { openingEnd: number; start: number };
 
 export type ButtonAccessibilityFinding = {
+	accessibleNameInsertion: string | null;
+	buttonOpeningEnd: number;
 	buttonStart: number;
 	exposedIcons: ExposedIcon[];
 	missingAccessibleName: boolean;
+};
+
+const preserveLines = (value: string) => value.replace(/[^\n]/gu, " ");
+
+const maskIgnoredSource = (source: string) =>
+	(source.startsWith(TEMPLATE_PROCESSOR_PREFIX)
+		? source
+		: source.replace(BLOCK_COMMENT_PATTERN, preserveLines)
+	)
+		.replace(STYLE_BLOCK_PATTERN, preserveLines)
+		.replace(HTML_COMMENT_SOURCE_PATTERN, preserveLines);
+
+const accessibleNameInsertion = (opening: string) => {
+	const match = TITLE_PATTERN.exec(opening);
+	if (!match) return null;
+	const [, titleName, titleValue] = match;
+	if (!titleName || !titleValue) return null;
+	const attributeName =
+		titleName.startsWith(":") || titleName.startsWith("v-bind:")
+			? ":aria-label"
+			: "aria-label";
+
+	return ` ${attributeName}=${titleValue}`;
 };
 
 // The state machine must track quoted and braced attribute values while finding `>`.
@@ -71,7 +101,9 @@ const exposedIcons = (inner: string, innerOffset: number) => {
 
 export const scanButtonAccessibility = (source: string) => {
 	const findings: ButtonAccessibilityFinding[] = [];
-	for (const match of source.matchAll(BUTTON_OPEN_PATTERN)) {
+	for (const match of maskIgnoredSource(source).matchAll(
+		BUTTON_OPEN_PATTERN
+	)) {
 		const buttonStart = match.index ?? 0;
 		const openingEnd = tagEnd(source, buttonStart);
 		if (openingEnd < 0) continue;
@@ -83,6 +115,8 @@ export const scanButtonAccessibility = (source: string) => {
 		const innerEnd = closeStart < 0 ? openingEnd + 1 : closeStart;
 		const inner = source.slice(openingEnd + 1, innerEnd);
 		findings.push({
+			accessibleNameInsertion: accessibleNameInsertion(opening),
+			buttonOpeningEnd: openingEnd,
 			buttonStart,
 			exposedIcons: exposedIcons(inner, openingEnd + 1),
 			missingAccessibleName:

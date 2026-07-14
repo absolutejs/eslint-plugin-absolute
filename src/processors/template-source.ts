@@ -1,6 +1,8 @@
 import type { Linter } from "eslint";
 
 const WRAPPER_LINES = 1;
+const BLOCK_COMMENT_PATTERN = /\/\*[\s\S]*?\*\//gu;
+const preserveLines = (value: string) => value.replace(/[^\n]/gu, " ");
 
 export const templateSourceProcessor: Linter.Processor = {
 	meta: { name: "template-source", version: "1" },
@@ -18,7 +20,7 @@ export const templateSourceProcessor: Linter.Processor = {
 		return [
 			{
 				filename: `${filename}.js`,
-				text: `/*\n${text.replaceAll("*/", "* /")}\n*/`
+				text: `/* absolute-template-source\n${text.replace(BLOCK_COMMENT_PATTERN, preserveLines)}\n*/`
 			}
 		];
 	},
