@@ -4675,11 +4675,12 @@ var elysiaCompositionBoundaries = createRule({
   name: "elysia-composition-boundaries"
 });
 
-// src/rules/elysia-app-contracts.ts
-var DEFAULT_APP_DIRECTORIES = ["src/backend/apps", "src/apps", "apps"];
-var APP_FILE_PATTERN = /\.app\.[cm]?[jt]sx?$/u;
-var APPLICATION_FACTORY_PATTERN = /^create.+Application$/u;
-var APPLICATION_TYPE_PATTERN = /Application$/u;
+// src/rules/elysia-route-boundaries.ts
+var DEFAULT_ROUTE_DIRECTORIES = [
+  "src/backend/routes",
+  "src/routes",
+  "routes"
+];
 var ROUTE_METHODS2 = new Set([
   "all",
   "connect",
@@ -4687,6 +4688,7 @@ var ROUTE_METHODS2 = new Set([
   "get",
   "group",
   "head",
+  "mount",
   "options",
   "patch",
   "post",
@@ -4701,121 +4703,182 @@ var isInsideDirectory = (filename, directory) => {
   const normalizedDirectory = normalizePath(directory);
   return normalizedFilename.startsWith(`${normalizedDirectory}/`) || normalizedFilename.includes(`/${normalizedDirectory}/`);
 };
-var typeQueryIdentifier = (node) => {
-  if (node.type !== "TSTypeQuery")
-    return;
-  return node.exprName.type === "Identifier" ? node.exprName.name : undefined;
-};
-var isApplicationType = (node) => {
-  if (!APPLICATION_TYPE_PATTERN.test(node.id.name))
-    return false;
-  if (node.typeAnnotation.type === "TSTypeQuery")
-    return true;
-  if (node.typeAnnotation.type !== "TSTypeReference" || node.typeAnnotation.typeName.type !== "Identifier" || node.typeAnnotation.typeName.name !== "ReturnType")
-    return false;
-  return node.typeAnnotation.typeArguments?.params.some((parameter) => parameter.type === "TSTypeQuery");
-};
-var exportedVariableNames = (node) => node.declarations.flatMap((declaration) => declaration.id.type === "Identifier" ? [declaration.id.name] : []);
 var memberName2 = (node) => {
   if (node.computed)
     return node.property.type === "Literal" && typeof node.property.value === "string" ? node.property.value : undefined;
   return node.property.type === "Identifier" ? node.property.name : undefined;
 };
-var registersRoute = (expression) => {
+var callMember2 = (node) => node.callee.type === "MemberExpression" ? node.callee : undefined;
+var chainAnalysis = (expression) => {
   let current = expression;
+  let registersRoute = false;
+  let registersHttpPath = false;
   while (current.type === "CallExpression") {
-    if (current.callee.type !== "MemberExpression")
-      return false;
-    const method = memberName2(current.callee);
-    if (method && ROUTE_METHODS2.has(method))
-      return true;
-    if (current.callee.object.type === "Super")
-      return false;
-    current = current.callee.object;
+    const member = callMember2(current);
+    if (!member || member.object.type === "Super")
+      break;
+    const method = memberName2(member);
+    const isRouteMethod = Boolean(method && ROUTE_METHODS2.has(method));
+    const [firstArgument] = current.arguments;
+    registersRoute ||= isRouteMethod;
+    registersHttpPath ||= isRouteMethod && firstArgument?.type === "Literal" && typeof firstArgument.value === "string" && firstArgument.value.startsWith("/");
+    current = member.object;
   }
-  return false;
+  return { registersHttpPath, registersRoute, root: current };
 };
-var elysiaAppContracts = createRule({
+var variableFor2 = (context, id) => {
+  const scope = context.sourceCode.getScope(id);
+  return scope.references.find((reference) => reference.identifier === id)?.resolved;
+};
+var blockReturnExpressions2 = (body) => body.body.flatMap((statement) => statement.type === "ReturnStatement" && statement.argument ? [statement.argument] : []);
+var functionReturnExpressions = (functionNode) => functionNode.body.type === "BlockStatement" ? blockReturnExpressions2(functionNode.body) : [functionNode.body];
+var definitionExpressions = (definition) => {
+  if (definition.type === "Variable") {
+    const initializer = definition.node.init;
+    if (!initializer)
+      return [];
+    if (initializer.type === "ArrowFunctionExpression" || initializer.type === "FunctionExpression")
+      return functionReturnExpressions(initializer);
+    return [initializer];
+  }
+  if (definition.type === "FunctionName" && definition.node.type === "FunctionDeclaration")
+    return functionReturnExpressions(definition.node);
+  return [];
+};
+var elysiaConstructorLocal2 = (node) => {
+  const specifier = node.specifiers.find((candidate) => candidate.type === "ImportSpecifier" && candidate.imported.type === "Identifier" && candidate.imported.name === "Elysia");
+  return specifier?.local.name;
+};
+var isElysiaExpression = (context, expression, elysiaConstructors, seen = new Set) => {
+  const { root } = chainAnalysis(expression);
+  if (root.type === "NewExpression" && root.callee.type === "Identifier" && elysiaConstructors.has(root.callee.name))
+    return true;
+  if (root.type !== "Identifier")
+    return false;
+  const variable = variableFor2(context, root);
+  if (!variable || seen.has(variable))
+    return false;
+  seen.add(variable);
+  return variable.defs.some((definition) => definitionExpressions(definition).some((result) => isElysiaExpression(context, result, elysiaConstructors, seen)));
+};
+var isRouteExpression = (context, expression, elysiaConstructors) => {
+  const analysis = chainAnalysis(expression);
+  return analysis.registersRoute && (analysis.registersHttpPath || isElysiaExpression(context, expression, elysiaConstructors));
+};
+var declaratorRouteExpressions = (node) => {
+  const { init } = node;
+  if (!init)
+    return [];
+  if (init.type === "ArrowFunctionExpression" || init.type === "FunctionExpression")
+    return functionReturnExpressions(init);
+  return [init];
+};
+var ancestorTypeAlias = (node) => {
+  let current = node.parent;
+  while (current && current.type !== "TSTypeAliasDeclaration")
+    current = current.parent;
+  return current?.type === "TSTypeAliasDeclaration" ? current : undefined;
+};
+var elysiaRouteBoundaries = createRule({
   create(context, [options]) {
-    const appDirectories = options?.appDirectories ?? DEFAULT_APP_DIRECTORIES;
+    const routeDirectories = options?.routeDirectories ?? DEFAULT_ROUTE_DIRECTORIES;
     const filename = normalizePath(context.filename);
-    const isAppFile = APP_FILE_PATTERN.test(filename) && appDirectories.some((directory) => isInsideDirectory(filename, directory));
-    let applicationFactory;
-    let applicationType;
+    const isRouteFile = routeDirectories.some((directory) => isInsideDirectory(filename, directory));
+    const elysiaConstructors = new Set;
+    const exportedRouteSymbols = new Map;
+    const queriedTypes = [];
+    const declaratorIsRoute = (node) => declaratorRouteExpressions(node).some((expression) => isRouteExpression(context, expression, elysiaConstructors));
+    const inspectQueriedType = ({
+      alias,
+      identifier
+    }) => {
+      const variable = variableFor2(context, identifier);
+      if (!variable)
+        return;
+      const expressions = variable.defs.flatMap(definitionExpressions);
+      const referencesRoute = expressions.some((expression) => isRouteExpression(context, expression, elysiaConstructors));
+      if (referencesRoute && !isRouteFile) {
+        context.report({
+          data: { directory: routeDirectories[0] ?? "routes" },
+          messageId: "routeContractLocation",
+          node: alias
+        });
+        return;
+      }
+      if (!referencesRoute && expressions.some((expression) => isElysiaExpression(context, expression, elysiaConstructors)))
+        context.report({
+          messageId: "terminalGraphType",
+          node: alias
+        });
+    };
     return {
       ExportNamedDeclaration(node) {
         const { declaration } = node;
         if (!declaration)
           return;
-        if (declaration.type === "TSTypeAliasDeclaration") {
-          const queriedIdentifier = typeQueryIdentifier(declaration.typeAnnotation);
-          if (declaration.id.name === "Server" && queriedIdentifier === "server")
-            context.report({
-              messageId: "terminalServerType",
-              node: declaration
-            });
-          if (!isApplicationType(declaration))
-            return;
-          applicationType = declaration;
-          if (isAppFile)
-            return;
-          context.report({
-            data: { directory: appDirectories[0] ?? "apps" },
-            messageId: "applicationTypeLocation",
-            node: declaration
-          });
-          return;
-        }
         if (declaration.type === "VariableDeclaration") {
-          if (exportedVariableNames(declaration).some((name) => APPLICATION_FACTORY_PATTERN.test(name)))
-            applicationFactory = declaration;
-          return;
+          for (const declarator of declaration.declarations)
+            if (declarator.id.type === "Identifier" && declaratorIsRoute(declarator))
+              exportedRouteSymbols.set(declarator.id.name, declarator);
         }
-        if (declaration.type === "FunctionDeclaration" && declaration.id && APPLICATION_FACTORY_PATTERN.test(declaration.id.name))
-          applicationFactory = declaration;
+        if (declaration.type === "FunctionDeclaration" && declaration.id && functionReturnExpressions(declaration).some((expression) => isRouteExpression(context, expression, elysiaConstructors)))
+          exportedRouteSymbols.set(declaration.id.name, declaration);
       },
-      "Program:exit"(node) {
-        if (!isAppFile)
+      ImportDeclaration(node) {
+        if (node.source.value !== "elysia")
           return;
-        if (!applicationFactory)
-          context.report({
-            messageId: "missingApplicationFactory",
-            node
-          });
-        if (!applicationType)
-          context.report({
-            messageId: "missingApplicationType",
-            node
-          });
+        const localName = elysiaConstructorLocal2(node);
+        if (localName)
+          elysiaConstructors.add(localName);
+      },
+      "Program:exit"() {
+        queriedTypes.forEach(inspectQueriedType);
+        if (!isRouteFile)
+          return;
+        const contractedSymbols = new Set(queriedTypes.map(({ identifier }) => identifier.name));
+        for (const [symbol, node] of exportedRouteSymbols)
+          if (!contractedSymbols.has(symbol))
+            context.report({
+              data: { symbol },
+              messageId: "missingRouteContract",
+              node
+            });
+      },
+      TSTypeQuery(node) {
+        if (node.exprName.type !== "Identifier")
+          return;
+        const alias = ancestorTypeAlias(node);
+        if (!alias || alias.parent.type !== "ExportNamedDeclaration")
+          return;
+        queriedTypes.push({ alias, identifier: node.exprName });
       },
       VariableDeclarator(node) {
-        if (isAppFile || node.id.type !== "Identifier" || !APPLICATION_TYPE_PATTERN.test(node.id.name) || !node.init || !registersRoute(node.init))
+        if (!declaratorIsRoute(node) || isRouteFile)
           return;
         context.report({
-          data: { directory: appDirectories[0] ?? "apps" },
-          messageId: "applicationValueLocation",
+          data: { directory: routeDirectories[0] ?? "routes" },
+          messageId: "routeSurfaceLocation",
           node
         });
       }
     };
   },
-  defaultOptions: [{ appDirectories: DEFAULT_APP_DIRECTORIES }],
+  defaultOptions: [{ routeDirectories: DEFAULT_ROUTE_DIRECTORIES }],
   meta: {
     docs: {
-      description: "Keep inferred Elysia sub-app contracts in dedicated app modules and prevent terminal `typeof server` aliases from forcing TypeScript to instantiate the complete server graph."
+      description: "Detect Elysia route surfaces and inferred contracts semantically, keep them in configured route directories, and prevent terminal graph type exports."
     },
     messages: {
-      applicationTypeLocation: "Move this inferred Elysia application contract into a `*.app.ts` module under `{{directory}}` and inject its dependencies through a create...Application factory.",
-      applicationValueLocation: "Move this route-bearing Elysia application into a `*.app.ts` module under `{{directory}}` and expose it through a create...Application factory.",
-      missingApplicationFactory: "This Elysia app module must export a create...Application factory so the entrypoint only assembles independently inferred route surfaces.",
-      missingApplicationType: "This Elysia app module must export its ...Application type for isolated Eden consumers.",
-      terminalServerType: "Do not export `typeof server`: it forces TypeScript consumers to instantiate the entire composed Elysia graph. Export the independently inferred sub-app contracts instead."
+      missingRouteContract: "Export an inferred type contract that references `{{symbol}}` so consumers use this isolated route surface instead of the terminal server graph.",
+      routeContractLocation: "Move this inferred route contract and its route surface under `{{directory}}`; filenames and symbol names are unrestricted.",
+      routeSurfaceLocation: "Move this route-bearing surface under `{{directory}}`; filenames and symbol names are unrestricted.",
+      terminalGraphType: "Do not export an inferred type for the terminal composed Elysia graph. Export independently inferred route-surface contracts instead."
     },
     schema: [
       {
         additionalProperties: false,
         properties: {
-          appDirectories: {
+          routeDirectories: {
             items: { minLength: 1, type: "string" },
             type: "array"
           }
@@ -4825,7 +4888,7 @@ var elysiaAppContracts = createRule({
     ],
     type: "problem"
   },
-  name: "elysia-app-contracts"
+  name: "elysia-route-boundaries"
 });
 
 // src/index.ts
@@ -4836,8 +4899,8 @@ var src_default = {
   rules: {
     "angular-one-feature-per-file": angularOneFeaturePerFile,
     "button-icon-is-hidden": buttonIconIsHidden,
-    "elysia-app-contracts": elysiaAppContracts,
     "elysia-composition-boundaries": elysiaCompositionBoundaries,
+    "elysia-route-boundaries": elysiaRouteBoundaries,
     "explicit-object-types": explicitObjectTypes,
     "heading-order": headingOrder,
     "icon-button-has-accessible-name": iconButtonHasAccessibleName,

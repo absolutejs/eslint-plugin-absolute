@@ -31,7 +31,7 @@ import { buttonIconIsHidden } from "./rules/button-icon-is-hidden";
 import { iconButtonHasAccessibleName } from "./rules/icon-button-has-accessible-name";
 import { templateSourceProcessor } from "./processors/template-source";
 import { elysiaCompositionBoundaries } from "./rules/elysia-composition-boundaries";
-import { elysiaAppContracts } from "./rules/elysia-app-contracts";
+import { elysiaRouteBoundaries } from "./rules/elysia-route-boundaries";
 
 export default {
 	processors: {
@@ -40,8 +40,8 @@ export default {
 	rules: {
 		"angular-one-feature-per-file": angularOneFeaturePerFile,
 		"button-icon-is-hidden": buttonIconIsHidden,
-		"elysia-app-contracts": elysiaAppContracts,
 		"elysia-composition-boundaries": elysiaCompositionBoundaries,
+		"elysia-route-boundaries": elysiaRouteBoundaries,
 		"explicit-object-types": explicitObjectTypes,
 		"heading-order": headingOrder,
 		"icon-button-has-accessible-name": iconButtonHasAccessibleName,

@@ -31,11 +31,10 @@ destructured component props. It is intentionally distinct from the broader
 `absolute/no-inline-object-types` policy so upgrades do not silently expand a
 repository's lint surface.
 
-`absolute/elysia-app-contracts` makes the corresponding file architecture
-enforceable. Route-bearing `...Application` values and their inferred types
-must live in `*.app.ts` modules under a configured app directory. Those
-modules must export both a
-`create...Application` factory and an isolated application type, and terminal
-`export type Server = typeof server` aliases are forbidden. The rule reports
-cross-file extractions without autofixing them because captured services and
-route closures must become explicit factory dependencies.
+`absolute/elysia-route-boundaries` makes the corresponding file architecture
+enforceable without filename or symbol-name conventions. It detects Elysia
+route registration chains, exported route factories, their actual inferred
+type references, and terminal composed graphs from AST structure and symbol
+resolution. Route files may have any name under a configured directory. The
+rule reports cross-file extractions without autofixing them because captured
+services and route closures must become explicit factory dependencies.
