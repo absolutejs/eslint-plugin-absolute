@@ -4485,6 +4485,150 @@ ${text.replace(BLOCK_COMMENT_PATTERN2, preserveLines2)}
   supportsAutofix: false
 };
 
+// src/rules/elysia-composition-boundaries.ts
+var ROUTE_METHODS = new Set([
+  "all",
+  "connect",
+  "delete",
+  "get",
+  "group",
+  "head",
+  "options",
+  "patch",
+  "post",
+  "put",
+  "route",
+  "trace",
+  "ws"
+]);
+var memberName = (node) => {
+  if (node.computed) {
+    return node.property.type === "Literal" && typeof node.property.value === "string" ? node.property.value : undefined;
+  }
+  return node.property.type === "Identifier" ? node.property.name : undefined;
+};
+var callMember = (node) => node.callee.type === "MemberExpression" ? node.callee : undefined;
+var chainRoot = (expression) => {
+  let current = expression;
+  let registersRoute = false;
+  while (current.type === "CallExpression") {
+    const member = callMember(current);
+    if (!member || member.object.type === "Super")
+      break;
+    const method = memberName(member);
+    if (method && ROUTE_METHODS.has(method))
+      registersRoute = true;
+    current = member.object;
+  }
+  return { registersRoute, root: current };
+};
+var isElysiaConstructor = (expression, elysiaConstructors) => expression.type === "NewExpression" && expression.callee.type === "Identifier" && elysiaConstructors.has(expression.callee.name);
+var variableFor = (context, id) => {
+  const scope = context.sourceCode.getScope(id);
+  return scope.references.find((reference) => reference.identifier === id)?.resolved;
+};
+var isElysiaApplication = (context, expression, elysiaConstructors, seen = new Set) => {
+  const { root } = chainRoot(expression);
+  if (isElysiaConstructor(root, elysiaConstructors))
+    return true;
+  if (root.type !== "Identifier")
+    return false;
+  const variable = variableFor(context, root);
+  if (!variable || seen.has(variable))
+    return false;
+  seen.add(variable);
+  return variable.defs.some((definition) => {
+    if (definition.type !== "Variable")
+      return false;
+    const declarator = definition.node;
+    if (!declarator.init)
+      return false;
+    return isElysiaApplication(context, declarator.init, elysiaConstructors, seen);
+  });
+};
+var isUseCall = (node) => {
+  const member = callMember(node);
+  return Boolean(member && memberName(member) === "use" && node.arguments.length === 1);
+};
+var parentIsUseCall = (node) => {
+  const { parent } = node;
+  if (parent.type !== "MemberExpression" || parent.object !== node)
+    return false;
+  const call = parent.parent;
+  return call.type === "CallExpression" && isUseCall(call);
+};
+var collectUseChain = (node) => {
+  const plugins = [];
+  let current = node;
+  while (current.type === "CallExpression" && isUseCall(current)) {
+    plugins.unshift(current.arguments[0]);
+    const member = callMember(current);
+    if (member.object.type === "Super")
+      break;
+    current = member.object;
+  }
+  return { plugins, root: current };
+};
+var elysiaConstructorLocal = (node) => {
+  const specifier = node.specifiers.find((candidate) => candidate.type === "ImportSpecifier" && candidate.imported.type === "Identifier" && candidate.imported.name === "Elysia");
+  return specifier?.local.name;
+};
+var elysiaCompositionBoundaries = createRule({
+  create(context) {
+    const elysiaConstructors = new Set;
+    return {
+      CallExpression(node) {
+        if (!isUseCall(node) || parentIsUseCall(node))
+          return;
+        const { plugins, root } = collectUseChain(node);
+        if (plugins.length < 2)
+          return;
+        const comments = context.sourceCode.getCommentsInside(node);
+        context.report({
+          fix: comments.length === 0 ? (fixer) => fixer.replaceText(node, `${context.sourceCode.getText(root)}.use([${plugins.map((plugin) => context.sourceCode.getText(plugin)).join(", ")}])`) : undefined,
+          messageId: "preferUseArray",
+          node
+        });
+      },
+      ImportDeclaration(node) {
+        if (node.source.value !== "elysia")
+          return;
+        const localName = elysiaConstructorLocal(node);
+        if (localName)
+          elysiaConstructors.add(localName);
+      },
+      VariableDeclarator(node) {
+        if (!node.init || node.init.type !== "CallExpression")
+          return;
+        const { registersRoute, root } = chainRoot(node.init);
+        if (!registersRoute || root.type !== "Identifier")
+          return;
+        if (!isElysiaApplication(context, root, elysiaConstructors))
+          return;
+        context.report({
+          data: { source: root.name },
+          messageId: "independentRouteApp",
+          node
+        });
+      }
+    };
+  },
+  defaultOptions: [],
+  meta: {
+    docs: {
+      description: "Require independent Elysia route applications and prefer shallow array plugin composition so TypeScript does not instantiate an ever-growing server graph."
+    },
+    fixable: "code",
+    messages: {
+      independentRouteApp: "Build this route surface from a new named Elysia application instead of extending `{{source}}`. Install shared dependencies explicitly, mount both applications at the root, and export the real sub-app type for Eden consumers.",
+      preferUseArray: "Compose adjacent Elysia plugins with one shallow `.use([pluginA, pluginB])` call to keep the inferred type graph balanced."
+    },
+    schema: [],
+    type: "problem"
+  },
+  name: "elysia-composition-boundaries"
+});
+
 // src/index.ts
 var src_default = {
   processors: {
@@ -4493,6 +4637,7 @@ var src_default = {
   rules: {
     "angular-one-feature-per-file": angularOneFeaturePerFile,
     "button-icon-is-hidden": buttonIconIsHidden,
+    "elysia-composition-boundaries": elysiaCompositionBoundaries,
     "explicit-object-types": explicitObjectTypes,
     "heading-order": headingOrder,
     "icon-button-has-accessible-name": iconButtonHasAccessibleName,
