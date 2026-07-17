@@ -32,8 +32,9 @@ destructured component props. It is intentionally distinct from the broader
 repository's lint surface.
 
 `absolute/elysia-app-contracts` makes the corresponding file architecture
-enforceable. Inferred `...Application` types must live in `*.app.ts` modules
-under a configured app directory, those modules must export both a
+enforceable. Route-bearing `...Application` values and their inferred types
+must live in `*.app.ts` modules under a configured app directory. Those
+modules must export both a
 `create...Application` factory and an isolated application type, and terminal
 `export type Server = typeof server` aliases are forbidden. The rule reports
 cross-file extractions without autofixing them because captured services and

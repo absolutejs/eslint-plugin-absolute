@@ -16,6 +16,18 @@ export type Server = typeof server;`,
 			name: "rejects a terminal server type"
 		},
 		{
+			code: `const adminApplication = createHttpApplication("admin")
+  .get("/admin", () => "ok");`,
+			errors: [
+				{
+					data: { directory: "src/backend/apps" },
+					messageId: "applicationValueLocation"
+				}
+			],
+			filename: "src/backend/server.ts",
+			name: "requires route-bearing application values to live in the app directory"
+		},
+		{
 			code: `export const adminApplication = createAdminApplication(dependencies);
 export type AdminApplication = typeof adminApplication;`,
 			errors: [
@@ -45,6 +57,11 @@ export type AdminApplication = typeof adminApplication;`,
 			code: `export const server = platform.use(networking);`,
 			filename: "src/backend/server.ts",
 			name: "accepts an untyped terminal server value"
+		},
+		{
+			code: `const platformApplication = new Elysia().use(auth);`,
+			filename: "src/backend/server.ts",
+			name: "allows a root composition application without routes"
 		},
 		{
 			code: `export const createAdminApplication = () => new Elysia();

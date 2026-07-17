@@ -4680,6 +4680,21 @@ var DEFAULT_APP_DIRECTORIES = ["src/backend/apps", "src/apps", "apps"];
 var APP_FILE_PATTERN = /\.app\.[cm]?[jt]sx?$/u;
 var APPLICATION_FACTORY_PATTERN = /^create.+Application$/u;
 var APPLICATION_TYPE_PATTERN = /Application$/u;
+var ROUTE_METHODS2 = new Set([
+  "all",
+  "connect",
+  "delete",
+  "get",
+  "group",
+  "head",
+  "options",
+  "patch",
+  "post",
+  "put",
+  "route",
+  "trace",
+  "ws"
+]);
 var normalizePath = (path) => path.replaceAll("\\", "/").replace(/^\.\//u, "").replace(/\/$/u, "");
 var isInsideDirectory = (filename, directory) => {
   const normalizedFilename = normalizePath(filename);
@@ -4701,6 +4716,25 @@ var isApplicationType = (node) => {
   return node.typeAnnotation.typeArguments?.params.some((parameter) => parameter.type === "TSTypeQuery");
 };
 var exportedVariableNames = (node) => node.declarations.flatMap((declaration) => declaration.id.type === "Identifier" ? [declaration.id.name] : []);
+var memberName2 = (node) => {
+  if (node.computed)
+    return node.property.type === "Literal" && typeof node.property.value === "string" ? node.property.value : undefined;
+  return node.property.type === "Identifier" ? node.property.name : undefined;
+};
+var registersRoute = (expression) => {
+  let current = expression;
+  while (current.type === "CallExpression") {
+    if (current.callee.type !== "MemberExpression")
+      return false;
+    const method = memberName2(current.callee);
+    if (method && ROUTE_METHODS2.has(method))
+      return true;
+    if (current.callee.object.type === "Super")
+      return false;
+    current = current.callee.object;
+  }
+  return false;
+};
 var elysiaAppContracts = createRule({
   create(context, [options]) {
     const appDirectories = options?.appDirectories ?? DEFAULT_APP_DIRECTORIES;
@@ -4753,6 +4787,15 @@ var elysiaAppContracts = createRule({
             messageId: "missingApplicationType",
             node
           });
+      },
+      VariableDeclarator(node) {
+        if (isAppFile || node.id.type !== "Identifier" || !APPLICATION_TYPE_PATTERN.test(node.id.name) || !node.init || !registersRoute(node.init))
+          return;
+        context.report({
+          data: { directory: appDirectories[0] ?? "apps" },
+          messageId: "applicationValueLocation",
+          node
+        });
       }
     };
   },
@@ -4763,6 +4806,7 @@ var elysiaAppContracts = createRule({
     },
     messages: {
       applicationTypeLocation: "Move this inferred Elysia application contract into a `*.app.ts` module under `{{directory}}` and inject its dependencies through a create...Application factory.",
+      applicationValueLocation: "Move this route-bearing Elysia application into a `*.app.ts` module under `{{directory}}` and expose it through a create...Application factory.",
       missingApplicationFactory: "This Elysia app module must export a create...Application factory so the entrypoint only assembles independently inferred route surfaces.",
       missingApplicationType: "This Elysia app module must export its ...Application type for isolated Eden consumers.",
       terminalServerType: "Do not export `typeof server`: it forces TypeScript consumers to instantiate the entire composed Elysia graph. Export the independently inferred sub-app contracts instead."
