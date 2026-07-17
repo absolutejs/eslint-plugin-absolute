@@ -3783,6 +3783,36 @@ var noInlineObjectTypes = createRule({
   name: "no-inline-object-types"
 });
 
+// src/rules/no-inline-prop-types.ts
+var checkParameter = (context, parameter) => {
+  if (parameter.type !== "ObjectPattern" || parameter.typeAnnotation?.type !== "TSTypeAnnotation" || parameter.typeAnnotation.typeAnnotation.type !== "TSTypeLiteral")
+    return;
+  context.report({ messageId: "noInlinePropTypes", node: parameter });
+};
+var noInlinePropTypes = createRule({
+  create(context) {
+    return {
+      "FunctionDeclaration, ArrowFunctionExpression, FunctionExpression"(node) {
+        const [firstParameter] = node.params;
+        if (firstParameter)
+          checkParameter(context, firstParameter);
+      }
+    };
+  },
+  defaultOptions: [],
+  meta: {
+    docs: {
+      description: "Require a named type for destructured component props without applying the broader no-inline-object-types policy."
+    },
+    messages: {
+      noInlinePropTypes: "Inline prop type definitions are not allowed. Use a named type alias or interface instead of an inline object type."
+    },
+    schema: [],
+    type: "suggestion"
+  },
+  name: "no-inline-prop-types"
+});
+
 // src/rules/no-nondeterministic-render.ts
 import { AST_NODE_TYPES as AST_NODE_TYPES4 } from "@typescript-eslint/utils";
 var BANNED_TEMPLATE_PATTERN = /\bMath\.random\s*\(|\bDate\.now\s*\(|\bnew\s+Date\s*\(\s*\)|\bcrypto\.randomUUID\s*\(|\bperformance\.now\s*\(/;
@@ -4650,6 +4680,7 @@ var src_default = {
     "no-explicit-return-type": noExplicitReturnTypes,
     "no-import-meta-path": noImportMetaPath,
     "no-inline-object-types": noInlineObjectTypes,
+    "no-inline-prop-types": noInlinePropTypes,
     "no-multi-style-objects": noMultiStyleObjects,
     "no-nested-jsx-return": noNestedJSXReturn,
     "no-nondeterministic-render": noNondeterministicRender,

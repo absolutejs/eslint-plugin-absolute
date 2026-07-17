@@ -25,3 +25,8 @@ new Elysia().use([auth, metrics]);
 
 Chains containing comments are reported without an automatic rewrite so the
 ordering rationale cannot be lost.
+
+`absolute/no-inline-prop-types` remains the narrow compatibility rule for
+destructured component props. It is intentionally distinct from the broader
+`absolute/no-inline-object-types` policy so upgrades do not silently expand a
+repository's lint surface.
