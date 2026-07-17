@@ -22,6 +22,19 @@ const adminApp = publicApp.get("/admin", () => "admin");`,
 		},
 		{
 			code: `import { Elysia } from "elysia";
+const createHttpApplication = (name: string) => new Elysia({ name });
+const publicApp = createHttpApplication("public").get("/", () => "ok");
+const adminApp = publicApp.get("/admin", () => "admin");`,
+			errors: [
+				{
+					data: { source: "publicApp" },
+					messageId: "independentRouteApp"
+				}
+			],
+			name: "resolves a local Elysia application factory"
+		},
+		{
+			code: `import { Elysia } from "elysia";
 const app = new Elysia().use(auth).use(metrics).get("/", () => "ok");`,
 			errors: [{ messageId: "preferUseArray" }],
 			name: "fixes adjacent plugin composition",
@@ -52,6 +65,13 @@ const app = new Elysia()
 const publicApp = new Elysia({ name: "public" }).use([auth, metrics]).get("/", () => "ok");
 const adminApp = new Elysia({ name: "admin" }).use(auth).get("/admin", () => "admin");`,
 			name: "accepts independent named route applications"
+		},
+		{
+			code: `import { Elysia } from "elysia";
+const createHttpApplication = (name: string) => new Elysia({ name });
+const publicApp = createHttpApplication("public").get("/", () => "ok");
+const adminApp = createHttpApplication("admin").get("/admin", () => "admin");`,
+			name: "accepts independent applications from a local factory"
 		},
 		{
 			code: `const builder = createBuilder();

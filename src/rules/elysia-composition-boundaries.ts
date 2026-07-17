@@ -67,6 +67,27 @@ const variableFor = (
 		?.resolved;
 };
 
+const blockReturnExpressions = (body: TSESTree.BlockStatement) =>
+	body.body.flatMap((statement) =>
+		statement.type === "ReturnStatement" && statement.argument
+			? [statement.argument]
+			: []
+	);
+
+const factoryReturnExpressions = (definition: TSESLint.Scope.Definition) => {
+	if (definition.type !== "Variable") return [];
+	const initializer = definition.node.init;
+	if (
+		initializer?.type !== "ArrowFunctionExpression" &&
+		initializer?.type !== "FunctionExpression"
+	)
+		return [];
+
+	return initializer.body.type === "BlockStatement"
+		? blockReturnExpressions(initializer.body)
+		: [initializer.body];
+};
+
 const isElysiaApplication = (
 	context: Parameters<TSESLint.RuleModule<MessageIds, Options>["create"]>[0],
 	expression: TSESTree.Expression,
@@ -75,6 +96,17 @@ const isElysiaApplication = (
 ): boolean => {
 	const { root } = chainRoot(expression);
 	if (isElysiaConstructor(root, elysiaConstructors)) return true;
+	if (root.type === "CallExpression" && root.callee.type === "Identifier") {
+		const factory = variableFor(context, root.callee);
+		if (!factory || seen.has(factory)) return false;
+		seen.add(factory);
+
+		return factory.defs.some((definition) =>
+			factoryReturnExpressions(definition).some((result) =>
+				isElysiaApplication(context, result, elysiaConstructors, seen)
+			)
+		);
+	}
 	if (root.type !== "Identifier") return false;
 	const variable = variableFor(context, root);
 	if (!variable || seen.has(variable)) return false;

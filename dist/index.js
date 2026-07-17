@@ -4557,10 +4557,26 @@ var variableFor = (context, id) => {
   const scope = context.sourceCode.getScope(id);
   return scope.references.find((reference) => reference.identifier === id)?.resolved;
 };
+var blockReturnExpressions = (body) => body.body.flatMap((statement) => statement.type === "ReturnStatement" && statement.argument ? [statement.argument] : []);
+var factoryReturnExpressions = (definition) => {
+  if (definition.type !== "Variable")
+    return [];
+  const initializer = definition.node.init;
+  if (initializer?.type !== "ArrowFunctionExpression" && initializer?.type !== "FunctionExpression")
+    return [];
+  return initializer.body.type === "BlockStatement" ? blockReturnExpressions(initializer.body) : [initializer.body];
+};
 var isElysiaApplication = (context, expression, elysiaConstructors, seen = new Set) => {
   const { root } = chainRoot(expression);
   if (isElysiaConstructor(root, elysiaConstructors))
     return true;
+  if (root.type === "CallExpression" && root.callee.type === "Identifier") {
+    const factory = variableFor(context, root.callee);
+    if (!factory || seen.has(factory))
+      return false;
+    seen.add(factory);
+    return factory.defs.some((definition) => factoryReturnExpressions(definition).some((result) => isElysiaApplication(context, result, elysiaConstructors, seen)));
+  }
   if (root.type !== "Identifier")
     return false;
   const variable = variableFor(context, root);
