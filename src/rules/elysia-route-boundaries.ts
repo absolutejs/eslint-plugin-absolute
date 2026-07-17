@@ -1,7 +1,12 @@
 import { TSESLint, TSESTree } from "@typescript-eslint/utils";
 import { createRule } from "../createRule";
 
-type Options = [{ routeDirectories?: string[] }];
+type Options = [
+	{
+		compositionFiles?: string[];
+		routeDirectories?: string[];
+	}
+];
 type MessageIds =
 	| "missingRouteContract"
 	| "routeContractLocation"
@@ -12,6 +17,11 @@ const DEFAULT_ROUTE_DIRECTORIES = [
 	"src/backend/routes",
 	"src/routes",
 	"routes"
+];
+const DEFAULT_COMPOSITION_FILES = [
+	"src/backend/server.ts",
+	"src/server.ts",
+	"server.ts"
 ];
 const ROUTE_METHODS = new Set([
 	"all",
@@ -44,6 +54,16 @@ const isInsideDirectory = (filename: string, directory: string) => {
 	return (
 		normalizedFilename.startsWith(`${normalizedDirectory}/`) ||
 		normalizedFilename.includes(`/${normalizedDirectory}/`)
+	);
+};
+
+const matchesFile = (filename: string, configuredFile: string) => {
+	const normalizedFilename = normalizePath(filename);
+	const normalizedConfiguredFile = normalizePath(configuredFile);
+
+	return (
+		normalizedFilename === normalizedConfiguredFile ||
+		normalizedFilename.endsWith(`/${normalizedConfiguredFile}`)
 	);
 };
 
@@ -200,11 +220,16 @@ const ancestorTypeAlias = (node: TSESTree.Node) => {
 
 export const elysiaRouteBoundaries = createRule<Options, MessageIds>({
 	create(context, [options]) {
+		const compositionFiles =
+			options?.compositionFiles ?? DEFAULT_COMPOSITION_FILES;
 		const routeDirectories =
 			options?.routeDirectories ?? DEFAULT_ROUTE_DIRECTORIES;
 		const filename = normalizePath(context.filename);
 		const isRouteFile = routeDirectories.some((directory) =>
 			isInsideDirectory(filename, directory)
+		);
+		const isCompositionFile = compositionFiles.some((file) =>
+			matchesFile(filename, file)
 		);
 		const elysiaConstructors = new Set<string>();
 		const exportedRouteSymbols = new Map<string, TSESTree.Node>();
@@ -227,7 +252,7 @@ export const elysiaRouteBoundaries = createRule<Options, MessageIds>({
 			const referencesRoute = expressions.some((expression) =>
 				isRouteExpression(context, expression, elysiaConstructors)
 			);
-			if (referencesRoute && !isRouteFile) {
+			if (referencesRoute && isCompositionFile) {
 				context.report({
 					data: { directory: routeDirectories[0] ?? "routes" },
 					messageId: "routeContractLocation",
@@ -302,7 +327,7 @@ export const elysiaRouteBoundaries = createRule<Options, MessageIds>({
 				queriedTypes.push({ alias, identifier: node.exprName });
 			},
 			VariableDeclarator(node: TSESTree.VariableDeclarator) {
-				if (!declaratorIsRoute(node) || isRouteFile) return;
+				if (!declaratorIsRoute(node) || !isCompositionFile) return;
 				context.report({
 					data: { directory: routeDirectories[0] ?? "routes" },
 					messageId: "routeSurfaceLocation",
@@ -311,7 +336,12 @@ export const elysiaRouteBoundaries = createRule<Options, MessageIds>({
 			}
 		};
 	},
-	defaultOptions: [{ routeDirectories: DEFAULT_ROUTE_DIRECTORIES }],
+	defaultOptions: [
+		{
+			compositionFiles: DEFAULT_COMPOSITION_FILES,
+			routeDirectories: DEFAULT_ROUTE_DIRECTORIES
+		}
+	],
 	meta: {
 		docs: {
 			description:
@@ -331,6 +361,10 @@ export const elysiaRouteBoundaries = createRule<Options, MessageIds>({
 			{
 				additionalProperties: false,
 				properties: {
+					compositionFiles: {
+						items: { minLength: 1, type: "string" },
+						type: "array"
+					},
 					routeDirectories: {
 						items: { minLength: 1, type: "string" },
 						type: "array"

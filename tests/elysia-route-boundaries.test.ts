@@ -51,6 +51,11 @@ export type PublicSurface = ReturnType<typeof anything>;`,
 	],
 	valid: [
 		{
+			code: `export const whatever = () => dependencies.make().get("/health", () => "ok");`,
+			filename: "src/backend/utils/health.ts",
+			name: "allows route factories outside configured composition entrypoints"
+		},
+		{
 			code: `export const weave = () => dependencies.make().get("/users", () => []);
 export type PublicSurface = ReturnType<typeof weave>;`,
 			filename: "src/backend/routes/users.ts",

@@ -4681,6 +4681,11 @@ var DEFAULT_ROUTE_DIRECTORIES = [
   "src/routes",
   "routes"
 ];
+var DEFAULT_COMPOSITION_FILES = [
+  "src/backend/server.ts",
+  "src/server.ts",
+  "server.ts"
+];
 var ROUTE_METHODS2 = new Set([
   "all",
   "connect",
@@ -4702,6 +4707,11 @@ var isInsideDirectory = (filename, directory) => {
   const normalizedFilename = normalizePath(filename);
   const normalizedDirectory = normalizePath(directory);
   return normalizedFilename.startsWith(`${normalizedDirectory}/`) || normalizedFilename.includes(`/${normalizedDirectory}/`);
+};
+var matchesFile = (filename, configuredFile) => {
+  const normalizedFilename = normalizePath(filename);
+  const normalizedConfiguredFile = normalizePath(configuredFile);
+  return normalizedFilename === normalizedConfiguredFile || normalizedFilename.endsWith(`/${normalizedConfiguredFile}`);
 };
 var memberName2 = (node) => {
   if (node.computed)
@@ -4781,9 +4791,11 @@ var ancestorTypeAlias = (node) => {
 };
 var elysiaRouteBoundaries = createRule({
   create(context, [options]) {
+    const compositionFiles = options?.compositionFiles ?? DEFAULT_COMPOSITION_FILES;
     const routeDirectories = options?.routeDirectories ?? DEFAULT_ROUTE_DIRECTORIES;
     const filename = normalizePath(context.filename);
     const isRouteFile = routeDirectories.some((directory) => isInsideDirectory(filename, directory));
+    const isCompositionFile = compositionFiles.some((file) => matchesFile(filename, file));
     const elysiaConstructors = new Set;
     const exportedRouteSymbols = new Map;
     const queriedTypes = [];
@@ -4797,7 +4809,7 @@ var elysiaRouteBoundaries = createRule({
         return;
       const expressions = variable.defs.flatMap(definitionExpressions);
       const referencesRoute = expressions.some((expression) => isRouteExpression(context, expression, elysiaConstructors));
-      if (referencesRoute && !isRouteFile) {
+      if (referencesRoute && isCompositionFile) {
         context.report({
           data: { directory: routeDirectories[0] ?? "routes" },
           messageId: "routeContractLocation",
@@ -4853,7 +4865,7 @@ var elysiaRouteBoundaries = createRule({
         queriedTypes.push({ alias, identifier: node.exprName });
       },
       VariableDeclarator(node) {
-        if (!declaratorIsRoute(node) || isRouteFile)
+        if (!declaratorIsRoute(node) || !isCompositionFile)
           return;
         context.report({
           data: { directory: routeDirectories[0] ?? "routes" },
@@ -4863,7 +4875,12 @@ var elysiaRouteBoundaries = createRule({
       }
     };
   },
-  defaultOptions: [{ routeDirectories: DEFAULT_ROUTE_DIRECTORIES }],
+  defaultOptions: [
+    {
+      compositionFiles: DEFAULT_COMPOSITION_FILES,
+      routeDirectories: DEFAULT_ROUTE_DIRECTORIES
+    }
+  ],
   meta: {
     docs: {
       description: "Detect Elysia route surfaces and inferred contracts semantically, keep them in configured route directories, and prevent terminal graph type exports."
@@ -4878,6 +4895,10 @@ var elysiaRouteBoundaries = createRule({
       {
         additionalProperties: false,
         properties: {
+          compositionFiles: {
+            items: { minLength: 1, type: "string" },
+            type: "array"
+          },
           routeDirectories: {
             items: { minLength: 1, type: "string" },
             type: "array"

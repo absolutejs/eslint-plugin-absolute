@@ -35,6 +35,8 @@ repository's lint surface.
 enforceable without filename or symbol-name conventions. It detects Elysia
 route registration chains, exported route factories, their actual inferred
 type references, and terminal composed graphs from AST structure and symbol
-resolution. Route files may have any name under a configured directory. The
-rule reports cross-file extractions without autofixing them because captured
-services and route closures must become explicit factory dependencies.
+resolution. Configured composition entrypoints may assemble route surfaces but
+may not register routes themselves; configured route directories require
+isolated exported contracts. Route factories elsewhere remain valid. The rule
+reports cross-file extractions without autofixing them because captured services
+and route closures must become explicit factory dependencies.
