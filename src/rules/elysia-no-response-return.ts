@@ -11,6 +11,11 @@ type FunctionReference = {
 	functionNode: FunctionNode;
 	target: TSESTree.Node;
 };
+type ReturnedExpression = (
+	context: RuleContext,
+	node: TSESTree.Node,
+	seen?: Set<TSESLint.Scope.Variable>
+) => boolean;
 type ResponseUse = {
 	functionNode: FunctionNode | undefined;
 	kind: "constructor" | "json";
@@ -141,7 +146,29 @@ const preservesReturnedValue = (
 	);
 };
 
-const isReturnedExpression = (node: TSESTree.Node) => {
+const isReturnedVariable = (
+	context: RuleContext,
+	declarator: TSESTree.VariableDeclarator,
+	owner: FunctionNode | undefined,
+	seen: Set<TSESLint.Scope.Variable>
+) => {
+	const [variable] = context.sourceCode.getDeclaredVariables(declarator);
+	if (!variable || seen.has(variable)) return false;
+	seen.add(variable);
+
+	return variable.references.some(
+		(reference) =>
+			functionAncestor(reference.identifier) === owner &&
+			isReturnedExpression(context, reference.identifier, seen)
+	);
+};
+
+const isReturnedExpression: ReturnedExpression = (
+	context: RuleContext,
+	node: TSESTree.Node,
+	seen = new Set<TSESLint.Scope.Variable>()
+) => {
+	const owner = functionAncestor(node);
 	let current = node;
 	while (current.parent) {
 		const { parent } = current;
@@ -153,6 +180,8 @@ const isReturnedExpression = (node: TSESTree.Node) => {
 			parent.body.type !== "BlockStatement"
 		)
 			return parent.body === current;
+		if (parent.type === "VariableDeclarator" && parent.init === current)
+			return isReturnedVariable(context, parent, owner, seen);
 		if (!preservesReturnedValue(parent, current)) return false;
 		current = parent;
 	}
@@ -202,7 +231,7 @@ export const elysiaNoResponseReturn = createRule<Options, MessageIds>({
 				const route = routeRegistration(node);
 				if (route) routeRegistrations.push(route);
 				const owner = functionAncestor(node);
-				if (isResponseJson(node) && isReturnedExpression(node))
+				if (isResponseJson(node) && isReturnedExpression(context, node))
 					responseUses.push({
 						functionNode: owner,
 						kind: "json",
@@ -223,7 +252,10 @@ export const elysiaNoResponseReturn = createRule<Options, MessageIds>({
 					});
 			},
 			NewExpression(node: TSESTree.NewExpression) {
-				if (isResponseConstructor(node) && isReturnedExpression(node))
+				if (
+					isResponseConstructor(node) &&
+					isReturnedExpression(context, node)
+				)
 					responseUses.push({
 						functionNode: functionAncestor(node),
 						kind: "constructor",

@@ -37,6 +37,14 @@ new Elysia().get("/download", shared).get("/json", shared);`,
 			errors: [{ messageId: "nativeResponse" }],
 			name: "rejects a shared helper when any route is not allowlisted",
 			options: [{ allowNativeResponsePaths: ["/download"] }]
+		},
+		{
+			code: `new Elysia().get("/users", () => {
+	const response = Response.json({ users: [] });
+	return response;
+});`,
+			errors: [{ messageId: "responseJson" }],
+			name: "follows a Response stored before it is returned"
 		}
 	],
 	valid: [
@@ -61,6 +69,14 @@ new Elysia().get("/download", shared).get("/json", shared);`,
 	return { text };
 });`,
 			name: "ignores Response used to consume a stream instead of returning it"
+		},
+		{
+			code: `new Elysia().get("/inspect", async () => {
+	const response = new Response(stream);
+	const text = await response.text();
+	return { text };
+});`,
+			name: "ignores a stored Response that is consumed rather than returned"
 		},
 		{
 			code: `const handler = () => Response.json({ ok: true });

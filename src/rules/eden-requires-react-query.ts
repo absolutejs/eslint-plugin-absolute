@@ -56,32 +56,57 @@ const propertyName = (node: TSESTree.Property) => {
 	return typeof node.key.value === "string" ? node.key.value : undefined;
 };
 
-const expressionContainsApi = (node: TSESTree.Node): boolean => {
+const variableFor = (context: RuleContext, identifier: TSESTree.Identifier) =>
+	context.sourceCode
+		.getScope(identifier)
+		.references.find((reference) => reference.identifier === identifier)
+		?.resolved;
+
+const expressionContainsApi = (
+	context: RuleContext,
+	node: TSESTree.Node,
+	seen = new Set<TSESLint.Scope.Variable>()
+): boolean => {
 	if (node.type === "MemberExpression")
-		return memberName(node) === "api" || expressionContainsApi(node.object);
+		return (
+			memberName(node) === "api" ||
+			expressionContainsApi(context, node.object, seen)
+		);
 	if (node.type === "CallExpression" || node.type === "NewExpression")
-		return expressionContainsApi(node.callee);
+		return expressionContainsApi(context, node.callee, seen);
 	if (node.type === "ChainExpression")
-		return expressionContainsApi(node.expression);
+		return expressionContainsApi(context, node.expression, seen);
 	if (
 		node.type === "TSAsExpression" ||
 		node.type === "TSInstantiationExpression" ||
 		node.type === "TSNonNullExpression" ||
 		node.type === "TSTypeAssertion"
 	)
-		return expressionContainsApi(node.expression);
+		return expressionContainsApi(context, node.expression, seen);
+	if (node.type === "Identifier") {
+		const variable = variableFor(context, node);
+		if (!variable || seen.has(variable)) return false;
+		seen.add(variable);
+
+		return variable.defs.some(
+			(definition) =>
+				definition.type === "Variable" &&
+				definition.node.init !== null &&
+				expressionContainsApi(context, definition.node.init, seen)
+		);
+	}
 
 	return false;
 };
 
-const isEdenCall = (node: TSESTree.CallExpression) => {
+const isEdenCall = (context: RuleContext, node: TSESTree.CallExpression) => {
 	if (node.callee.type !== "MemberExpression") return false;
 	const method = memberName(node.callee);
 
 	return Boolean(
 		method &&
 		EDEN_HTTP_METHODS.has(method) &&
-		expressionContainsApi(node.callee.object)
+		expressionContainsApi(context, node.callee.object)
 	);
 };
 
@@ -99,12 +124,6 @@ const functionAncestor = (node: TSESTree.Node) => {
 
 	return undefined;
 };
-
-const variableFor = (context: RuleContext, identifier: TSESTree.Identifier) =>
-	context.sourceCode
-		.getScope(identifier)
-		.references.find((reference) => reference.identifier === identifier)
-		?.resolved;
 
 const functionFromDefinition = (definition: TSESLint.Scope.Definition) => {
 	if (
@@ -220,7 +239,7 @@ export const edenRequiresReactQuery = createRule<Options, MessageIds>({
 		return {
 			CallExpression(node: TSESTree.CallExpression) {
 				const owner = functionAncestor(node);
-				if (isEdenCall(node))
+				if (isEdenCall(context, node))
 					edenCalls.push({ functionNode: owner, node });
 				if (owner && node.callee.type === "Identifier")
 					functionReferences.push({

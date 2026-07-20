@@ -27,6 +27,12 @@ const Screen = () => {
 const Screen = () => useMutation({ mutationFn: () => client.api.projects.post() });`,
 			errors: [{ messageId: "outsideReactQuery" }],
 			name: "does not trust a hook-shaped local function"
+		},
+		{
+			code: `const projects = client.api.projects;
+const save = () => projects.post({ name: "Site" });`,
+			errors: [{ messageId: "outsideReactQuery" }],
+			name: "follows a locally aliased Eden endpoint"
 		}
 	],
 	valid: [
@@ -62,6 +68,12 @@ const Screen = ({ ids }) => useQuery({
 		{
 			code: `type Result = ReturnType<typeof client.api.projects.get>;`,
 			name: "ignores Eden type queries"
+		},
+		{
+			code: `import { useQuery } from "@tanstack/react-query";
+const projects = client.api.projects;
+const Screen = () => useQuery({ queryFn: () => projects.get(), queryKey: ["projects"] });`,
+			name: "allows an aliased endpoint inside a query function"
 		}
 	]
 });

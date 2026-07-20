@@ -4744,7 +4744,15 @@ var preservesReturnedValue = (parent, current) => {
     return parent.expressions[parent.expressions.length - 1] === current;
   return parent.type === "AwaitExpression" || parent.type === "ChainExpression" || parent.type === "LogicalExpression" || parent.type === "TSAsExpression" || parent.type === "TSNonNullExpression" || parent.type === "TSTypeAssertion";
 };
-var isReturnedExpression = (node) => {
+var isReturnedVariable = (context, declarator, owner, seen) => {
+  const [variable] = context.sourceCode.getDeclaredVariables(declarator);
+  if (!variable || seen.has(variable))
+    return false;
+  seen.add(variable);
+  return variable.references.some((reference) => functionAncestor(reference.identifier) === owner && isReturnedExpression(context, reference.identifier, seen));
+};
+var isReturnedExpression = (context, node, seen = new Set) => {
+  const owner = functionAncestor(node);
   let current = node;
   while (current.parent) {
     const { parent } = current;
@@ -4752,6 +4760,8 @@ var isReturnedExpression = (node) => {
       return parent.argument === current;
     if (parent.type === "ArrowFunctionExpression" && parent.body !== null && parent.body.type !== "BlockStatement")
       return parent.body === current;
+    if (parent.type === "VariableDeclarator" && parent.init === current)
+      return isReturnedVariable(context, parent, owner, seen);
     if (!preservesReturnedValue(parent, current))
       return false;
     current = parent;
@@ -4783,7 +4793,7 @@ var elysiaNoResponseReturn = createRule({
         if (route)
           routeRegistrations.push(route);
         const owner = functionAncestor(node);
-        if (isResponseJson(node) && isReturnedExpression(node))
+        if (isResponseJson(node) && isReturnedExpression(context, node))
           responseUses.push({
             functionNode: owner,
             kind: "json",
@@ -4804,7 +4814,7 @@ var elysiaNoResponseReturn = createRule({
           });
       },
       NewExpression(node) {
-        if (isResponseConstructor(node) && isReturnedExpression(node))
+        if (isResponseConstructor(node) && isReturnedExpression(context, node))
           responseUses.push({
             functionNode: functionAncestor(node),
             kind: "constructor",
@@ -5136,22 +5146,30 @@ var propertyName = (node) => {
     return node.key.name;
   return typeof node.key.value === "string" ? node.key.value : undefined;
 };
-var expressionContainsApi = (node) => {
+var variableFor4 = (context, identifier) => context.sourceCode.getScope(identifier).references.find((reference) => reference.identifier === identifier)?.resolved;
+var expressionContainsApi = (context, node, seen = new Set) => {
   if (node.type === "MemberExpression")
-    return memberName4(node) === "api" || expressionContainsApi(node.object);
+    return memberName4(node) === "api" || expressionContainsApi(context, node.object, seen);
   if (node.type === "CallExpression" || node.type === "NewExpression")
-    return expressionContainsApi(node.callee);
+    return expressionContainsApi(context, node.callee, seen);
   if (node.type === "ChainExpression")
-    return expressionContainsApi(node.expression);
+    return expressionContainsApi(context, node.expression, seen);
   if (node.type === "TSAsExpression" || node.type === "TSInstantiationExpression" || node.type === "TSNonNullExpression" || node.type === "TSTypeAssertion")
-    return expressionContainsApi(node.expression);
+    return expressionContainsApi(context, node.expression, seen);
+  if (node.type === "Identifier") {
+    const variable = variableFor4(context, node);
+    if (!variable || seen.has(variable))
+      return false;
+    seen.add(variable);
+    return variable.defs.some((definition) => definition.type === "Variable" && definition.node.init !== null && expressionContainsApi(context, definition.node.init, seen));
+  }
   return false;
 };
-var isEdenCall = (node) => {
+var isEdenCall = (context, node) => {
   if (node.callee.type !== "MemberExpression")
     return false;
   const method = memberName4(node.callee);
-  return Boolean(method && EDEN_HTTP_METHODS.has(method) && expressionContainsApi(node.callee.object));
+  return Boolean(method && EDEN_HTTP_METHODS.has(method) && expressionContainsApi(context, node.callee.object));
 };
 var functionAncestor2 = (node) => {
   let current = node.parent;
@@ -5162,7 +5180,6 @@ var functionAncestor2 = (node) => {
   }
   return;
 };
-var variableFor4 = (context, identifier) => context.sourceCode.getScope(identifier).references.find((reference) => reference.identifier === identifier)?.resolved;
 var functionFromDefinition2 = (definition) => {
   if (definition.type === "FunctionName" && definition.node.type === "FunctionDeclaration")
     return definition.node;
@@ -5233,7 +5250,7 @@ var edenRequiresReactQuery = createRule({
     return {
       CallExpression(node) {
         const owner = functionAncestor2(node);
-        if (isEdenCall(node))
+        if (isEdenCall(context, node))
           edenCalls.push({ functionNode: owner, node });
         if (owner && node.callee.type === "Identifier")
           functionReferences.push({
