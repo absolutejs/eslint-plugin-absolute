@@ -7,6 +7,10 @@ type FunctionNode =
 	| TSESTree.ArrowFunctionExpression
 	| TSESTree.FunctionDeclaration
 	| TSESTree.FunctionExpression;
+type FunctionReference = {
+	functionNode: FunctionNode;
+	target: TSESTree.Node;
+};
 type ResponseUse = {
 	functionNode: FunctionNode | undefined;
 	kind: "constructor" | "json";
@@ -159,10 +163,7 @@ const isReturnedExpression = (node: TSESTree.Node) => {
 const propagateRoutePaths = (
 	context: RuleContext,
 	routePaths: Map<FunctionNode, Set<string>>,
-	functionCalls: Array<{
-		callee: TSESTree.Identifier;
-		functionNode: FunctionNode;
-	}>
+	functionReferences: FunctionReference[]
 ) => {
 	const visit = (
 		functionNode: FunctionNode,
@@ -174,9 +175,9 @@ const propagateRoutePaths = (
 		const paths = routePaths.get(functionNode) ?? new Set();
 		paths.add(path);
 		routePaths.set(functionNode, paths);
-		functionCalls
-			.filter((call) => call.functionNode === functionNode)
-			.map(({ callee }) => resolveFunction(context, callee))
+		functionReferences
+			.filter((reference) => reference.functionNode === functionNode)
+			.map(({ target }) => resolveFunction(context, target))
 			.filter((target) => target !== undefined)
 			.forEach((target) => visit(target, path, visited));
 	};
@@ -189,10 +190,7 @@ const propagateRoutePaths = (
 export const elysiaNoResponseReturn = createRule<Options, MessageIds>({
 	create(context, [options]) {
 		const allowedPaths = new Set(options?.allowNativeResponsePaths ?? []);
-		const functionCalls: Array<{
-			callee: TSESTree.Identifier;
-			functionNode: FunctionNode;
-		}> = [];
+		const functionReferences: FunctionReference[] = [];
 		const responseUses: ResponseUse[] = [];
 		const routeRegistrations: Array<{
 			handler: TSESTree.Node;
@@ -211,9 +209,17 @@ export const elysiaNoResponseReturn = createRule<Options, MessageIds>({
 						node
 					});
 				if (owner && node.callee.type === "Identifier")
-					functionCalls.push({
-						callee: node.callee,
-						functionNode: owner
+					functionReferences.push({
+						functionNode: owner,
+						target: node.callee
+					});
+				if (owner)
+					node.arguments.forEach((argument) => {
+						if (argument.type !== "SpreadElement")
+							functionReferences.push({
+								functionNode: owner,
+								target: argument
+							});
 					});
 			},
 			NewExpression(node: TSESTree.NewExpression) {
@@ -234,7 +240,7 @@ export const elysiaNoResponseReturn = createRule<Options, MessageIds>({
 					routePaths.set(handlerFunction, paths);
 				}
 
-				propagateRoutePaths(context, routePaths, functionCalls);
+				propagateRoutePaths(context, routePaths, functionReferences);
 
 				for (const { functionNode, kind, node } of responseUses) {
 					if (!functionNode) continue;

@@ -52,6 +52,14 @@ const Screen = () => {
 			name: "allows a request closure executed by mutation variables"
 		},
 		{
+			code: `import { useQuery } from "@tanstack/react-query";
+const Screen = ({ ids }) => useQuery({
+	queryFn: () => Promise.all(ids.map((id) => client.api.projects({ id }).get())),
+	queryKey: ["projects", ids]
+});`,
+			name: "follows nested callbacks inside a query function"
+		},
+		{
 			code: `type Result = ReturnType<typeof client.api.projects.get>;`,
 			name: "ignores Eden type queries"
 		}

@@ -4758,7 +4758,7 @@ var isReturnedExpression = (node) => {
   }
   return false;
 };
-var propagateRoutePaths = (context, routePaths, functionCalls) => {
+var propagateRoutePaths = (context, routePaths, functionReferences) => {
   const visit = (functionNode, path, visited) => {
     if (visited.has(functionNode))
       return;
@@ -4766,7 +4766,7 @@ var propagateRoutePaths = (context, routePaths, functionCalls) => {
     const paths = routePaths.get(functionNode) ?? new Set;
     paths.add(path);
     routePaths.set(functionNode, paths);
-    functionCalls.filter((call) => call.functionNode === functionNode).map(({ callee }) => resolveFunction(context, callee)).filter((target) => target !== undefined).forEach((target) => visit(target, path, visited));
+    functionReferences.filter((reference) => reference.functionNode === functionNode).map(({ target }) => resolveFunction(context, target)).filter((target) => target !== undefined).forEach((target) => visit(target, path, visited));
   };
   const roots = [...routePaths.entries()];
   roots.forEach(([functionNode, paths]) => paths.forEach((path) => visit(functionNode, path, new Set)));
@@ -4774,7 +4774,7 @@ var propagateRoutePaths = (context, routePaths, functionCalls) => {
 var elysiaNoResponseReturn = createRule({
   create(context, [options]) {
     const allowedPaths = new Set(options?.allowNativeResponsePaths ?? []);
-    const functionCalls = [];
+    const functionReferences = [];
     const responseUses = [];
     const routeRegistrations = [];
     return {
@@ -4790,9 +4790,17 @@ var elysiaNoResponseReturn = createRule({
             node
           });
         if (owner && node.callee.type === "Identifier")
-          functionCalls.push({
-            callee: node.callee,
-            functionNode: owner
+          functionReferences.push({
+            functionNode: owner,
+            target: node.callee
+          });
+        if (owner)
+          node.arguments.forEach((argument) => {
+            if (argument.type !== "SpreadElement")
+              functionReferences.push({
+                functionNode: owner,
+                target: argument
+              });
           });
       },
       NewExpression(node) {
@@ -4813,7 +4821,7 @@ var elysiaNoResponseReturn = createRule({
           paths.add(path);
           routePaths.set(handlerFunction, paths);
         }
-        propagateRoutePaths(context, routePaths, functionCalls);
+        propagateRoutePaths(context, routePaths, functionReferences);
         for (const { functionNode, kind, node } of responseUses) {
           if (!functionNode)
             continue;
@@ -5204,13 +5212,13 @@ var belongsToMutationVariables = (node) => {
   }
   return false;
 };
-var propagateApprovedFunctions = (context, approvedFunctions, functionCalls) => {
+var propagateApprovedFunctions = (context, approvedFunctions, functionReferences) => {
   const reachable = new Set;
   const visit = (functionNode) => {
     if (reachable.has(functionNode))
       return;
     reachable.add(functionNode);
-    functionCalls.filter((call) => call.functionNode === functionNode).map(({ callee }) => resolveFunction2(context, callee)).filter((target) => target !== undefined).forEach(visit);
+    functionReferences.filter((reference) => reference.functionNode === functionNode).map(({ target }) => resolveFunction2(context, target)).filter((target) => target !== undefined).forEach(visit);
   };
   approvedFunctions.forEach(visit);
   reachable.forEach((functionNode) => approvedFunctions.add(functionNode));
@@ -5219,7 +5227,7 @@ var edenRequiresReactQuery = createRule({
   create(context) {
     const approvedFunctions = new Set;
     const edenCalls = [];
-    const functionCalls = [];
+    const functionReferences = [];
     const queryFactories = new Set;
     const queryProperties = [];
     return {
@@ -5228,9 +5236,17 @@ var edenRequiresReactQuery = createRule({
         if (isEdenCall(node))
           edenCalls.push({ functionNode: owner, node });
         if (owner && node.callee.type === "Identifier")
-          functionCalls.push({
-            callee: node.callee,
-            functionNode: owner
+          functionReferences.push({
+            functionNode: owner,
+            target: node.callee
+          });
+        if (owner)
+          node.arguments.forEach((argument) => {
+            if (argument.type !== "SpreadElement")
+              functionReferences.push({
+                functionNode: owner,
+                target: argument
+              });
           });
       },
       ImportDeclaration(node) {
@@ -5251,7 +5267,7 @@ var edenRequiresReactQuery = createRule({
         for (const { functionNode } of edenCalls)
           if (functionNode && belongsToMutationVariables(functionNode))
             approvedFunctions.add(functionNode);
-        propagateApprovedFunctions(context, approvedFunctions, functionCalls);
+        propagateApprovedFunctions(context, approvedFunctions, functionReferences);
         for (const { functionNode, node } of edenCalls)
           if (!functionNode || !approvedFunctions.has(functionNode))
             context.report({

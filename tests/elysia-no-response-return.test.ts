@@ -21,6 +21,12 @@ new Elysia().get("/users/:id", handler);`,
 			name: "follows referenced route helpers"
 		},
 		{
+			code: `new Elysia().get("/download", ({ cookie }) =>
+		authorized(cookie, async () => new Response(stream)));`,
+			errors: [{ messageId: "nativeResponse" }],
+			name: "follows callback arguments passed through route wrappers"
+		},
+		{
 			code: `new Elysia().route("POST", "/users", () => Response.json({ ok: true }));`,
 			errors: [{ messageId: "responseJson" }],
 			name: "understands the generic Elysia route signature"

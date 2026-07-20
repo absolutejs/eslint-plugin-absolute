@@ -7,6 +7,10 @@ type FunctionNode =
 	| TSESTree.ArrowFunctionExpression
 	| TSESTree.FunctionDeclaration
 	| TSESTree.FunctionExpression;
+type FunctionReference = {
+	functionNode: FunctionNode;
+	target: TSESTree.Node;
+};
 
 const EDEN_HTTP_METHODS = new Set([
 	"delete",
@@ -186,18 +190,15 @@ const belongsToMutationVariables = (node: FunctionNode) => {
 const propagateApprovedFunctions = (
 	context: RuleContext,
 	approvedFunctions: Set<FunctionNode>,
-	functionCalls: Array<{
-		callee: TSESTree.Identifier;
-		functionNode: FunctionNode;
-	}>
+	functionReferences: FunctionReference[]
 ) => {
 	const reachable = new Set<FunctionNode>();
 	const visit = (functionNode: FunctionNode) => {
 		if (reachable.has(functionNode)) return;
 		reachable.add(functionNode);
-		functionCalls
-			.filter((call) => call.functionNode === functionNode)
-			.map(({ callee }) => resolveFunction(context, callee))
+		functionReferences
+			.filter((reference) => reference.functionNode === functionNode)
+			.map(({ target }) => resolveFunction(context, target))
 			.filter((target) => target !== undefined)
 			.forEach(visit);
 	};
@@ -212,10 +213,7 @@ export const edenRequiresReactQuery = createRule<Options, MessageIds>({
 			functionNode: FunctionNode | undefined;
 			node: TSESTree.CallExpression;
 		}> = [];
-		const functionCalls: Array<{
-			callee: TSESTree.Identifier;
-			functionNode: FunctionNode;
-		}> = [];
+		const functionReferences: FunctionReference[] = [];
 		const queryFactories = new Set<string>();
 		const queryProperties: TSESTree.Property[] = [];
 
@@ -225,9 +223,17 @@ export const edenRequiresReactQuery = createRule<Options, MessageIds>({
 				if (isEdenCall(node))
 					edenCalls.push({ functionNode: owner, node });
 				if (owner && node.callee.type === "Identifier")
-					functionCalls.push({
-						callee: node.callee,
-						functionNode: owner
+					functionReferences.push({
+						functionNode: owner,
+						target: node.callee
+					});
+				if (owner)
+					node.arguments.forEach((argument) => {
+						if (argument.type !== "SpreadElement")
+							functionReferences.push({
+								functionNode: owner,
+								target: argument
+							});
 					});
 			},
 			ImportDeclaration(node: TSESTree.ImportDeclaration) {
@@ -253,7 +259,7 @@ export const edenRequiresReactQuery = createRule<Options, MessageIds>({
 				propagateApprovedFunctions(
 					context,
 					approvedFunctions,
-					functionCalls
+					functionReferences
 				);
 
 				for (const { functionNode, node } of edenCalls)
