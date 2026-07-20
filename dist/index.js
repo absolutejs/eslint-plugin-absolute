@@ -4675,6 +4675,187 @@ var elysiaCompositionBoundaries = createRule({
   name: "elysia-composition-boundaries"
 });
 
+// src/rules/elysia-no-response-return.ts
+var ROUTE_METHODS2 = new Set([
+  "all",
+  "connect",
+  "delete",
+  "get",
+  "head",
+  "options",
+  "patch",
+  "post",
+  "put",
+  "trace"
+]);
+var memberName2 = (node) => {
+  if (node.computed)
+    return node.property.type === "Literal" && typeof node.property.value === "string" ? node.property.value : undefined;
+  return node.property.type === "Identifier" ? node.property.name : undefined;
+};
+var functionAncestor = (node) => {
+  let current = node.parent;
+  while (current) {
+    if (current.type === "ArrowFunctionExpression" || current.type === "FunctionDeclaration" || current.type === "FunctionExpression")
+      return current;
+    current = current.parent;
+  }
+  return;
+};
+var variableFor2 = (context, identifier) => context.sourceCode.getScope(identifier).references.find((reference) => reference.identifier === identifier)?.resolved;
+var functionFromDefinition = (definition) => {
+  if (definition.type === "FunctionName" && definition.node.type === "FunctionDeclaration")
+    return definition.node;
+  if (definition.type !== "Variable")
+    return;
+  const initializer = definition.node.init;
+  return initializer?.type === "ArrowFunctionExpression" || initializer?.type === "FunctionExpression" ? initializer : undefined;
+};
+var resolveFunction = (context, node) => {
+  if (node.type === "ArrowFunctionExpression" || node.type === "FunctionExpression")
+    return node;
+  if (node.type !== "Identifier")
+    return;
+  const variable = variableFor2(context, node);
+  return variable?.defs.map(functionFromDefinition).find(Boolean);
+};
+var routeRegistration = (node) => {
+  if (node.callee.type !== "MemberExpression")
+    return;
+  const method = memberName2(node.callee);
+  if (!method)
+    return;
+  const pathIndex = method === "route" ? 1 : 0;
+  const handlerIndex = method === "route" ? 2 : 1;
+  if (method !== "route" && !ROUTE_METHODS2.has(method))
+    return;
+  const path = node.arguments[pathIndex];
+  const handler = node.arguments[handlerIndex];
+  if (path?.type !== "Literal" || typeof path.value !== "string" || !path.value.startsWith("/") || !handler || handler.type === "SpreadElement")
+    return;
+  return { handler, path: path.value };
+};
+var isResponseJson = (node) => node.callee.type === "MemberExpression" && node.callee.object.type === "Identifier" && node.callee.object.name === "Response" && memberName2(node.callee) === "json";
+var isResponseConstructor = (node) => node.callee.type === "Identifier" && node.callee.name === "Response";
+var preservesReturnedValue = (parent, current) => {
+  if (parent.type === "ConditionalExpression")
+    return parent.consequent === current || parent.alternate === current;
+  if (parent.type === "SequenceExpression")
+    return parent.expressions[parent.expressions.length - 1] === current;
+  return parent.type === "AwaitExpression" || parent.type === "ChainExpression" || parent.type === "LogicalExpression" || parent.type === "TSAsExpression" || parent.type === "TSNonNullExpression" || parent.type === "TSTypeAssertion";
+};
+var isReturnedExpression = (node) => {
+  let current = node;
+  while (current.parent) {
+    const { parent } = current;
+    if (parent.type === "ReturnStatement")
+      return parent.argument === current;
+    if (parent.type === "ArrowFunctionExpression" && parent.body !== null && parent.body.type !== "BlockStatement")
+      return parent.body === current;
+    if (!preservesReturnedValue(parent, current))
+      return false;
+    current = parent;
+  }
+  return false;
+};
+var propagateRoutePaths = (context, routePaths, functionCalls) => {
+  const visit = (functionNode, path, visited) => {
+    if (visited.has(functionNode))
+      return;
+    visited.add(functionNode);
+    const paths = routePaths.get(functionNode) ?? new Set;
+    paths.add(path);
+    routePaths.set(functionNode, paths);
+    functionCalls.filter((call) => call.functionNode === functionNode).map(({ callee }) => resolveFunction(context, callee)).filter((target) => target !== undefined).forEach((target) => visit(target, path, visited));
+  };
+  const roots = [...routePaths.entries()];
+  roots.forEach(([functionNode, paths]) => paths.forEach((path) => visit(functionNode, path, new Set)));
+};
+var elysiaNoResponseReturn = createRule({
+  create(context, [options]) {
+    const allowedPaths = new Set(options?.allowNativeResponsePaths ?? []);
+    const functionCalls = [];
+    const responseUses = [];
+    const routeRegistrations = [];
+    return {
+      CallExpression(node) {
+        const route = routeRegistration(node);
+        if (route)
+          routeRegistrations.push(route);
+        const owner = functionAncestor(node);
+        if (isResponseJson(node) && isReturnedExpression(node))
+          responseUses.push({
+            functionNode: owner,
+            kind: "json",
+            node
+          });
+        if (owner && node.callee.type === "Identifier")
+          functionCalls.push({
+            callee: node.callee,
+            functionNode: owner
+          });
+      },
+      NewExpression(node) {
+        if (isResponseConstructor(node) && isReturnedExpression(node))
+          responseUses.push({
+            functionNode: functionAncestor(node),
+            kind: "constructor",
+            node
+          });
+      },
+      "Program:exit"() {
+        const routePaths = new Map;
+        for (const { handler, path } of routeRegistrations) {
+          const handlerFunction = resolveFunction(context, handler);
+          if (!handlerFunction)
+            continue;
+          const paths = routePaths.get(handlerFunction) ?? new Set;
+          paths.add(path);
+          routePaths.set(handlerFunction, paths);
+        }
+        propagateRoutePaths(context, routePaths, functionCalls);
+        for (const { functionNode, kind, node } of responseUses) {
+          if (!functionNode)
+            continue;
+          const paths = routePaths.get(functionNode);
+          if (!paths)
+            continue;
+          if (kind === "constructor" && [...paths].every((path) => allowedPaths.has(path)))
+            continue;
+          context.report({
+            messageId: kind === "json" ? "responseJson" : "nativeResponse",
+            node
+          });
+        }
+      }
+    };
+  },
+  defaultOptions: [{ allowNativeResponsePaths: [] }],
+  meta: {
+    docs: {
+      description: "Preserve Elysia route inference by rejecting Fetch Response values from application route handlers."
+    },
+    messages: {
+      nativeResponse: "Return plain typed data, status(...), or redirect(...) from this Elysia route. Reserve new Response(...) for an explicitly allowlisted streaming, file, or HTML route path.",
+      responseJson: "Return the typed JSON value directly, or status(...) for an error, so Elysia and Eden preserve the route contract."
+    },
+    schema: [
+      {
+        additionalProperties: false,
+        properties: {
+          allowNativeResponsePaths: {
+            items: { minLength: 1, type: "string" },
+            type: "array"
+          }
+        },
+        type: "object"
+      }
+    ],
+    type: "problem"
+  },
+  name: "elysia-no-response-return"
+});
+
 // src/rules/elysia-route-boundaries.ts
 var DEFAULT_ROUTE_DIRECTORIES = [
   "src/backend/routes",
@@ -4686,7 +4867,7 @@ var DEFAULT_COMPOSITION_FILES = [
   "src/server.ts",
   "server.ts"
 ];
-var ROUTE_METHODS2 = new Set([
+var ROUTE_METHODS3 = new Set([
   "all",
   "connect",
   "delete",
@@ -4713,7 +4894,7 @@ var matchesFile = (filename, configuredFile) => {
   const normalizedConfiguredFile = normalizePath(configuredFile);
   return normalizedFilename === normalizedConfiguredFile || normalizedFilename.endsWith(`/${normalizedConfiguredFile}`);
 };
-var memberName2 = (node) => {
+var memberName3 = (node) => {
   if (node.computed)
     return node.property.type === "Literal" && typeof node.property.value === "string" ? node.property.value : undefined;
   return node.property.type === "Identifier" ? node.property.name : undefined;
@@ -4727,8 +4908,8 @@ var chainAnalysis = (expression) => {
     const member = callMember2(current);
     if (!member || member.object.type === "Super")
       break;
-    const method = memberName2(member);
-    const isRouteMethod = Boolean(method && ROUTE_METHODS2.has(method));
+    const method = memberName3(member);
+    const isRouteMethod = Boolean(method && ROUTE_METHODS3.has(method));
     const [firstArgument] = current.arguments;
     registersRoute ||= isRouteMethod;
     registersHttpPath ||= isRouteMethod && firstArgument?.type === "Literal" && typeof firstArgument.value === "string" && firstArgument.value.startsWith("/");
@@ -4736,7 +4917,7 @@ var chainAnalysis = (expression) => {
   }
   return { registersHttpPath, registersRoute, root: current };
 };
-var variableFor2 = (context, id) => {
+var variableFor3 = (context, id) => {
   const scope = context.sourceCode.getScope(id);
   return scope.references.find((reference) => reference.identifier === id)?.resolved;
 };
@@ -4765,7 +4946,7 @@ var isElysiaExpression = (context, expression, elysiaConstructors, seen = new Se
     return true;
   if (root.type !== "Identifier")
     return false;
-  const variable = variableFor2(context, root);
+  const variable = variableFor3(context, root);
   if (!variable || seen.has(variable))
     return false;
   seen.add(variable);
@@ -4804,7 +4985,7 @@ var elysiaRouteBoundaries = createRule({
       alias,
       identifier
     }) => {
-      const variable = variableFor2(context, identifier);
+      const variable = variableFor3(context, identifier);
       if (!variable)
         return;
       const expressions = variable.defs.flatMap(definitionExpressions);
@@ -4912,6 +5093,193 @@ var elysiaRouteBoundaries = createRule({
   name: "elysia-route-boundaries"
 });
 
+// src/rules/eden-requires-react-query.ts
+var EDEN_HTTP_METHODS = new Set([
+  "delete",
+  "get",
+  "head",
+  "options",
+  "patch",
+  "post",
+  "put"
+]);
+var QUERY_CALLBACK_PROPERTIES = new Set(["mutationFn", "queryFn"]);
+var REACT_QUERY_FACTORIES = new Set([
+  "infiniteQueryOptions",
+  "mutationOptions",
+  "queryOptions",
+  "useInfiniteQuery",
+  "useMutation",
+  "useQueries",
+  "useQuery",
+  "useSuspenseInfiniteQuery",
+  "useSuspenseQueries",
+  "useSuspenseQuery"
+]);
+var memberName4 = (node) => {
+  if (node.computed)
+    return node.property.type === "Literal" && typeof node.property.value === "string" ? node.property.value : undefined;
+  return node.property.type === "Identifier" ? node.property.name : undefined;
+};
+var propertyName = (node) => {
+  if (node.computed)
+    return;
+  if (node.key.type === "Identifier")
+    return node.key.name;
+  return typeof node.key.value === "string" ? node.key.value : undefined;
+};
+var expressionContainsApi = (node) => {
+  if (node.type === "MemberExpression")
+    return memberName4(node) === "api" || expressionContainsApi(node.object);
+  if (node.type === "CallExpression" || node.type === "NewExpression")
+    return expressionContainsApi(node.callee);
+  if (node.type === "ChainExpression")
+    return expressionContainsApi(node.expression);
+  if (node.type === "TSAsExpression" || node.type === "TSInstantiationExpression" || node.type === "TSNonNullExpression" || node.type === "TSTypeAssertion")
+    return expressionContainsApi(node.expression);
+  return false;
+};
+var isEdenCall = (node) => {
+  if (node.callee.type !== "MemberExpression")
+    return false;
+  const method = memberName4(node.callee);
+  return Boolean(method && EDEN_HTTP_METHODS.has(method) && expressionContainsApi(node.callee.object));
+};
+var functionAncestor2 = (node) => {
+  let current = node.parent;
+  while (current) {
+    if (current.type === "ArrowFunctionExpression" || current.type === "FunctionDeclaration" || current.type === "FunctionExpression")
+      return current;
+    current = current.parent;
+  }
+  return;
+};
+var variableFor4 = (context, identifier) => context.sourceCode.getScope(identifier).references.find((reference) => reference.identifier === identifier)?.resolved;
+var functionFromDefinition2 = (definition) => {
+  if (definition.type === "FunctionName" && definition.node.type === "FunctionDeclaration")
+    return definition.node;
+  if (definition.type !== "Variable")
+    return;
+  const initializer = definition.node.init;
+  return initializer?.type === "ArrowFunctionExpression" || initializer?.type === "FunctionExpression" ? initializer : undefined;
+};
+var resolveFunction2 = (context, node) => {
+  if (node.type === "ArrowFunctionExpression" || node.type === "FunctionExpression")
+    return node;
+  if (node.type !== "Identifier")
+    return;
+  const variable = variableFor4(context, node);
+  return variable?.defs.map(functionFromDefinition2).find(Boolean);
+};
+var importedName = (specifier) => {
+  if (specifier.type !== "ImportSpecifier")
+    return;
+  return specifier.imported.type === "Identifier" ? specifier.imported.name : String(specifier.imported.value);
+};
+var belongsToReactQueryFactory = (node, factories) => {
+  let current = node.parent;
+  while (current) {
+    if (current.type === "CallExpression")
+      return current.callee.type === "Identifier" && factories.has(current.callee.name);
+    if (current.type === "ArrowFunctionExpression" || current.type === "FunctionDeclaration" || current.type === "FunctionExpression")
+      return false;
+    current = current.parent;
+  }
+  return false;
+};
+var isMutationCall = (node) => {
+  if (node.callee.type !== "MemberExpression")
+    return false;
+  const method = memberName4(node.callee);
+  return method === "mutate" || method === "mutateAsync";
+};
+var belongsToMutationVariables = (node) => {
+  let current = node.parent;
+  while (current) {
+    if (current.type === "CallExpression")
+      return isMutationCall(current);
+    if (current.type === "ArrowFunctionExpression" || current.type === "FunctionDeclaration" || current.type === "FunctionExpression")
+      return false;
+    current = current.parent;
+  }
+  return false;
+};
+var propagateApprovedFunctions = (context, approvedFunctions, functionCalls) => {
+  const reachable = new Set;
+  const visit = (functionNode) => {
+    if (reachable.has(functionNode))
+      return;
+    reachable.add(functionNode);
+    functionCalls.filter((call) => call.functionNode === functionNode).map(({ callee }) => resolveFunction2(context, callee)).filter((target) => target !== undefined).forEach(visit);
+  };
+  approvedFunctions.forEach(visit);
+  reachable.forEach((functionNode) => approvedFunctions.add(functionNode));
+};
+var edenRequiresReactQuery = createRule({
+  create(context) {
+    const approvedFunctions = new Set;
+    const edenCalls = [];
+    const functionCalls = [];
+    const queryFactories = new Set;
+    const queryProperties = [];
+    return {
+      CallExpression(node) {
+        const owner = functionAncestor2(node);
+        if (isEdenCall(node))
+          edenCalls.push({ functionNode: owner, node });
+        if (owner && node.callee.type === "Identifier")
+          functionCalls.push({
+            callee: node.callee,
+            functionNode: owner
+          });
+      },
+      ImportDeclaration(node) {
+        if (node.source.value !== "@tanstack/react-query")
+          return;
+        for (const specifier of node.specifiers) {
+          const sourceName = importedName(specifier);
+          if (sourceName && REACT_QUERY_FACTORIES.has(sourceName))
+            queryFactories.add(specifier.local.name);
+        }
+      },
+      "Program:exit"() {
+        for (const property of queryProperties) {
+          const callback = resolveFunction2(context, property.value);
+          if (callback)
+            approvedFunctions.add(callback);
+        }
+        for (const { functionNode } of edenCalls)
+          if (functionNode && belongsToMutationVariables(functionNode))
+            approvedFunctions.add(functionNode);
+        propagateApprovedFunctions(context, approvedFunctions, functionCalls);
+        for (const { functionNode, node } of edenCalls)
+          if (!functionNode || !approvedFunctions.has(functionNode))
+            context.report({
+              messageId: "outsideReactQuery",
+              node
+            });
+      },
+      Property(node) {
+        const name = propertyName(node);
+        if (name && QUERY_CALLBACK_PROPERTIES.has(name) && belongsToReactQueryFactory(node, queryFactories))
+          queryProperties.push(node);
+      }
+    };
+  },
+  defaultOptions: [],
+  meta: {
+    docs: {
+      description: "Require browser Eden Treaty requests to execute through React Query query and mutation functions."
+    },
+    messages: {
+      outsideReactQuery: "Execute this Eden Treaty request through a React Query queryFn or mutationFn so server state, loading, errors, retries, and invalidation share one lifecycle."
+    },
+    schema: [],
+    type: "problem"
+  },
+  name: "eden-requires-react-query"
+});
+
 // src/index.ts
 var src_default = {
   processors: {
@@ -4920,7 +5288,9 @@ var src_default = {
   rules: {
     "angular-one-feature-per-file": angularOneFeaturePerFile,
     "button-icon-is-hidden": buttonIconIsHidden,
+    "eden-requires-react-query": edenRequiresReactQuery,
     "elysia-composition-boundaries": elysiaCompositionBoundaries,
+    "elysia-no-response-return": elysiaNoResponseReturn,
     "elysia-route-boundaries": elysiaRouteBoundaries,
     "explicit-object-types": explicitObjectTypes,
     "heading-order": headingOrder,

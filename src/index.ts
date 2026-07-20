@@ -31,7 +31,9 @@ import { buttonIconIsHidden } from "./rules/button-icon-is-hidden";
 import { iconButtonHasAccessibleName } from "./rules/icon-button-has-accessible-name";
 import { templateSourceProcessor } from "./processors/template-source";
 import { elysiaCompositionBoundaries } from "./rules/elysia-composition-boundaries";
+import { elysiaNoResponseReturn } from "./rules/elysia-no-response-return";
 import { elysiaRouteBoundaries } from "./rules/elysia-route-boundaries";
+import { edenRequiresReactQuery } from "./rules/eden-requires-react-query";
 
 export default {
 	processors: {
@@ -40,7 +42,9 @@ export default {
 	rules: {
 		"angular-one-feature-per-file": angularOneFeaturePerFile,
 		"button-icon-is-hidden": buttonIconIsHidden,
+		"eden-requires-react-query": edenRequiresReactQuery,
 		"elysia-composition-boundaries": elysiaCompositionBoundaries,
+		"elysia-no-response-return": elysiaNoResponseReturn,
 		"elysia-route-boundaries": elysiaRouteBoundaries,
 		"explicit-object-types": explicitObjectTypes,
 		"heading-order": headingOrder,

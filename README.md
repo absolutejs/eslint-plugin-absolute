@@ -40,3 +40,18 @@ may not register routes themselves; configured route directories require
 isolated exported contracts. Route factories elsewhere remain valid. The rule
 reports cross-file extractions without autofixing them because captured services
 and route closures must become explicit factory dependencies.
+
+## Typed request boundaries
+
+`absolute/eden-requires-react-query` requires browser Eden Treaty requests to
+execute inside a TanStack React Query `queryFn` or `mutationFn`. The rule follows
+aliased React Query imports, same-file helper functions, and request closures
+passed through `mutate` or `mutateAsync`, without depending on application client,
+component, or endpoint names.
+
+`absolute/elysia-no-response-return` prevents Elysia application handlers from
+returning `Response.json(...)` or `new Response(...)`, including through
+same-file helpers. Routes retain their inferred Eden contract by returning plain
+typed data, `status(...)`, or `redirect(...)`. Exact streaming, file, and HTML
+route paths can allow `new Response(...)`; `Response.json(...)` remains forbidden
+because JSON application data never needs the Fetch escape hatch.
