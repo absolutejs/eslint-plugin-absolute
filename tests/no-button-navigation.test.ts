@@ -125,6 +125,11 @@ vueRuleTester.run("no-button-navigation in Vue", noButtonNavigation, {
 			code: `<script setup>const save = () => console.log("saved");</script><template><button @click="save">Save</button></template>`,
 			filename: "Editor.vue",
 			name: "Vue action button"
+		},
+		{
+			code: `<script setup>const claim = async () => { await saveClaim(); window.location.assign("/portal"); };</script><template><button @click="claim">Claim</button></template>`,
+			filename: "ClaimRoom.vue",
+			name: "Vue action that redirects after completing work"
 		}
 	]
 });

@@ -2823,6 +2823,15 @@ var functionName = (node) => {
   }
   return null;
 };
+var isNavigationOnlyFunction = (node) => {
+  if (node.body.type !== "BlockStatement")
+    return true;
+  const statements = node.body.body.filter((statement2) => statement2.type !== "EmptyStatement");
+  if (statements.length !== 1)
+    return false;
+  const [statement] = statements;
+  return statement?.type === "ExpressionStatement" || statement?.type === "ReturnStatement" && statement.argument !== null;
+};
 var clickAttribute = (node) => {
   if (node.parent?.type !== "JSXExpressionContainer")
     return null;
@@ -2928,7 +2937,7 @@ var noButtonNavigation = createRule({
     const exitFunction = (node) => {
       const functionState = functionStack.pop();
       const reason = functionState ? detectionReason(functionState) : null;
-      if (functionState?.name && reason) {
+      if (functionState?.name && reason && isNavigationOnlyFunction(node)) {
         navigationFunctions.set(functionState.name, reason);
       }
       if (node.type === "ArrowFunctionExpression" || node.type === "FunctionExpression") {
@@ -2984,7 +2993,7 @@ var noButtonNavigation = createRule({
   defaultOptions: [],
   meta: {
     docs: {
-      description: "Require semantic links for navigation: anchors for external or new-tab destinations and framework router-link components for internal SPA routes."
+      description: "Require semantic links for navigation-only controls: anchors for external or new-tab destinations and framework router-link components for internal SPA routes."
     },
     messages: {
       noButtonNavigation: "Use a semantic link for navigation instead of a button: an <a> for external or new-tab destinations, or the framework router-link component for internal SPA routes. Detected: {{reason}}."

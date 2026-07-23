@@ -144,6 +144,25 @@ const functionName = (
 	return null;
 };
 
+const isNavigationOnlyFunction = (
+	node:
+		| TSESTree.ArrowFunctionExpression
+		| TSESTree.FunctionDeclaration
+		| TSESTree.FunctionExpression
+) => {
+	if (node.body.type !== "BlockStatement") return true;
+	const statements = node.body.body.filter(
+		(statement) => statement.type !== "EmptyStatement"
+	);
+	if (statements.length !== 1) return false;
+	const [statement] = statements;
+
+	return (
+		statement?.type === "ExpressionStatement" ||
+		(statement?.type === "ReturnStatement" && statement.argument !== null)
+	);
+};
+
 const clickAttribute = (
 	node: TSESTree.ArrowFunctionExpression | TSESTree.FunctionExpression
 ) => {
@@ -298,7 +317,11 @@ export const noButtonNavigation = createRule<Options, MessageIds>({
 			const reason = functionState
 				? detectionReason(functionState)
 				: null;
-			if (functionState?.name && reason) {
+			if (
+				functionState?.name &&
+				reason &&
+				isNavigationOnlyFunction(node)
+			) {
 				navigationFunctions.set(functionState.name, reason);
 			}
 			if (
@@ -381,7 +404,7 @@ export const noButtonNavigation = createRule<Options, MessageIds>({
 	meta: {
 		docs: {
 			description:
-				"Require semantic links for navigation: anchors for external or new-tab destinations and framework router-link components for internal SPA routes."
+				"Require semantic links for navigation-only controls: anchors for external or new-tab destinations and framework router-link components for internal SPA routes."
 		},
 		messages: {
 			noButtonNavigation:
