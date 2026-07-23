@@ -2764,179 +2764,230 @@ var noOrNoneComponent = createRule({
 });
 
 // src/rules/no-button-navigation.ts
+var emptyDetection = () => ({
+  reason: null,
+  sawAllowedLocationRead: false,
+  sawHistoryCall: false
+});
+var isWindowLocationMember = (member) => {
+  const { object } = member;
+  if (object.type !== "MemberExpression")
+    return false;
+  return object.object.type === "Identifier" && object.object.name === "window" && object.property.type === "Identifier" && object.property.name === "location";
+};
+var isWindowHistoryMember = (member) => {
+  const { object } = member;
+  if (object.type !== "MemberExpression")
+    return false;
+  return object.object.type === "Identifier" && object.object.name === "window" && object.property.type === "Identifier" && object.property.name === "history";
+};
+var applyAssignment = (state, node) => {
+  if (state.reason || node.left.type !== "MemberExpression")
+    return;
+  const { left } = node;
+  if (left.object.type === "Identifier" && left.object.name === "window" && left.property.type === "Identifier" && left.property.name === "location") {
+    state.reason = "assignment to window.location";
+    return;
+  }
+  if (isWindowLocationMember(left)) {
+    state.reason = "assignment to a window.location property";
+  }
+};
+var applyCall = (state, node) => {
+  if (node.callee.type !== "MemberExpression")
+    return;
+  const { callee } = node;
+  if (!state.reason && callee.object.type === "Identifier" && callee.object.name === "window" && callee.property.type === "Identifier" && callee.property.name === "open") {
+    state.reason = "window.open";
+    return;
+  }
+  if (!state.reason && isWindowLocationMember(callee) && callee.property.type === "Identifier" && (callee.property.name === "assign" || callee.property.name === "replace")) {
+    state.reason = `window.location.${callee.property.name}`;
+    return;
+  }
+  if (isWindowHistoryMember(callee) && callee.property.type === "Identifier" && (callee.property.name === "pushState" || callee.property.name === "replaceState")) {
+    state.sawHistoryCall = true;
+  }
+};
+var applyLocationRead = (state, node) => {
+  if (isWindowLocationMember(node) && node.property.type === "Identifier" && (node.property.name === "search" || node.property.name === "pathname" || node.property.name === "hash")) {
+    state.sawAllowedLocationRead = true;
+  }
+};
+var detectionReason = (state) => state.reason ?? (state.sawHistoryCall && !state.sawAllowedLocationRead ? "history.replaceState/pushState without reading window.location" : null);
+var functionName = (node) => {
+  if (node.type === "FunctionDeclaration")
+    return node.id?.name ?? null;
+  if (node.parent?.type === "VariableDeclarator" && node.parent.id.type === "Identifier") {
+    return node.parent.id.name;
+  }
+  return null;
+};
+var clickAttribute = (node) => {
+  if (node.parent?.type !== "JSXExpressionContainer")
+    return null;
+  const attribute = node.parent.parent;
+  if (attribute?.type !== "JSXAttribute" || attribute.name.type !== "JSXIdentifier" || attribute.name.name !== "onClick") {
+    return null;
+  }
+  const openingElement = attribute.parent;
+  if (openingElement?.type !== "JSXOpeningElement" || openingElement.name.type !== "JSXIdentifier" || openingElement.name.name !== "button") {
+    return null;
+  }
+  return attribute;
+};
+var buttonClickDirective = (node) => {
+  if (node.rawName.toLowerCase() !== "button")
+    return null;
+  return node.startTag.attributes.find((attribute) => attribute.directive && attribute.key.name.name === "on" && attribute.key.argument?.type === "VIdentifier" && attribute.key.argument.name === "click") ?? null;
+};
+var expressionReason = (value, navigationFunctions) => {
+  const state = emptyDetection();
+  const seen = new WeakSet;
+  const visit = (candidate) => {
+    if (candidate === null || typeof candidate !== "object" || seen.has(candidate)) {
+      return;
+    }
+    seen.add(candidate);
+    const node = candidate;
+    if (node.type === "AssignmentExpression") {
+      applyAssignment(state, candidate);
+    }
+    if (node.type === "CallExpression") {
+      const call = candidate;
+      applyCall(state, call);
+      if (call.callee.type === "Identifier") {
+        const reason = navigationFunctions.get(call.callee.name);
+        if (!state.reason && reason) {
+          state.reason = `${call.callee.name} handler: ${reason}`;
+        }
+      }
+    }
+    if (node.type === "Identifier") {
+      const identifier = candidate;
+      const reason = navigationFunctions.get(identifier.name);
+      if (!state.reason && reason) {
+        state.reason = `${identifier.name} handler: ${reason}`;
+      }
+    }
+    if (node.type === "MemberExpression") {
+      applyLocationRead(state, candidate);
+    }
+    for (const [key, child] of Object.entries(candidate)) {
+      if (key === "parent" || key === "loc" || key === "range" || key === "references") {
+        continue;
+      }
+      if (Array.isArray(child))
+        child.forEach(visit);
+      else
+        visit(child);
+    }
+  };
+  visit(value);
+  return detectionReason(state);
+};
 var noButtonNavigation = createRule({
   create(context) {
     const handlerStack = [];
-    const getCurrentHandler = () => {
-      const state = handlerStack[handlerStack.length - 1];
-      if (!state) {
-        return null;
-      }
-      return state;
+    const functionStack = [];
+    const navigationFunctions = new Map;
+    const currentHandler = () => handlerStack.at(-1) ?? null;
+    const currentFunction = () => functionStack.at(-1) ?? null;
+    const activeStates = () => {
+      const states = [];
+      const handler = currentHandler();
+      const fn = currentFunction();
+      if (handler)
+        states.push(handler);
+      if (fn)
+        states.push(fn);
+      return states;
     };
-    const isOnClickButtonHandler = (node) => {
-      const { parent } = node;
-      if (!parent || parent.type !== "JSXExpressionContainer") {
-        return null;
-      }
-      const attributeCandidate = parent.parent;
-      if (!attributeCandidate || attributeCandidate.type !== "JSXAttribute") {
-        return null;
-      }
-      const attr = attributeCandidate;
-      if (!attr.name || attr.name.type !== "JSXIdentifier" || attr.name.name !== "onClick") {
-        return null;
-      }
-      const openingElementCandidate = attr.parent;
-      if (!openingElementCandidate || openingElementCandidate.type !== "JSXOpeningElement") {
-        return null;
-      }
-      const tagNameNode = openingElementCandidate.name;
-      if (tagNameNode.type !== "JSXIdentifier" || tagNameNode.name !== "button") {
-        return null;
-      }
-      return attr;
+    const report = (node, reason) => {
+      context.report({
+        data: { reason },
+        loc: node.loc,
+        messageId: "noButtonNavigation"
+      });
     };
-    const isWindowLocationMember = (member) => {
-      const { object } = member;
-      if (object.type !== "MemberExpression") {
-        return false;
-      }
-      const outerObject = object.object;
-      const outerProperty = object.property;
-      return outerObject.type === "Identifier" && outerObject.name === "window" && outerProperty.type === "Identifier" && outerProperty.name === "location";
-    };
-    const isWindowHistoryMember = (member) => {
-      const { object } = member;
-      if (object.type !== "MemberExpression") {
-        return false;
-      }
-      const outerObject = object.object;
-      const outerProperty = object.property;
-      return outerObject.type === "Identifier" && outerObject.name === "window" && outerProperty.type === "Identifier" && outerProperty.name === "history";
-    };
-    const reportHandlerExit = (state) => {
-      const { reason, sawReplaceCall, sawAllowedLocationRead } = state;
-      if (reason) {
-        context.report({
-          data: { reason },
-          messageId: "noButtonNavigation",
-          node: state.attribute
-        });
-        return;
-      }
-      if (sawReplaceCall && !sawAllowedLocationRead) {
-        context.report({
-          data: {
-            reason: "history.replaceState/pushState without reading window.location"
-          },
-          messageId: "noButtonNavigation",
-          node: state.attribute
-        });
-      }
-    };
-    return {
-      ArrowFunctionExpression(node) {
-        const attr = isOnClickButtonHandler(node);
-        if (!attr) {
-          return;
+    const enterFunction = (node) => {
+      functionStack.push({
+        ...emptyDetection(),
+        name: functionName(node)
+      });
+      if (node.type === "ArrowFunctionExpression" || node.type === "FunctionExpression") {
+        const attribute = clickAttribute(node);
+        if (attribute) {
+          handlerStack.push({
+            ...emptyDetection(),
+            attribute
+          });
         }
-        handlerStack.push({
-          attribute: attr,
-          reason: null,
-          sawAllowedLocationRead: false,
-          sawReplaceCall: false
-        });
-      },
-      "ArrowFunctionExpression:exit"(node) {
-        const attr = isOnClickButtonHandler(node);
-        if (!attr) {
+      }
+    };
+    const exitFunction = (node) => {
+      const functionState = functionStack.pop();
+      const reason = functionState ? detectionReason(functionState) : null;
+      if (functionState?.name && reason) {
+        navigationFunctions.set(functionState.name, reason);
+      }
+      if (node.type === "ArrowFunctionExpression" || node.type === "FunctionExpression") {
+        const attribute = clickAttribute(node);
+        if (!attribute)
           return;
-        }
-        const state = handlerStack.pop();
-        if (!state) {
-          return;
-        }
-        reportHandlerExit(state);
-      },
+        const handlerState = handlerStack.pop();
+        const handlerReason = handlerState ? detectionReason(handlerState) : null;
+        if (handlerReason)
+          report(attribute, handlerReason);
+      }
+    };
+    const scriptVisitor = {
+      ArrowFunctionExpression: enterFunction,
+      "ArrowFunctionExpression:exit": exitFunction,
       AssignmentExpression(node) {
-        const state = getCurrentHandler();
-        if (!state) {
-          return;
-        }
-        if (node.left.type !== "MemberExpression") {
-          return;
-        }
-        const { left } = node;
-        if (left.object.type === "Identifier" && left.object.name === "window" && left.property.type === "Identifier" && left.property.name === "location" && !state.reason) {
-          state.reason = "assignment to window.location";
-          return;
-        }
-        if (isWindowLocationMember(left) && !state.reason) {
-          state.reason = "assignment to window.location sub-property";
-        }
+        activeStates().forEach((state) => applyAssignment(state, node));
       },
       CallExpression(node) {
-        const state = getCurrentHandler();
-        if (!state) {
-          return;
-        }
-        const { callee } = node;
-        if (callee.type !== "MemberExpression") {
-          return;
-        }
-        if (isWindowLocationMember(callee) && callee.property.type === "Identifier" && callee.property.name === "replace" && !state.reason) {
-          state.reason = "window.location.replace";
-          return;
-        }
-        if (isWindowHistoryMember(callee) && callee.property.type === "Identifier" && (callee.property.name === "pushState" || callee.property.name === "replaceState")) {
-          state.sawReplaceCall = true;
-        }
+        activeStates().forEach((state) => applyCall(state, node));
       },
-      FunctionExpression(node) {
-        const attr = isOnClickButtonHandler(node);
-        if (!attr) {
+      FunctionDeclaration: enterFunction,
+      "FunctionDeclaration:exit": exitFunction,
+      FunctionExpression: enterFunction,
+      "FunctionExpression:exit": exitFunction,
+      JSXAttribute(node) {
+        if (node.name.type !== "JSXIdentifier" || node.name.name !== "onClick" || node.parent?.type !== "JSXOpeningElement" || node.parent.name.type !== "JSXIdentifier" || node.parent.name.name !== "button" || node.value?.type !== "JSXExpressionContainer" || node.value.expression?.type === "ArrowFunctionExpression" || node.value.expression?.type === "FunctionExpression") {
           return;
         }
-        handlerStack.push({
-          attribute: attr,
-          reason: null,
-          sawAllowedLocationRead: false,
-          sawReplaceCall: false
-        });
-      },
-      "FunctionExpression:exit"(node) {
-        const attr = isOnClickButtonHandler(node);
-        if (!attr) {
-          return;
-        }
-        const state = handlerStack.pop();
-        if (!state) {
-          return;
-        }
-        reportHandlerExit(state);
+        const reason = expressionReason(node.value.expression, navigationFunctions);
+        if (reason)
+          report(node, reason);
       },
       MemberExpression(node) {
-        const state = getCurrentHandler();
-        if (!state) {
-          return;
-        }
-        if (node.object.type === "Identifier" && node.object.name === "window" && node.property.type === "Identifier" && node.property.name === "open" && !state.reason) {
-          state.reason = "window.open";
-        }
-        if (isWindowLocationMember(node) && node.property.type === "Identifier" && (node.property.name === "search" || node.property.name === "pathname" || node.property.name === "hash")) {
-          state.sawAllowedLocationRead = true;
-        }
+        activeStates().forEach((state) => applyLocationRead(state, node));
       }
     };
+    const { parserServices } = context.sourceCode;
+    if (!parserServices || !("defineTemplateBodyVisitor" in parserServices) || typeof parserServices.defineTemplateBodyVisitor !== "function") {
+      return scriptVisitor;
+    }
+    return parserServices.defineTemplateBodyVisitor({
+      VElement(node) {
+        const directive = buttonClickDirective(node);
+        if (!directive)
+          return;
+        const reason = expressionReason(directive.value?.expression, navigationFunctions);
+        if (reason)
+          report(directive, reason);
+      }
+    }, scriptVisitor);
   },
   defaultOptions: [],
   meta: {
     docs: {
-      description: "Enforce using anchor tags for navigation instead of buttons whose onClick handlers change the path. Allow only query/hash updates via window.location.search or history.replaceState(window.location.pathname + \u2026)."
+      description: "Require semantic links for navigation: anchors for external or new-tab destinations and framework router-link components for internal SPA routes."
     },
     messages: {
-      noButtonNavigation: "Use an anchor tag for navigation instead of a button whose onClick handler changes the path. Detected: {{reason}}. Only query/hash updates (reading window.location.search, .pathname, or .hash) are allowed."
+      noButtonNavigation: "Use a semantic link for navigation instead of a button: an <a> for external or new-tab destinations, or the framework router-link component for internal SPA routes. Detected: {{reason}}."
     },
     schema: [],
     type: "suggestion"

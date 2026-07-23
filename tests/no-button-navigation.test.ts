@@ -1,4 +1,5 @@
 import { RuleTester } from "@typescript-eslint/rule-tester";
+import vueParser from "vue-eslint-parser";
 import { noButtonNavigation } from "../src/rules/no-button-navigation";
 
 const ruleTester = new RuleTester({
@@ -20,6 +21,11 @@ ruleTester.run("no-button-navigation", noButtonNavigation, {
 			code: `const C = () => <button onClick={() => { window.location.replace("/new"); }}>Go</button>;`,
 			errors: [{ messageId: "noButtonNavigation" }],
 			name: "button onClick calling window.location.replace"
+		},
+		{
+			code: `const C = () => <button onClick={() => { window.location.assign("/new"); }}>Go</button>;`,
+			errors: [{ messageId: "noButtonNavigation" }],
+			name: "button onClick calling window.location.assign"
 		},
 		{
 			code: `const C = () => <button onClick={() => { window.open("/new"); }}>Go</button>;`,
@@ -50,6 +56,11 @@ ruleTester.run("no-button-navigation", noButtonNavigation, {
 			code: `const C = () => <button onClick={() => { window.location = "/a"; window.location.href = "/b"; }}>Go</button>;`,
 			errors: [{ messageId: "noButtonNavigation" }],
 			name: "multiple navigation calls in one handler"
+		},
+		{
+			code: `const openRoom = () => window.open("/room", "_blank"); const C = () => <button onClick={openRoom}>Go</button>;`,
+			errors: [{ messageId: "noButtonNavigation" }],
+			name: "named JSX navigation handler"
 		}
 	],
 	valid: [
@@ -68,6 +79,52 @@ ruleTester.run("no-button-navigation", noButtonNavigation, {
 		{
 			code: `const C = () => <button onClick={() => { const p = window.location.pathname; window.history.replaceState({}, "", p + "?q=1"); }}>Update</button>;`,
 			name: "button onClick with replaceState reading window.location.pathname"
+		}
+	]
+});
+
+const vueRuleTester = new RuleTester({
+	languageOptions: {
+		ecmaVersion: 2020,
+		parser: vueParser,
+		parserOptions: {
+			extraFileExtensions: [".vue"],
+			sourceType: "module"
+		},
+		sourceType: "module"
+	}
+});
+
+vueRuleTester.run("no-button-navigation in Vue", noButtonNavigation, {
+	invalid: [
+		{
+			code: `<script setup>const openRoom = (url) => window.open(url, "_blank", "noopener");</script><template><button @click="openRoom('/room')">Open</button></template>`,
+			errors: [{ messageId: "noButtonNavigation" }],
+			filename: "DealRooms.vue",
+			name: "Vue button calling a named new-tab handler"
+		},
+		{
+			code: `<template><button @click="window.location.assign('/portal')">Open</button></template>`,
+			errors: [{ messageId: "noButtonNavigation" }],
+			filename: "Portal.vue",
+			name: "Vue button with inline navigation"
+		}
+	],
+	valid: [
+		{
+			code: `<template><a href="/room" target="_blank" rel="noopener">Open</a></template>`,
+			filename: "DealRooms.vue",
+			name: "Vue external anchor"
+		},
+		{
+			code: `<template><RouterLink to="/portal/dashboard">Dashboard</RouterLink></template>`,
+			filename: "Portal.vue",
+			name: "Vue SPA router link"
+		},
+		{
+			code: `<script setup>const save = () => console.log("saved");</script><template><button @click="save">Save</button></template>`,
+			filename: "Editor.vue",
+			name: "Vue action button"
 		}
 	]
 });
