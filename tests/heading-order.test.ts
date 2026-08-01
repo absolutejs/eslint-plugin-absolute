@@ -75,7 +75,6 @@ ruleTester.run("heading-order", headingOrder, {
 			filename: "NestedWidget.vue",
 			name: "reusable components may start at a contextual heading level"
 		}
-
 	]
 });
 
