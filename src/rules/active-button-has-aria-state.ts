@@ -53,7 +53,8 @@ const stateClassBinding = (node: AST.VElement) => {
 	const classBinding = node.startTag.attributes.find((attribute) =>
 		boundAttribute(attribute, "class")
 	);
-	const expression = classBinding?.value?.expression;
+	if (classBinding === undefined) return null;
+	const expression = classBinding.value?.expression;
 	if (expression?.type !== "ObjectExpression") return null;
 	for (const candidate of expression.properties) {
 		if (candidate.type !== "Property") continue;
@@ -64,7 +65,11 @@ const stateClassBinding = (node: AST.VElement) => {
 			candidate.value !== undefined &&
 			candidate.value !== null
 		) {
-			return { className: name, condition: candidate.value };
+			return {
+				classBinding,
+				className: name,
+				condition: candidate.value
+			};
 		}
 	}
 
@@ -135,16 +140,27 @@ export const activeButtonHasAriaState = createRule<Options, MessageIds>({
 					? "aria-selected"
 					: "aria-pressed";
 				const canFix = !hasAriaState(node);
-				const insertion =
-					node.startTag.range[1] -
-					(node.startTag.selfClosing ? 2 : 1);
+				const conditionText = context.sourceCode.text.slice(
+					...state.condition.range
+				);
+				const lineStart =
+					context.sourceCode.text.lastIndexOf(
+						"\n",
+						state.classBinding.range[0] - 1
+					) + 1;
+				const leadingText = context.sourceCode.text.slice(
+					lineStart,
+					state.classBinding.range[0]
+				);
+				const separator =
+					leadingText.trim() === "" ? `\n${leadingText}` : " ";
 				context.report({
 					data: { ariaAttribute, className: state.className },
 					fix: canFix
 						? (fixer) =>
-								fixer.insertTextBeforeRange(
-									[insertion, insertion],
-									` :${ariaAttribute}="${context.sourceCode.text.slice(...state.condition.range)}"`
+								fixer.insertTextAfterRange(
+									state.classBinding.range,
+									`${separator}:${ariaAttribute}="${conditionText}"`
 								)
 						: undefined,
 					loc: node.loc,

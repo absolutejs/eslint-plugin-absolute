@@ -31,6 +31,13 @@ ruleTester.run("active-button-has-aria-state", activeButtonHasAriaState, {
 			output: `<template><button role="tab" :class="{ selected: tab === option }" :aria-selected="tab === option">Overview</button></template>`
 		},
 		{
+			code: `<template>\n  <button\n    type="button"\n    :class="{ active: selected === option }"\n    @click="select(option)"\n  >\n    All\n  </button>\n</template>`,
+			errors: [{ messageId: "missingAriaState" }],
+			filename: "MultilineFilters.vue",
+			name: "multiline fix stays beside its class binding",
+			output: `<template>\n  <button\n    type="button"\n    :class="{ active: selected === option }"\n    :aria-pressed="selected === option"\n    @click="select(option)"\n  >\n    All\n  </button>\n</template>`
+		},
+		{
 			code: `<template><button :class="{ 'is-active': enabled }" :aria-pressed="other">Toggle</button></template>`,
 			errors: [{ messageId: "missingAriaState" }],
 			filename: "Toggle.vue",

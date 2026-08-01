@@ -90,7 +90,9 @@ var propertyName = (property) => {
 };
 var stateClassBinding = (node) => {
   const classBinding = node.startTag.attributes.find((attribute) => boundAttribute(attribute, "class"));
-  const expression = classBinding?.value?.expression;
+  if (classBinding === undefined)
+    return null;
+  const expression = classBinding.value?.expression;
   if (expression?.type !== "ObjectExpression")
     return null;
   for (const candidate of expression.properties) {
@@ -98,7 +100,11 @@ var stateClassBinding = (node) => {
       continue;
     const name = propertyName(candidate);
     if (name !== null && STATE_CLASS_NAMES.has(name) && candidate.value !== undefined && candidate.value !== null) {
-      return { className: name, condition: candidate.value };
+      return {
+        classBinding,
+        className: name,
+        condition: candidate.value
+      };
     }
   }
   return null;
@@ -134,10 +140,15 @@ var activeButtonHasAriaState = createRule({
         }
         const ariaAttribute = isTab(node) ? "aria-selected" : "aria-pressed";
         const canFix = !hasAriaState(node);
-        const insertion = node.startTag.range[1] - (node.startTag.selfClosing ? 2 : 1);
+        const conditionText = context.sourceCode.text.slice(...state.condition.range);
+        const lineStart = context.sourceCode.text.lastIndexOf(`
+`, state.classBinding.range[0] - 1) + 1;
+        const leadingText = context.sourceCode.text.slice(lineStart, state.classBinding.range[0]);
+        const separator = leadingText.trim() === "" ? `
+${leadingText}` : " ";
         context.report({
           data: { ariaAttribute, className: state.className },
-          fix: canFix ? (fixer) => fixer.insertTextBeforeRange([insertion, insertion], ` :${ariaAttribute}="${context.sourceCode.text.slice(...state.condition.range)}"`) : undefined,
+          fix: canFix ? (fixer) => fixer.insertTextAfterRange(state.classBinding.range, `${separator}:${ariaAttribute}="${conditionText}"`) : undefined,
           loc: node.loc,
           messageId: "missingAriaState"
         });
