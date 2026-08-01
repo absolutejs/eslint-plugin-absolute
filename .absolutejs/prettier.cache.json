@@ -34,7 +34,7 @@
 		"src/rules/no-or-none-component.ts": "3u8ad8unwj5lw",
 		"src/rules/no-import-meta-path.ts": "15d267bq8afn",
 		"src/rules/elysia-no-response-return.ts": "3igb1snjaqcos",
-		"src/rules/active-button-has-aria-state.ts": "2lb0tr86z5toz",
+		"src/rules/active-button-has-aria-state.ts": "2k94lcus74lln",
 		"src/rules/no-transition-cssproperties.ts": "1mp6xju6gd9rr",
 		"src/rules/no-explicit-return-types.ts": "3q53uocijma7d",
 		"src/rules/min-var-length.ts": "2fd05js9tt5ah",
@@ -72,7 +72,7 @@
 		"tests/no-useless-function.test.ts": "33cbqfjlndj4g",
 		"tests/button-accessibility.test.ts": "1sukfja0qht40",
 		"tests/spring-naming-convention.test.ts": "1pjy6rh6neepb",
-		"tests/active-button-has-aria-state.test.ts": "2kq8zdwlwz0of",
+		"tests/active-button-has-aria-state.test.ts": "1u73rn2wdmt2f",
 		"tests/no-multi-style-objects.test.ts": "3iunssjnzlidf",
 		"tests/no-explicit-return-types.test.ts": "2zw446k43oj4y",
 		"tests/no-or-none-component.test.ts": "2bwo49a5wbs17",
@@ -83,7 +83,7 @@
 		"eslint.config.mjs": "2bbibgehc7ow4",
 		"knip.json": "2ad5ztaafwxql",
 		"tsconfig.json": "jviy56mvnw8r",
-		"package.json": "206zgyff4ymhk",
+		"package.json": "1u12gimvt8qo7",
 		"tests/fixtures/tsconfig.json": "1f31j6n1h4oyk"
 	}
 }
