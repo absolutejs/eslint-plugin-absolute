@@ -1,4 +1,5 @@
 import { angularOneFeaturePerFile } from "./rules/angular-one-feature-per-file";
+import { activeButtonHasAriaState } from "./rules/active-button-has-aria-state";
 import { headingOrder } from "./rules/heading-order";
 import { noNestedJSXReturn } from "./rules/no-nested-jsx-return";
 import { explicitObjectTypes } from "./rules/explicit-object-types";
@@ -40,6 +41,7 @@ export default {
 		"template-source": templateSourceProcessor
 	},
 	rules: {
+		"active-button-has-aria-state": activeButtonHasAriaState,
 		"angular-one-feature-per-file": angularOneFeaturePerFile,
 		"button-icon-is-hidden": buttonIconIsHidden,
 		"eden-requires-react-query": edenRequiresReactQuery,

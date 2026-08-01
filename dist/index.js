@@ -63,6 +63,102 @@ var angularOneFeaturePerFile = createRule({
   name: "angular-one-feature-per-file"
 });
 
+// src/rules/active-button-has-aria-state.ts
+var STATE_CLASS_NAMES = new Set([
+  "active",
+  "is-active",
+  "is-selected",
+  "selected"
+]);
+var ARIA_STATE_NAMES = new Set([
+  "aria-current",
+  "aria-pressed",
+  "aria-selected"
+]);
+var directiveArgument = (attribute) => attribute.directive && attribute.key.argument?.type === "VIdentifier" ? attribute.key.argument.name : null;
+var boundAttribute = (attribute, name) => attribute.directive && attribute.key.name.name === "bind" && directiveArgument(attribute) === name;
+var literalAttribute = (attribute, name) => !attribute.directive && attribute.key.name === name;
+var propertyName = (property) => {
+  if (property.computed || property.type !== "Property")
+    return null;
+  if (property.key.type === "Identifier")
+    return property.key.name;
+  if (property.key.type === "Literal") {
+    return typeof property.key.value === "string" ? property.key.value : null;
+  }
+  return null;
+};
+var stateClassBinding = (node) => {
+  const classBinding = node.startTag.attributes.find((attribute) => boundAttribute(attribute, "class"));
+  const expression = classBinding?.value?.expression;
+  if (expression?.type !== "ObjectExpression")
+    return null;
+  for (const candidate of expression.properties) {
+    if (candidate.type !== "Property")
+      continue;
+    const name = propertyName(candidate);
+    if (name !== null && STATE_CLASS_NAMES.has(name) && candidate.value !== undefined && candidate.value !== null) {
+      return { className: name, condition: candidate.value };
+    }
+  }
+  return null;
+};
+var isTab = (node) => node.startTag.attributes.some((attribute) => literalAttribute(attribute, "role") && attribute.value?.type === "VLiteral" && attribute.value.value === "tab");
+var matchingAriaState = (context, node, condition) => {
+  const expected = context.sourceCode.text.slice(...condition.range);
+  return node.startTag.attributes.some((attribute) => {
+    const name = directiveArgument(attribute);
+    if (name === null || !ARIA_STATE_NAMES.has(name))
+      return false;
+    const expression = attribute.directive ? attribute.value?.expression : null;
+    return expression !== null && expression !== undefined && context.sourceCode.text.slice(...expression.range) === expected;
+  });
+};
+var hasAriaState = (node) => node.startTag.attributes.some((attribute) => {
+  const name = attribute.directive ? directiveArgument(attribute) : attribute.key.name;
+  return name !== null && ARIA_STATE_NAMES.has(name);
+});
+var activeButtonHasAriaState = createRule({
+  create(context) {
+    const { parserServices } = context.sourceCode;
+    if (!parserServices || !("defineTemplateBodyVisitor" in parserServices) || typeof parserServices.defineTemplateBodyVisitor !== "function") {
+      return {};
+    }
+    return parserServices.defineTemplateBodyVisitor({
+      VElement(node) {
+        if (node.rawName.toLowerCase() !== "button")
+          return;
+        const state = stateClassBinding(node);
+        if (state === null || matchingAriaState(context, node, state.condition)) {
+          return;
+        }
+        const ariaAttribute = isTab(node) ? "aria-selected" : "aria-pressed";
+        const canFix = !hasAriaState(node);
+        const insertion = node.startTag.range[1] - (node.startTag.selfClosing ? 2 : 1);
+        context.report({
+          data: { ariaAttribute, className: state.className },
+          fix: canFix ? (fixer) => fixer.insertTextBeforeRange([insertion, insertion], ` :${ariaAttribute}="${context.sourceCode.text.slice(...state.condition.range)}"`) : undefined,
+          loc: node.loc,
+          messageId: "missingAriaState"
+        });
+      }
+    });
+  },
+  defaultOptions: [],
+  meta: {
+    docs: {
+      description: "Require conditionally active Vue buttons to expose the same state to assistive technology."
+    },
+    fixable: "code",
+    messages: {
+      missingAriaState: 'Button state class "{{className}}" needs :{{ariaAttribute}} bound to the same condition so assistive technology and runtime diagnostics can recognize the selected state.'
+    },
+    schema: [],
+    type: "problem"
+  },
+  name: "active-button-has-aria-state"
+});
+
 // src/rules/heading-order.ts
 var DEFAULT_MAX_FIRST_LEVEL = 6;
 var HEADING_NAME_PATTERN = /^h([1-6])$/;
@@ -3877,7 +3973,7 @@ var noInlinePropTypes = createRule({
 import { AST_NODE_TYPES as AST_NODE_TYPES4 } from "@typescript-eslint/utils";
 var BANNED_TEMPLATE_PATTERN = /\bMath\.random\s*\(|\bDate\.now\s*\(|\bnew\s+Date\s*\(\s*\)|\bcrypto\.randomUUID\s*\(|\bperformance\.now\s*\(/;
 var isIdentifier2 = (node, name) => node?.type === AST_NODE_TYPES4.Identifier && node.name === name;
-var isStaticMemberCall = (node, objectName, propertyName) => node.callee.type === AST_NODE_TYPES4.MemberExpression && !node.callee.computed && isIdentifier2(node.callee.object, objectName) && isIdentifier2(node.callee.property, propertyName);
+var isStaticMemberCall = (node, objectName, propertyName2) => node.callee.type === AST_NODE_TYPES4.MemberExpression && !node.callee.computed && isIdentifier2(node.callee.object, objectName) && isIdentifier2(node.callee.property, propertyName2);
 var getPropertyName2 = (node) => {
   const { key } = node;
   if (key.type === AST_NODE_TYPES4.Identifier)
@@ -5199,7 +5295,7 @@ var memberName4 = (node) => {
     return node.property.type === "Literal" && typeof node.property.value === "string" ? node.property.value : undefined;
   return node.property.type === "Identifier" ? node.property.name : undefined;
 };
-var propertyName = (node) => {
+var propertyName2 = (node) => {
   if (node.computed)
     return;
   if (node.key.type === "Identifier")
@@ -5353,7 +5449,7 @@ var edenRequiresReactQuery = createRule({
             });
       },
       Property(node) {
-        const name = propertyName(node);
+        const name = propertyName2(node);
         if (name && QUERY_CALLBACK_PROPERTIES.has(name) && belongsToReactQueryFactory(node, queryFactories))
           queryProperties.push(node);
       }
@@ -5379,6 +5475,7 @@ var src_default = {
     "template-source": templateSourceProcessor
   },
   rules: {
+    "active-button-has-aria-state": activeButtonHasAriaState,
     "angular-one-feature-per-file": angularOneFeaturePerFile,
     "button-icon-is-hidden": buttonIconIsHidden,
     "eden-requires-react-query": edenRequiresReactQuery,
