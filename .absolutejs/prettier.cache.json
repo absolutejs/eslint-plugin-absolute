@@ -34,7 +34,7 @@
 		"src/rules/no-or-none-component.ts": "3u8ad8unwj5lw",
 		"src/rules/no-import-meta-path.ts": "15d267bq8afn",
 		"src/rules/elysia-no-response-return.ts": "3igb1snjaqcos",
-		"src/rules/active-button-has-aria-state.ts": "3so7upf600l6t",
+		"src/rules/active-button-has-aria-state.ts": "2lb0tr86z5toz",
 		"src/rules/no-transition-cssproperties.ts": "1mp6xju6gd9rr",
 		"src/rules/no-explicit-return-types.ts": "3q53uocijma7d",
 		"src/rules/min-var-length.ts": "2fd05js9tt5ah",
