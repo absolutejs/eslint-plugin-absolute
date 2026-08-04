@@ -55,3 +55,17 @@ same-file helpers. Routes retain their inferred Eden contract by returning plain
 typed data, `status(...)`, or `redirect(...)`. Exact streaming, file, and HTML
 route paths can allow `new Response(...)`; `Response.json(...)` remains forbidden
 because JSON application data never needs the Fetch escape hatch.
+
+## Typed persistence boundaries
+
+`absolute/no-unsafe-schema-types` rejects TypeBox `Any`, `Unknown`, and
+`Unsafe` escape hatches, plus Drizzle `$type` declarations containing `any` or
+`unknown`. Drizzle JSON annotations are compile-time promises, not runtime
+validation; use a bounded type derived from the runtime schema and validate
+untrusted input before persistence.
+
+`absolute/prefer-drizzle-query-builders` rejects `sql.raw()` and recognizes raw
+Drizzle SQL templates that have direct typed equivalents such as `eq`, `gte`,
+`isNull`, `inArray`, `like`, and `desc`. SQL remains available for database
+features that Drizzle cannot express, including JSONPath and aggregate/window
+expressions.

@@ -24,10 +24,12 @@ import { noInlineObjectTypes } from "./rules/no-inline-object-types";
 import { noInlinePropTypes } from "./rules/no-inline-prop-types";
 import { noNondeterministicRender } from "./rules/no-nondeterministic-render";
 import { noRedundantTypeAnnotation } from "./rules/no-redundant-type-annotation";
+import { noUnsafeSchemaTypes } from "./rules/no-unsafe-schema-types";
 import { noImportMetaPath } from "./rules/no-import-meta-path";
 import { noTrivialAlias } from "./rules/no-trivial-alias";
 import { noUnnecessaryDiv } from "./rules/no-unnecessary-div";
 import { preferInlineExports } from "./rules/prefer-inline-exports";
+import { preferDrizzleQueryBuilders } from "./rules/prefer-drizzle-query-builders";
 import { buttonIconIsHidden } from "./rules/button-icon-is-hidden";
 import { iconButtonHasAccessibleName } from "./rules/icon-button-has-accessible-name";
 import { templateSourceProcessor } from "./processors/template-source";
@@ -70,8 +72,10 @@ export default {
 		"no-trivial-alias": noTrivialAlias,
 		"no-unnecessary-div": noUnnecessaryDiv,
 		"no-unnecessary-key": noUnnecessaryKey,
+		"no-unsafe-schema-types": noUnsafeSchemaTypes,
 		"no-useless-catch": noUselessCatch,
 		"no-useless-function": noUselessFunction,
+		"prefer-drizzle-query-builders": preferDrizzleQueryBuilders,
 		"prefer-inline-exports": preferInlineExports,
 		"seperate-style-files": seperateStyleFiles,
 		"sort-exports": sortExports,

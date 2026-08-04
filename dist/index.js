@@ -4197,6 +4197,95 @@ var noRedundantTypeAnnotation = createRule({
   name: "no-redundant-type-annotation"
 });
 
+// src/rules/no-unsafe-schema-types.ts
+var TYPEBOX_MODULES = new Set(["@sinclair/typebox", "elysia"]);
+var TYPEBOX_ESCAPE_METHODS = new Set(["Any", "Unknown", "Unsafe"]);
+var memberName = (node) => {
+  if (node.computed) {
+    return node.property.type === "Literal" && typeof node.property.value === "string" ? node.property.value : null;
+  }
+  return node.property.type === "Identifier" ? node.property.name : null;
+};
+var typeboxNamespaceName = (specifier) => {
+  if (specifier.type === "ImportNamespaceSpecifier")
+    return specifier.local.name;
+  if (specifier.type !== "ImportSpecifier")
+    return null;
+  if (specifier.imported.type !== "Identifier")
+    return null;
+  if (specifier.imported.name !== "Type" && specifier.imported.name !== "t") {
+    return null;
+  }
+  return specifier.local.name;
+};
+var isNode = (value) => typeof value === "object" && value !== null && ("type" in value) && typeof value.type === "string";
+var containsUnboundedType = (node, seen = new WeakSet) => {
+  if (seen.has(node))
+    return false;
+  seen.add(node);
+  if (node.type === "TSAnyKeyword" || node.type === "TSUnknownKeyword") {
+    return true;
+  }
+  return Object.entries(node).some(([key, value]) => {
+    if (key === "parent")
+      return false;
+    if (!value || typeof value !== "object")
+      return false;
+    if (Array.isArray(value)) {
+      return value.some((child) => isNode(child) && containsUnboundedType(child, seen));
+    }
+    if (isNode(value))
+      return containsUnboundedType(value, seen);
+    return false;
+  });
+};
+var noUnsafeSchemaTypes = createRule({
+  create(context) {
+    const typeboxNamespaces = new Set;
+    return {
+      CallExpression(node) {
+        if (node.callee.type !== "MemberExpression")
+          return;
+        const method = memberName(node.callee);
+        if (method && TYPEBOX_ESCAPE_METHODS.has(method) && node.callee.object.type === "Identifier" && typeboxNamespaces.has(node.callee.object.name)) {
+          context.report({
+            data: { method },
+            messageId: "typeboxEscape",
+            node
+          });
+          return;
+        }
+        if (method !== "$type")
+          return;
+        const typeArguments = node.typeArguments?.params ?? [];
+        if (!typeArguments.some((typeArgument) => containsUnboundedType(typeArgument))) {
+          return;
+        }
+        context.report({ messageId: "drizzleType", node });
+      },
+      ImportDeclaration(node) {
+        if (typeof node.source.value !== "string" || !TYPEBOX_MODULES.has(node.source.value)) {
+          return;
+        }
+        node.specifiers.map(typeboxNamespaceName).filter((name) => name !== null).forEach((name) => typeboxNamespaces.add(name));
+      }
+    };
+  },
+  defaultOptions: [],
+  meta: {
+    docs: {
+      description: "Disallow TypeBox validation escape hatches and unbounded any/unknown Drizzle $type annotations. Use an exact runtime schema and a bounded inferred JSON column type."
+    },
+    messages: {
+      drizzleType: "Drizzle .$type<any/unknown>() only tells TypeScript to trust unvalidated JSON. Use a bounded domain type derived from the runtime schema, and validate untrusted writes before persistence.",
+      typeboxEscape: "TypeBox {{method}}() disables exact runtime validation. Model the real shape with TypeBox and derive the TypeScript type from that schema."
+    },
+    schema: [],
+    type: "problem"
+  },
+  name: "no-unsafe-schema-types"
+});
+
 // src/rules/no-import-meta-path.ts
 var FILESYSTEM_PATH_PROPERTIES = new Set(["dir", "dirname", "filename"]);
 var isImportMeta = (node) => node.type === "MetaProperty" && node.meta.name === "import" && node.property.name === "meta";
@@ -4495,6 +4584,87 @@ var preferInlineExports = createRule({
   name: "prefer-inline-exports"
 });
 
+// src/rules/prefer-drizzle-query-builders.ts
+var SIMPLE_SQL_BUILDERS = [
+  [/^\s*\$\{\}\s*=\s*\$\{\}\s*$/u, "eq"],
+  [/^\s*\$\{\}\s*(?:<>|!=)\s*\$\{\}\s*$/u, "ne"],
+  [/^\s*\$\{\}\s*>\s*\$\{\}\s*$/u, "gt"],
+  [/^\s*\$\{\}\s*>=\s*\$\{\}\s*$/u, "gte"],
+  [/^\s*\$\{\}\s*<\s*\$\{\}\s*$/u, "lt"],
+  [/^\s*\$\{\}\s*<=\s*\$\{\}\s*$/u, "lte"],
+  [/^\s*\$\{\}\s+is\s+null\s*$/iu, "isNull"],
+  [/^\s*\$\{\}\s+is\s+not\s+null\s*$/iu, "isNotNull"],
+  [/^\s*\$\{\}\s+like\s+\$\{\}\s*$/iu, "like"],
+  [/^\s*\$\{\}\s+ilike\s+\$\{\}\s*$/iu, "ilike"],
+  [/^\s*\$\{\}\s+in\s*\(\s*\$\{\}\s*\)\s*$/iu, "inArray"],
+  [/^\s*\$\{\}\s+not\s+in\s*\(\s*\$\{\}\s*\)\s*$/iu, "notInArray"],
+  [/^\s*\$\{\}\s+asc\s*$/iu, "asc"],
+  [/^\s*\$\{\}\s+desc\s*$/iu, "desc"]
+];
+var memberName2 = (node) => {
+  if (node.computed) {
+    return node.property.type === "Literal" && typeof node.property.value === "string" ? node.property.value : null;
+  }
+  return node.property.type === "Identifier" ? node.property.name : null;
+};
+var templateShape = (node) => node.quasis.map((quasi) => quasi.value.raw).join("${}");
+var drizzleSqlLocalName = (specifier) => {
+  if (specifier.type !== "ImportSpecifier")
+    return null;
+  if (specifier.imported.type !== "Identifier")
+    return null;
+  return specifier.imported.name === "sql" ? specifier.local.name : null;
+};
+var preferDrizzleQueryBuilders = createRule({
+  create(context) {
+    const drizzleSqlLocals = new Set;
+    return {
+      CallExpression(node) {
+        if (node.callee.type !== "MemberExpression")
+          return;
+        if (memberName2(node.callee) !== "raw")
+          return;
+        if (node.callee.object.type !== "Identifier" || !drizzleSqlLocals.has(node.callee.object.name)) {
+          return;
+        }
+        context.report({ messageId: "rawSql", node });
+      },
+      ImportDeclaration(node) {
+        if (node.source.value !== "drizzle-orm")
+          return;
+        node.specifiers.map(drizzleSqlLocalName).filter((name) => name !== null).forEach((name) => drizzleSqlLocals.add(name));
+      },
+      TaggedTemplateExpression(node) {
+        if (node.tag.type !== "Identifier" || !drizzleSqlLocals.has(node.tag.name)) {
+          return;
+        }
+        const shape = templateShape(node.quasi);
+        const match = SIMPLE_SQL_BUILDERS.find(([pattern]) => pattern.test(shape));
+        if (!match)
+          return;
+        context.report({
+          data: { builder: match[1] },
+          messageId: "preferBuilder",
+          node
+        });
+      }
+    };
+  },
+  defaultOptions: [],
+  meta: {
+    docs: {
+      description: "Require Drizzle's typed query builders for comparisons, null checks, membership, ordering, and patterns that do not need raw SQL."
+    },
+    messages: {
+      preferBuilder: "Use Drizzle's typed {{builder}}(...) query builder instead of an sql template for this expression.",
+      rawSql: "Do not use sql.raw(); it bypasses Drizzle parameterization and typing. Compose identifiers and values with Drizzle's typed APIs."
+    },
+    schema: [],
+    type: "problem"
+  },
+  name: "prefer-drizzle-query-builders"
+});
+
 // src/utils/buttonAccessibility.ts
 var BUTTON_OPEN_PATTERN = /<button\b/giu;
 var BUTTON_CLOSE = "</button";
@@ -4698,7 +4868,7 @@ var ROUTE_METHODS = new Set([
   "trace",
   "ws"
 ]);
-var memberName = (node) => {
+var memberName3 = (node) => {
   if (node.computed) {
     return node.property.type === "Literal" && typeof node.property.value === "string" ? node.property.value : undefined;
   }
@@ -4712,7 +4882,7 @@ var chainRoot = (expression) => {
     const member = callMember(current);
     if (!member || member.object.type === "Super")
       break;
-    const method = memberName(member);
+    const method = memberName3(member);
     if (method && ROUTE_METHODS.has(method))
       registersRoute = true;
     current = member.object;
@@ -4761,7 +4931,7 @@ var isElysiaApplication = (context, expression, elysiaConstructors, seen = new S
 };
 var isUseCall = (node) => {
   const member = callMember(node);
-  return Boolean(member && memberName(member) === "use" && node.arguments.length === 1);
+  return Boolean(member && memberName3(member) === "use" && node.arguments.length === 1);
 };
 var parentIsUseCall = (node) => {
   const { parent } = node;
@@ -4855,7 +5025,7 @@ var ROUTE_METHODS2 = new Set([
   "put",
   "trace"
 ]);
-var memberName2 = (node) => {
+var memberName4 = (node) => {
   if (node.computed)
     return node.property.type === "Literal" && typeof node.property.value === "string" ? node.property.value : undefined;
   return node.property.type === "Identifier" ? node.property.name : undefined;
@@ -4889,7 +5059,7 @@ var resolveFunction = (context, node) => {
 var routeRegistration = (node) => {
   if (node.callee.type !== "MemberExpression")
     return;
-  const method = memberName2(node.callee);
+  const method = memberName4(node.callee);
   if (!method)
     return;
   const pathIndex = method === "route" ? 1 : 0;
@@ -4902,7 +5072,7 @@ var routeRegistration = (node) => {
     return;
   return { handler, path: path.value };
 };
-var isResponseJson = (node) => node.callee.type === "MemberExpression" && node.callee.object.type === "Identifier" && node.callee.object.name === "Response" && memberName2(node.callee) === "json";
+var isResponseJson = (node) => node.callee.type === "MemberExpression" && node.callee.object.type === "Identifier" && node.callee.object.name === "Response" && memberName4(node.callee) === "json";
 var isResponseConstructor = (node) => node.callee.type === "Identifier" && node.callee.name === "Response";
 var preservesReturnedValue = (parent, current) => {
   if (parent.type === "ConditionalExpression")
@@ -5079,7 +5249,7 @@ var matchesFile = (filename, configuredFile) => {
   const normalizedConfiguredFile = normalizePath(configuredFile);
   return normalizedFilename === normalizedConfiguredFile || normalizedFilename.endsWith(`/${normalizedConfiguredFile}`);
 };
-var memberName3 = (node) => {
+var memberName5 = (node) => {
   if (node.computed)
     return node.property.type === "Literal" && typeof node.property.value === "string" ? node.property.value : undefined;
   return node.property.type === "Identifier" ? node.property.name : undefined;
@@ -5093,7 +5263,7 @@ var chainAnalysis = (expression) => {
     const member = callMember2(current);
     if (!member || member.object.type === "Super")
       break;
-    const method = memberName3(member);
+    const method = memberName5(member);
     const isRouteMethod = Boolean(method && ROUTE_METHODS3.has(method));
     const [firstArgument] = current.arguments;
     registersRoute ||= isRouteMethod;
@@ -5301,7 +5471,7 @@ var REACT_QUERY_FACTORIES = new Set([
   "useSuspenseQueries",
   "useSuspenseQuery"
 ]);
-var memberName4 = (node) => {
+var memberName6 = (node) => {
   if (node.computed)
     return node.property.type === "Literal" && typeof node.property.value === "string" ? node.property.value : undefined;
   return node.property.type === "Identifier" ? node.property.name : undefined;
@@ -5316,7 +5486,7 @@ var propertyName2 = (node) => {
 var variableFor4 = (context, identifier) => context.sourceCode.getScope(identifier).references.find((reference) => reference.identifier === identifier)?.resolved;
 var expressionContainsApi = (context, node, seen = new Set) => {
   if (node.type === "MemberExpression")
-    return memberName4(node) === "api" || expressionContainsApi(context, node.object, seen);
+    return memberName6(node) === "api" || expressionContainsApi(context, node.object, seen);
   if (node.type === "CallExpression" || node.type === "NewExpression")
     return expressionContainsApi(context, node.callee, seen);
   if (node.type === "ChainExpression")
@@ -5335,7 +5505,7 @@ var expressionContainsApi = (context, node, seen = new Set) => {
 var isEdenCall = (context, node) => {
   if (node.callee.type !== "MemberExpression")
     return false;
-  const method = memberName4(node.callee);
+  const method = memberName6(node.callee);
   return Boolean(method && EDEN_HTTP_METHODS.has(method) && expressionContainsApi(context, node.callee.object));
 };
 var functionAncestor2 = (node) => {
@@ -5382,7 +5552,7 @@ var belongsToReactQueryFactory = (node, factories) => {
 var isMutationCall = (node) => {
   if (node.callee.type !== "MemberExpression")
     return false;
-  const method = memberName4(node.callee);
+  const method = memberName6(node.callee);
   return method === "mutate" || method === "mutateAsync";
 };
 var belongsToMutationVariables = (node) => {
@@ -5515,8 +5685,10 @@ var src_default = {
     "no-trivial-alias": noTrivialAlias,
     "no-unnecessary-div": noUnnecessaryDiv,
     "no-unnecessary-key": noUnnecessaryKey,
+    "no-unsafe-schema-types": noUnsafeSchemaTypes,
     "no-useless-catch": noUselessCatch,
     "no-useless-function": noUselessFunction,
+    "prefer-drizzle-query-builders": preferDrizzleQueryBuilders,
     "prefer-inline-exports": preferInlineExports,
     "seperate-style-files": seperateStyleFiles,
     "sort-exports": sortExports,
