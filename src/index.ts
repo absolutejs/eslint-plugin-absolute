@@ -2,6 +2,7 @@ import { angularOneFeaturePerFile } from "./rules/angular-one-feature-per-file";
 import { activeButtonHasAriaState } from "./rules/active-button-has-aria-state";
 import { headingOrder } from "./rules/heading-order";
 import { noNestedJSXReturn } from "./rules/no-nested-jsx-return";
+import { noChainedTypeAssertions } from "./rules/no-chained-type-assertions";
 import { explicitObjectTypes } from "./rules/explicit-object-types";
 import { sortKeysFixable } from "./rules/sort-keys-fixable";
 import { noTransitionCSSProperties } from "./rules/no-transition-cssproperties";
@@ -59,6 +60,7 @@ export default {
 		"max-jsxnesting": maxJSXNesting,
 		"min-var-length": minVarLength,
 		"no-button-navigation": noButtonNavigation,
+		"no-chained-type-assertions": noChainedTypeAssertions,
 		"no-explicit-return-type": noExplicitReturnTypes,
 		"no-import-meta-path": noImportMetaPath,
 		"no-inline-object-types": noInlineObjectTypes,
