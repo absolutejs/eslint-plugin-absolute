@@ -2,7 +2,7 @@
 	"configHash": "o3xdo5w2pf33",
 	"files": {
 		"src/createRule.ts": "ufd8xkywxjpq",
-		"src/index.ts": "29fualenrv56v",
+		"src/index.ts": "1bgq72ce0vm9m",
 		"src/rules/no-unsafe-schema-types.ts": "ewvlhgz7ekvn",
 		"src/rules/max-depth-extended.ts": "1nihotxe9viyz",
 		"src/rules/no-nondeterministic-render.ts": "2xwu369lmv51r",
@@ -26,9 +26,11 @@
 		"src/rules/explicit-object-types.ts": "b75v29zllj3r",
 		"src/rules/spring-naming-convention.ts": "3bdjcqw8kqo9u",
 		"src/rules/sort-keys-fixable.ts": "2gecp4b5xc9ou",
+		"src/rules/no-chained-type-assertions.ts": "3u39w4c9u1vs7",
 		"src/rules/no-nested-jsx-return.ts": "2pfxs0ak3d1lu",
 		"src/rules/elysia-composition-boundaries.ts": "d578vaigddya",
 		"src/rules/no-multi-style-objects.ts": "1pu23exzpjwqg",
+		"src/rules/loading-indicator-has-aria-busy.ts": "1w9w0wewtqime",
 		"src/rules/no-trivial-alias.ts": "1kv1ofvfnd3uq",
 		"src/rules/max-jsx-nesting.ts": "2s3vt636gyopt",
 		"src/rules/angular-one-feature-per-file.ts": "arwwhpy8bpts",
@@ -44,6 +46,7 @@
 		"src/utils/buttonAccessibility.ts": "2l3hi5xzu0cdb",
 		"src/processors/template-source.ts": "29clv7c283wc2",
 		"tests/no-nondeterministic-render.test.ts": "1k8yba2r7cpy7",
+		"tests/no-chained-type-assertions.test.ts": "539k82422fyd",
 		"tests/seperate-style-files.test.ts": "21u06eu3q6tb1",
 		"tests/no-unsafe-schema-types.test.ts": "ue5a4f78oz3p",
 		"tests/no-button-navigation.test.ts": "3hya5iwbeefnv",
@@ -65,6 +68,7 @@
 		"tests/angular-one-feature-per-file.test.ts": "29vojpfl4tpr5",
 		"tests/min-var-length.test.ts": "2sza9qi3shthk",
 		"tests/icon-button-has-accessible-name.test.ts": "ip8flbcfwu2z",
+		"tests/loading-indicator-has-aria-busy.test.ts": "6xnyru4780ev",
 		"tests/sort-keys-fixable.test.ts": "22yjiao8j1czm",
 		"tests/max-depth-extended.test.ts": "1gtuzrhd19l2q",
 		"tests/elysia-route-boundaries.test.ts": "2o1t9e4tapp8r",
@@ -87,7 +91,7 @@
 		"eslint.config.mjs": "2bbibgehc7ow4",
 		"knip.json": "2ad5ztaafwxql",
 		"tsconfig.json": "jviy56mvnw8r",
-		"package.json": "1u12gimvt8qo7",
+		"package.json": "2s6cetuwa4grr",
 		"tests/fixtures/tsconfig.json": "1f31j6n1h4oyk"
 	}
 }
