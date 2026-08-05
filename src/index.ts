@@ -38,6 +38,7 @@ import { elysiaCompositionBoundaries } from "./rules/elysia-composition-boundari
 import { elysiaNoResponseReturn } from "./rules/elysia-no-response-return";
 import { elysiaRouteBoundaries } from "./rules/elysia-route-boundaries";
 import { edenRequiresReactQuery } from "./rules/eden-requires-react-query";
+import { loadingIndicatorHasAriaBusy } from "./rules/loading-indicator-has-aria-busy";
 
 export default {
 	processors: {
@@ -55,6 +56,7 @@ export default {
 		"heading-order": headingOrder,
 		"icon-button-has-accessible-name": iconButtonHasAccessibleName,
 		"inline-style-limit": inlineStyleLimit,
+		"loading-indicator-has-aria-busy": loadingIndicatorHasAriaBusy,
 		"localize-react-props": localizeReactProps,
 		"max-depth-extended": maxDepthExtended,
 		"max-jsxnesting": maxJSXNesting,
