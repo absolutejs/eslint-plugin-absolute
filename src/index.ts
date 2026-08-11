@@ -39,6 +39,7 @@ import { elysiaNoResponseReturn } from "./rules/elysia-no-response-return";
 import { elysiaRouteBoundaries } from "./rules/elysia-route-boundaries";
 import { edenRequiresReactQuery } from "./rules/eden-requires-react-query";
 import { loadingIndicatorHasAriaBusy } from "./rules/loading-indicator-has-aria-busy";
+import { modalHasFocusManagement } from "./rules/modal-has-focus-management";
 
 export default {
 	processors: {
@@ -61,6 +62,7 @@ export default {
 		"max-depth-extended": maxDepthExtended,
 		"max-jsxnesting": maxJSXNesting,
 		"min-var-length": minVarLength,
+		"modal-has-focus-management": modalHasFocusManagement,
 		"no-button-navigation": noButtonNavigation,
 		"no-chained-type-assertions": noChainedTypeAssertions,
 		"no-explicit-return-type": noExplicitReturnTypes,

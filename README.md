@@ -2,6 +2,15 @@
 
 ESLint rule collection for AbsoluteJS applications and packages.
 
+## Accessible modal focus
+
+`absolute/modal-has-focus-management` requires every Vue element that declares
+`aria-modal="true"` to expose the structural hooks a host needs for the modal
+focus lifecycle: a template ref for initial focus and restoration coordination,
+a `tabindex` fallback when it has no focusable children, and a keydown handler
+for Tab containment. The rule cannot prove runtime focus behavior; pair it with
+an accessibility runtime signal or browser test.
+
 ## Elysia composition boundaries
 
 `absolute/elysia-composition-boundaries` prevents a route application from

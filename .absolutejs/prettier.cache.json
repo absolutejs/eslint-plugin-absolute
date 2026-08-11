@@ -2,7 +2,7 @@
 	"configHash": "o3xdo5w2pf33",
 	"files": {
 		"src/createRule.ts": "ufd8xkywxjpq",
-		"src/index.ts": "1bgq72ce0vm9m",
+		"src/index.ts": "2yenhcdt6rslu",
 		"src/rules/no-unsafe-schema-types.ts": "ewvlhgz7ekvn",
 		"src/rules/max-depth-extended.ts": "1nihotxe9viyz",
 		"src/rules/no-nondeterministic-render.ts": "2xwu369lmv51r",
@@ -33,6 +33,7 @@
 		"src/rules/loading-indicator-has-aria-busy.ts": "1w9w0wewtqime",
 		"src/rules/no-trivial-alias.ts": "1kv1ofvfnd3uq",
 		"src/rules/max-jsx-nesting.ts": "2s3vt636gyopt",
+		"src/rules/modal-has-focus-management.ts": "nj8f7wi3pdyh",
 		"src/rules/angular-one-feature-per-file.ts": "arwwhpy8bpts",
 		"src/rules/prefer-drizzle-query-builders.ts": "10mednzkyi317",
 		"src/rules/no-or-none-component.ts": "3u8ad8unwj5lw",
@@ -55,6 +56,7 @@
 		"tests/button-icon-is-hidden.test.ts": "2phn75bo3qcce",
 		"tests/no-trivial-alias.test.ts": "2asn44n898xft",
 		"tests/no-nested-jsx-return.test.ts": "1bb4hv3y0gbe5",
+		"tests/modal-has-focus-management.test.ts": "19g6gdqsos6b1",
 		"tests/template-source-processor.test.ts": "q4jq7dkiyo62",
 		"tests/no-inline-prop-types.test.ts": "vk7xbiidgmzo",
 		"tests/no-unnecessary-key.test.ts": "3exk147ir3tgd",
@@ -91,7 +93,7 @@
 		"eslint.config.mjs": "2bbibgehc7ow4",
 		"knip.json": "2ad5ztaafwxql",
 		"tsconfig.json": "jviy56mvnw8r",
-		"package.json": "2s6cetuwa4grr",
+		"package.json": "1x043f5a8m0ce",
 		"tests/fixtures/tsconfig.json": "1f31j6n1h4oyk"
 	}
 }

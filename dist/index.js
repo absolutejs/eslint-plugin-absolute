@@ -5795,6 +5795,62 @@ ${leadingText}` : " ";
   name: "loading-indicator-has-aria-busy"
 });
 
+// src/rules/modal-has-focus-management.ts
+var directiveArgument3 = (attribute) => attribute.directive && attribute.key.argument?.type === "VIdentifier" ? attribute.key.argument.name : null;
+var literalAttribute3 = (attribute, name) => !attribute.directive && attribute.key.name === name;
+var boundAttribute3 = (attribute, name) => attribute.directive && attribute.key.name.name === "bind" && directiveArgument3(attribute) === name;
+var hasAttribute = (node, name) => node.startTag.attributes.some((attribute) => literalAttribute3(attribute, name) || boundAttribute3(attribute, name));
+var isAriaModal = (node) => node.startTag.attributes.some((attribute) => {
+  if (literalAttribute3(attribute, "aria-modal")) {
+    return attribute.value?.type === "VLiteral" && attribute.value.value.toLowerCase() === "true";
+  }
+  return boundAttribute3(attribute, "aria-modal");
+});
+var hasKeydownHandler = (node) => node.startTag.attributes.some((attribute) => attribute.directive && attribute.key.name.name === "on" && directiveArgument3(attribute) === "keydown");
+var modalHasFocusManagement = createRule({
+  create(context) {
+    const { parserServices } = context.sourceCode;
+    if (!parserServices || !("defineTemplateBodyVisitor" in parserServices) || typeof parserServices.defineTemplateBodyVisitor !== "function") {
+      return {};
+    }
+    return parserServices.defineTemplateBodyVisitor({
+      VElement(node) {
+        if (!isAriaModal(node))
+          return;
+        if (!hasAttribute(node, "ref")) {
+          context.report({ loc: node.loc, messageId: "missingRef" });
+        }
+        if (!hasAttribute(node, "tabindex")) {
+          context.report({
+            loc: node.loc,
+            messageId: "missingTabindex"
+          });
+        }
+        if (!hasKeydownHandler(node)) {
+          context.report({
+            loc: node.loc,
+            messageId: "missingKeydown"
+          });
+        }
+      }
+    });
+  },
+  defaultOptions: [],
+  meta: {
+    docs: {
+      description: "Require Vue ARIA modals to expose hooks for initial focus, focus fallback, and keyboard containment."
+    },
+    messages: {
+      missingKeydown: "ARIA modal needs a keydown handler that contains Tab and Shift+Tab focus within the modal.",
+      missingRef: "ARIA modal needs a template ref so opening code can move focus into it and closing code can coordinate restoration.",
+      missingTabindex: 'ARIA modal needs tabindex="-1" (or a bound tabindex) as a programmatic focus fallback.'
+    },
+    schema: [],
+    type: "problem"
+  },
+  name: "modal-has-focus-management"
+});
+
 // src/index.ts
 var src_default = {
   processors: {
@@ -5817,6 +5873,7 @@ var src_default = {
     "max-depth-extended": maxDepthExtended,
     "max-jsxnesting": maxJSXNesting,
     "min-var-length": minVarLength,
+    "modal-has-focus-management": modalHasFocusManagement,
     "no-button-navigation": noButtonNavigation,
     "no-chained-type-assertions": noChainedTypeAssertions,
     "no-explicit-return-type": noExplicitReturnTypes,
