@@ -40,6 +40,7 @@ import { elysiaRouteBoundaries } from "./rules/elysia-route-boundaries";
 import { edenRequiresReactQuery } from "./rules/eden-requires-react-query";
 import { loadingIndicatorHasAriaBusy } from "./rules/loading-indicator-has-aria-busy";
 import { modalHasFocusManagement } from "./rules/modal-has-focus-management";
+import { progressbarHasState } from "./rules/progressbar-has-state";
 
 export default {
 	processors: {
@@ -83,6 +84,7 @@ export default {
 		"no-useless-function": noUselessFunction,
 		"prefer-drizzle-query-builders": preferDrizzleQueryBuilders,
 		"prefer-inline-exports": preferInlineExports,
+		"progressbar-has-state": progressbarHasState,
 		"seperate-style-files": seperateStyleFiles,
 		"sort-exports": sortExports,
 		"sort-keys-fixable": sortKeysFixable,

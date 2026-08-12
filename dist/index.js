@@ -5851,6 +5851,45 @@ var modalHasFocusManagement = createRule({
   name: "modal-has-focus-management"
 });
 
+// src/rules/progressbar-has-state.ts
+var directiveArgument4 = (attribute) => attribute.directive && attribute.key.argument?.type === "VIdentifier" ? attribute.key.argument.name : null;
+var attributeName2 = (attribute) => attribute.directive ? directiveArgument4(attribute) : attribute.key.name;
+var isProgressbar2 = (node) => node.startTag.attributes.some((attribute) => !attribute.directive && attribute.key.name === "role" && attribute.value?.type === "VLiteral" && attribute.value.value === "progressbar");
+var hasState = (node) => node.startTag.attributes.some((attribute) => {
+  const name = attributeName2(attribute);
+  return name === "aria-valuenow" || name === "aria-busy" || name === "data-beacon-loading";
+});
+var progressbarHasState = createRule({
+  create(context) {
+    const { parserServices } = context.sourceCode;
+    if (!parserServices || !("defineTemplateBodyVisitor" in parserServices) || typeof parserServices.defineTemplateBodyVisitor !== "function") {
+      return {};
+    }
+    return parserServices.defineTemplateBodyVisitor({
+      VElement(node) {
+        if (!isProgressbar2(node) || hasState(node))
+          return;
+        context.report({
+          loc: node.loc,
+          messageId: "missingState"
+        });
+      }
+    });
+  },
+  defaultOptions: [],
+  meta: {
+    docs: {
+      description: "Require progressbars to distinguish determinate values from explicit indeterminate loading state."
+    },
+    messages: {
+      missingState: "Progressbar needs aria-valuenow for a determinate value, or aria-busy/data-beacon-loading for an indeterminate loader."
+    },
+    schema: [],
+    type: "problem"
+  },
+  name: "progressbar-has-state"
+});
+
 // src/index.ts
 var src_default = {
   processors: {
@@ -5894,6 +5933,7 @@ var src_default = {
     "no-useless-function": noUselessFunction,
     "prefer-drizzle-query-builders": preferDrizzleQueryBuilders,
     "prefer-inline-exports": preferInlineExports,
+    "progressbar-has-state": progressbarHasState,
     "seperate-style-files": seperateStyleFiles,
     "sort-exports": sortExports,
     "sort-keys-fixable": sortKeysFixable,

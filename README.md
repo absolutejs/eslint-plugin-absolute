@@ -2,6 +2,13 @@
 
 ESLint rule collection for AbsoluteJS applications and packages.
 
+## Progressbar state
+
+`absolute/progressbar-has-state` requires Vue progressbars to make their state
+explicit: determinate meters expose `aria-valuenow`, while indeterminate
+loaders use `aria-busy` or `data-beacon-loading`. This preserves valid ARIA
+semantics and lets runtime watchdogs distinguish persistent meters from loads.
+
 ## Accessible modal focus
 
 `absolute/modal-has-focus-management` requires every Vue element that declares

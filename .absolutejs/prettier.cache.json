@@ -2,10 +2,11 @@
 	"configHash": "o3xdo5w2pf33",
 	"files": {
 		"src/createRule.ts": "ufd8xkywxjpq",
-		"src/index.ts": "2yenhcdt6rslu",
+		"src/index.ts": "fprro6qzwtdo",
 		"src/rules/no-unsafe-schema-types.ts": "ewvlhgz7ekvn",
 		"src/rules/max-depth-extended.ts": "1nihotxe9viyz",
 		"src/rules/no-nondeterministic-render.ts": "2xwu369lmv51r",
+		"src/rules/progressbar-has-state.ts": "1u056ion493bc",
 		"src/rules/localize-react-props.ts": "gh8awi0dpt5i",
 		"src/rules/eden-requires-react-query.ts": "2h7xiapya8i8k",
 		"src/rules/no-redundant-type-annotation.ts": "31pn6xfkxj70t",
@@ -68,6 +69,7 @@
 		"tests/localize-react-props.test.ts": "1mvzkrqu484ls",
 		"tests/no-import-meta-path.test.ts": "1ia9h50oahoet",
 		"tests/angular-one-feature-per-file.test.ts": "29vojpfl4tpr5",
+		"tests/progressbar-has-state.test.ts": "22r1mkcopx8gd",
 		"tests/min-var-length.test.ts": "2sza9qi3shthk",
 		"tests/icon-button-has-accessible-name.test.ts": "ip8flbcfwu2z",
 		"tests/loading-indicator-has-aria-busy.test.ts": "6xnyru4780ev",
@@ -93,7 +95,7 @@
 		"eslint.config.mjs": "2bbibgehc7ow4",
 		"knip.json": "2ad5ztaafwxql",
 		"tsconfig.json": "jviy56mvnw8r",
-		"package.json": "1x043f5a8m0ce",
+		"package.json": "13lo5we0la63o",
 		"tests/fixtures/tsconfig.json": "1f31j6n1h4oyk"
 	}
 }
