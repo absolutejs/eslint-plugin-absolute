@@ -1,8 +1,8 @@
-import { TSESTree } from "@typescript-eslint/utils";
+import { TSESLint, TSESTree } from "@typescript-eslint/utils";
 import { createRule } from "../createRule";
 
 type Options = [];
-type MessageIds = "preferBuilder" | "rawSql";
+type MessageIds = "directColumn" | "preferBuilder" | "rawSql" | "unmappedDate";
 
 const SIMPLE_SQL_BUILDERS: ReadonlyArray<[RegExp, string]> = [
 	[/^\s*\$\{\}\s*=\s*\$\{\}\s*$/u, "eq"],
@@ -42,6 +42,25 @@ const drizzleSqlLocalName = (specifier: TSESTree.ImportClause) => {
 	return specifier.imported.name === "sql" ? specifier.local.name : null;
 };
 
+const mapsDriverValue = (node: TSESTree.TaggedTemplateExpression) => {
+	const member = node.parent;
+	if (member.type !== "MemberExpression" || member.object !== node)
+		return false;
+	if (memberName(member) !== "mapWith") return false;
+	const call = member.parent;
+
+	return call.type === "CallExpression" && call.callee === member;
+};
+
+const declaresDateResult = (
+	context: TSESLint.RuleContext<MessageIds, Options>,
+	node: TSESTree.TaggedTemplateExpression
+) => {
+	if (node.typeArguments === undefined) return false;
+
+	return /\bDate\b/u.test(context.sourceCode.getText(node.typeArguments));
+};
+
 export const preferDrizzleQueryBuilders = createRule<Options, MessageIds>({
 	create(context) {
 		const drizzleSqlLocals = new Set<string>();
@@ -73,6 +92,22 @@ export const preferDrizzleQueryBuilders = createRule<Options, MessageIds>({
 					return;
 				}
 				const shape = templateShape(node.quasi);
+				if (
+					shape.trim() === "${}" &&
+					node.quasi.expressions[0]?.type === "MemberExpression"
+				) {
+					context.report({ messageId: "directColumn", node });
+
+					return;
+				}
+				if (
+					declaresDateResult(context, node) &&
+					!mapsDriverValue(node)
+				) {
+					context.report({ messageId: "unmappedDate", node });
+
+					return;
+				}
 				const match = SIMPLE_SQL_BUILDERS.find(([pattern]) =>
 					pattern.test(shape)
 				);
@@ -92,9 +127,13 @@ export const preferDrizzleQueryBuilders = createRule<Options, MessageIds>({
 				"Require Drizzle's typed query builders for comparisons, null checks, membership, ordering, and patterns that do not need raw SQL."
 		},
 		messages: {
+			directColumn:
+				"Select the Drizzle column directly. Wrapping a column in sql<T> bypasses its runtime driver decoder while only pretending the result has type T.",
 			preferBuilder:
 				"Use Drizzle's typed {{builder}}(...) query builder instead of an sql template for this expression.",
-			rawSql: "Do not use sql.raw(); it bypasses Drizzle parameterization and typing. Compose identifiers and values with Drizzle's typed APIs."
+			rawSql: "Do not use sql.raw(); it bypasses Drizzle parameterization and typing. Compose identifiers and values with Drizzle's typed APIs.",
+			unmappedDate:
+				"sql<Date> changes only TypeScript's belief; it does not decode the database value. Use Drizzle's typed max/min builder or append .mapWith(timestampColumn)."
 		},
 		schema: [],
 		type: "problem"

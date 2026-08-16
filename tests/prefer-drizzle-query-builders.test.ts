@@ -25,11 +25,21 @@ ruleTester.run("prefer-drizzle-query-builders", preferDrizzleQueryBuilders, {
 		{
 			code: `import { sql } from "drizzle-orm"; const fragment = sql.raw(input);`,
 			errors: [{ messageId: "rawSql" }]
+		},
+		{
+			code: `import { sql } from "drizzle-orm"; const rows = db.select({ createdAt: sql<Date>\`\${users.createdAt}\` });`,
+			errors: [{ messageId: "directColumn" }]
+		},
+		{
+			code: `import { sql } from "drizzle-orm"; const rows = db.select({ latest: sql<Date | null>\`max(\${users.createdAt})\` });`,
+			errors: [{ messageId: "unmappedDate" }]
 		}
 	],
 	valid: [
 		`import { eq } from "drizzle-orm"; const where = eq(users.id, id);`,
 		`import { sql } from "drizzle-orm"; const count = sql<number>\`count(*)\`;`,
+		`import { max } from "drizzle-orm"; const rows = db.select({ latest: max(users.createdAt) });`,
+		`import { sql } from "drizzle-orm"; const rows = db.select({ latest: sql\`max(\${users.createdAt}) filter (where \${users.kind} = 'reply')\`.mapWith(users.createdAt) });`,
 		`import { sql } from "other-package"; const fragment = sql\`\${left} = \${right}\`;`
 	]
 });

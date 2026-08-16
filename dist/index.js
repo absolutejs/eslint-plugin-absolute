@@ -4638,6 +4638,20 @@ var drizzleSqlLocalName = (specifier) => {
     return null;
   return specifier.imported.name === "sql" ? specifier.local.name : null;
 };
+var mapsDriverValue = (node) => {
+  const member = node.parent;
+  if (member.type !== "MemberExpression" || member.object !== node)
+    return false;
+  if (memberName2(member) !== "mapWith")
+    return false;
+  const call = member.parent;
+  return call.type === "CallExpression" && call.callee === member;
+};
+var declaresDateResult = (context, node) => {
+  if (node.typeArguments === undefined)
+    return false;
+  return /\bDate\b/u.test(context.sourceCode.getText(node.typeArguments));
+};
 var preferDrizzleQueryBuilders = createRule({
   create(context) {
     const drizzleSqlLocals = new Set;
@@ -4662,6 +4676,14 @@ var preferDrizzleQueryBuilders = createRule({
           return;
         }
         const shape = templateShape(node.quasi);
+        if (shape.trim() === "${}" && node.quasi.expressions[0]?.type === "MemberExpression") {
+          context.report({ messageId: "directColumn", node });
+          return;
+        }
+        if (declaresDateResult(context, node) && !mapsDriverValue(node)) {
+          context.report({ messageId: "unmappedDate", node });
+          return;
+        }
         const match = SIMPLE_SQL_BUILDERS.find(([pattern]) => pattern.test(shape));
         if (!match)
           return;
@@ -4679,8 +4701,10 @@ var preferDrizzleQueryBuilders = createRule({
       description: "Require Drizzle's typed query builders for comparisons, null checks, membership, ordering, and patterns that do not need raw SQL."
     },
     messages: {
+      directColumn: "Select the Drizzle column directly. Wrapping a column in sql<T> bypasses its runtime driver decoder while only pretending the result has type T.",
       preferBuilder: "Use Drizzle's typed {{builder}}(...) query builder instead of an sql template for this expression.",
-      rawSql: "Do not use sql.raw(); it bypasses Drizzle parameterization and typing. Compose identifiers and values with Drizzle's typed APIs."
+      rawSql: "Do not use sql.raw(); it bypasses Drizzle parameterization and typing. Compose identifiers and values with Drizzle's typed APIs.",
+      unmappedDate: "sql<Date> changes only TypeScript's belief; it does not decode the database value. Use Drizzle's typed max/min builder or append .mapWith(timestampColumn)."
     },
     schema: [],
     type: "problem"
