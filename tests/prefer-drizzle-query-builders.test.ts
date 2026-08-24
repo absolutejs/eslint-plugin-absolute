@@ -27,6 +27,14 @@ ruleTester.run("prefer-drizzle-query-builders", preferDrizzleQueryBuilders, {
 			errors: [{ messageId: "rawSql" }]
 		},
 		{
+			code: `const rows = await client.unsafe<Row[]>("SELECT created_at FROM runs");`,
+			errors: [{ messageId: "unsafeQuery" }]
+		},
+		{
+			code: `const rows = await client["unsafe"]("SELECT * FROM runs");`,
+			errors: [{ messageId: "unsafeQuery" }]
+		},
+		{
 			code: `import { sql } from "drizzle-orm"; const rows = db.select({ createdAt: sql<Date>\`\${users.createdAt}\` });`,
 			errors: [{ messageId: "directColumn" }]
 		},
@@ -40,6 +48,7 @@ ruleTester.run("prefer-drizzle-query-builders", preferDrizzleQueryBuilders, {
 		`import { sql } from "drizzle-orm"; const count = sql<number>\`count(*)\`;`,
 		`import { max } from "drizzle-orm"; const rows = db.select({ latest: max(users.createdAt) });`,
 		`import { sql } from "drizzle-orm"; const rows = db.select({ latest: sql\`max(\${users.createdAt}) filter (where \${users.kind} = 'reply')\`.mapWith(users.createdAt) });`,
+		`const rows = await db.select().from(runs);`,
 		`import { sql } from "other-package"; const fragment = sql\`\${left} = \${right}\`;`
 	]
 });

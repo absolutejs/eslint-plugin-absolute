@@ -4,6 +4,13 @@ import { createRule } from "../createRule";
 type Options = [];
 type MessageIds = "uselessFunction";
 
+const isDirectCallArgument = (
+	parent: TSESTree.Node,
+	child: TSESTree.Node
+) =>
+	parent.type === "CallExpression" &&
+	parent.arguments.some((argument) => argument === child);
+
 export const noUselessFunction = createRule<Options, MessageIds>({
 	create(context) {
 		// A returned object is "static" only when every member is a plain literal
@@ -15,7 +22,7 @@ export const noUselessFunction = createRule<Options, MessageIds>({
 		// (config read at call time, fresh mutable counters, a mock method, ...).
 		const isStaticObjectLiteral = (
 			object: TSESTree.ObjectExpression
-		): boolean =>
+		) =>
 			object.properties.every((property) => {
 				if (property.type !== "Property" || property.computed) {
 					return false;
@@ -34,14 +41,11 @@ export const noUselessFunction = createRule<Options, MessageIds>({
 		// not a hoist-able constant.
 		const isWithinCallArgument = (
 			node: TSESTree.ArrowFunctionExpression
-		): boolean => {
+		) => {
 			let child: TSESTree.Node = node;
 			let current: TSESTree.Node | undefined = node.parent;
 			while (current) {
-				if (
-					current.type === "CallExpression" &&
-					current.arguments.some((argument) => argument === child)
-				) {
+				if (isDirectCallArgument(current, child)) {
 					return true;
 				}
 				child = current;

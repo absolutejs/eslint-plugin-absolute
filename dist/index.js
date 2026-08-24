@@ -458,6 +458,7 @@ var explicitObjectTypes = createRule({
 // src/rules/sort-keys-fixable.ts
 import * as ts from "typescript";
 var SORT_BEFORE = -1;
+var LAST_ENTRY = -1;
 var PURE_CONSTRUCTORS = new Set(["Date"]);
 var PURE_GLOBAL_IDENTIFIERS = new Set([
   "Array",
@@ -1604,21 +1605,17 @@ ${indent}`;
       if (node.properties.length < minKeys) {
         return;
       }
-      const segments = [];
-      let currentSegment = [];
-      for (const prop of node.properties) {
-        if (prop.type === "Property") {
-          currentSegment.push(prop);
-          continue;
+      const segments = node.properties.reduce((groups, property) => {
+        const currentSegment = groups.at(LAST_ENTRY);
+        if (property.type === "Property") {
+          currentSegment?.push(property);
+          return groups;
         }
-        if (currentSegment.length > 0) {
-          segments.push(currentSegment);
-          currentSegment = [];
+        if (currentSegment && currentSegment.length > 0) {
+          groups.push([]);
         }
-      }
-      if (currentSegment.length > 0) {
-        segments.push(currentSegment);
-      }
+        return groups;
+      }, [[]]).filter((segment) => segment.length > 0);
       let autoFixable = true;
       const keys = node.properties.map((prop) => {
         if (prop.type !== "Property") {
@@ -1906,6 +1903,28 @@ var noTransitionCSSProperties = createRule({
 });
 
 // src/rules/no-explicit-return-types.ts
+var isAstNode = (value) => {
+  if (value === null || typeof value !== "object" || !("type" in value)) {
+    return false;
+  }
+  return typeof value.type === "string";
+};
+var collectNodeTypeReferences = (value, names, pending, seen) => {
+  if (Array.isArray(value)) {
+    pending.push(...value);
+    return;
+  }
+  if (!isAstNode(value) || seen.has(value))
+    return;
+  seen.add(value);
+  if (value.type === "TSTypeReference" && value.typeName.type === "Identifier") {
+    names.add(value.typeName.name);
+  }
+  Object.entries(value).forEach(([key, child]) => {
+    if (key !== "parent")
+      pending.push(child);
+  });
+};
 var noExplicitReturnTypes = createRule({
   create(context) {
     const hasSingleObjectReturn = (body) => {
@@ -1935,30 +1954,11 @@ var noExplicitReturnTypes = createRule({
     };
     const collectTypeReferenceNames = (root) => {
       const names = new Set;
-      const visit = (value) => {
-        if (!value || typeof value !== "object") {
-          return;
-        }
-        if (Array.isArray(value)) {
-          value.forEach(visit);
-          return;
-        }
-        const candidate = value;
-        if (typeof candidate.type !== "string") {
-          return;
-        }
-        const astNode = value;
-        if (astNode.type === "TSTypeReference" && astNode.typeName.type === "Identifier") {
-          names.add(astNode.typeName.name);
-        }
-        for (const key of Object.keys(astNode)) {
-          if (key === "parent") {
-            continue;
-          }
-          visit(astNode[key]);
-        }
-      };
-      visit(root);
+      const pending = [root];
+      const seen = new WeakSet;
+      while (pending.length > 0) {
+        collectNodeTypeReferences(pending.pop(), names, pending, seen);
+      }
       return names;
     };
     const hasReturnOnlyTypeParameter = (node) => {
@@ -1967,12 +1967,9 @@ var noExplicitReturnTypes = createRule({
         return false;
       }
       const returnTypeNames = collectTypeReferenceNames(node.returnType);
-      const parameterTypeNames = new Set;
-      for (const parameter of node.params) {
-        for (const name of collectTypeReferenceNames(parameter)) {
-          parameterTypeNames.add(name);
-        }
-      }
+      const parameterTypeNames = new Set(node.params.flatMap((parameter) => [
+        ...collectTypeReferenceNames(parameter)
+      ]));
       return declaredTypeParams.some((typeParam) => returnTypeNames.has(typeParam.name.name) && !parameterTypeNames.has(typeParam.name.name));
     };
     const referencesOwnName = (node) => {
@@ -2894,11 +2891,13 @@ var noOrNoneComponent = createRule({
 });
 
 // src/rules/no-button-navigation.ts
-var emptyDetection = () => ({
+var LAST_ITEM = -1;
+var EMPTY_DETECTION = {
   reason: null,
   sawAllowedLocationRead: false,
   sawHistoryCall: false
-});
+};
+var emptyDetection = () => ({ ...EMPTY_DETECTION });
 var isWindowLocationMember = (member) => {
   const { object } = member;
   if (object.type !== "MemberExpression")
@@ -2980,49 +2979,60 @@ var buttonClickDirective = (node) => {
     return null;
   return node.startTag.attributes.find((attribute) => attribute.directive && attribute.key.name.name === "on" && attribute.key.argument?.type === "VIdentifier" && attribute.key.argument.name === "click") ?? null;
 };
+var isAstNode2 = (value) => {
+  if (value === null || typeof value !== "object" || !("type" in value)) {
+    return false;
+  }
+  return typeof value.type === "string";
+};
+var applyNamedNavigationCall = (state, call, navigationFunctions) => {
+  if (call.callee.type !== "Identifier" || state.reason)
+    return;
+  const reason = navigationFunctions.get(call.callee.name);
+  if (!reason)
+    return;
+  state.reason = `${call.callee.name} handler: ${reason}`;
+};
+var applyNamedNavigationIdentifier = (state, identifier, navigationFunctions) => {
+  if (state.reason)
+    return;
+  const reason = navigationFunctions.get(identifier.name);
+  if (!reason)
+    return;
+  state.reason = `${identifier.name} handler: ${reason}`;
+};
+var collectExpressionNavigation = (value, state, navigationFunctions, pending, seen) => {
+  if (Array.isArray(value)) {
+    pending.push(...value);
+    return;
+  }
+  if (!isAstNode2(value) || seen.has(value))
+    return;
+  seen.add(value);
+  if (value.type === "AssignmentExpression")
+    applyAssignment(state, value);
+  if (value.type === "CallExpression") {
+    applyCall(state, value);
+    applyNamedNavigationCall(state, value, navigationFunctions);
+  }
+  if (value.type === "Identifier") {
+    applyNamedNavigationIdentifier(state, value, navigationFunctions);
+  }
+  if (value.type === "MemberExpression")
+    applyLocationRead(state, value);
+  Object.entries(value).forEach(([key, child]) => {
+    if (!["parent", "loc", "range", "references"].includes(key)) {
+      pending.push(child);
+    }
+  });
+};
 var expressionReason = (value, navigationFunctions) => {
   const state = emptyDetection();
   const seen = new WeakSet;
-  const visit = (candidate) => {
-    if (candidate === null || typeof candidate !== "object" || seen.has(candidate)) {
-      return;
-    }
-    seen.add(candidate);
-    const node = candidate;
-    if (node.type === "AssignmentExpression") {
-      applyAssignment(state, candidate);
-    }
-    if (node.type === "CallExpression") {
-      const call = candidate;
-      applyCall(state, call);
-      if (call.callee.type === "Identifier") {
-        const reason = navigationFunctions.get(call.callee.name);
-        if (!state.reason && reason) {
-          state.reason = `${call.callee.name} handler: ${reason}`;
-        }
-      }
-    }
-    if (node.type === "Identifier") {
-      const identifier = candidate;
-      const reason = navigationFunctions.get(identifier.name);
-      if (!state.reason && reason) {
-        state.reason = `${identifier.name} handler: ${reason}`;
-      }
-    }
-    if (node.type === "MemberExpression") {
-      applyLocationRead(state, candidate);
-    }
-    for (const [key, child] of Object.entries(candidate)) {
-      if (key === "parent" || key === "loc" || key === "range" || key === "references") {
-        continue;
-      }
-      if (Array.isArray(child))
-        child.forEach(visit);
-      else
-        visit(child);
-    }
-  };
-  visit(value);
+  const pending = [value];
+  while (pending.length > 0) {
+    collectExpressionNavigation(pending.pop(), state, navigationFunctions, pending, seen);
+  }
   return detectionReason(state);
 };
 var noButtonNavigation = createRule({
@@ -3030,16 +3040,16 @@ var noButtonNavigation = createRule({
     const handlerStack = [];
     const functionStack = [];
     const navigationFunctions = new Map;
-    const currentHandler = () => handlerStack.at(-1) ?? null;
-    const currentFunction = () => functionStack.at(-1) ?? null;
+    const currentHandler = () => handlerStack.at(LAST_ITEM) ?? null;
+    const currentFunction = () => functionStack.at(LAST_ITEM) ?? null;
     const activeStates = () => {
       const states = [];
       const handler = currentHandler();
-      const fn = currentFunction();
+      const functionState = currentFunction();
       if (handler)
         states.push(handler);
-      if (fn)
-        states.push(fn);
+      if (functionState)
+        states.push(functionState);
       return states;
     };
     const report = (node, reason) => {
@@ -3049,20 +3059,29 @@ var noButtonNavigation = createRule({
         messageId: "noButtonNavigation"
       });
     };
+    const enterClickHandler = (node) => {
+      const attribute = clickAttribute(node);
+      if (!attribute)
+        return;
+      handlerStack.push({ ...emptyDetection(), attribute });
+    };
     const enterFunction = (node) => {
       functionStack.push({
         ...emptyDetection(),
         name: functionName(node)
       });
-      if (node.type === "ArrowFunctionExpression" || node.type === "FunctionExpression") {
-        const attribute = clickAttribute(node);
-        if (attribute) {
-          handlerStack.push({
-            ...emptyDetection(),
-            attribute
-          });
-        }
-      }
+      if (node.type === "FunctionDeclaration")
+        return;
+      enterClickHandler(node);
+    };
+    const exitClickHandler = (node) => {
+      const attribute = clickAttribute(node);
+      if (!attribute)
+        return;
+      const handlerState = handlerStack.pop();
+      const handlerReason = handlerState ? detectionReason(handlerState) : null;
+      if (handlerReason)
+        report(attribute, handlerReason);
     };
     const exitFunction = (node) => {
       const functionState = functionStack.pop();
@@ -3070,15 +3089,9 @@ var noButtonNavigation = createRule({
       if (functionState?.name && reason && isNavigationOnlyFunction(node)) {
         navigationFunctions.set(functionState.name, reason);
       }
-      if (node.type === "ArrowFunctionExpression" || node.type === "FunctionExpression") {
-        const attribute = clickAttribute(node);
-        if (!attribute)
-          return;
-        const handlerState = handlerStack.pop();
-        const handlerReason = handlerState ? detectionReason(handlerState) : null;
-        if (handlerReason)
-          report(attribute, handlerReason);
-      }
+      if (node.type === "FunctionDeclaration")
+        return;
+      exitClickHandler(node);
     };
     const scriptVisitor = {
       ArrowFunctionExpression: enterFunction,
@@ -3269,6 +3282,7 @@ var noUselessCatch = createRule({
 });
 
 // src/rules/no-useless-function.ts
+var isDirectCallArgument = (parent, child) => parent.type === "CallExpression" && parent.arguments.some((argument) => argument === child);
 var noUselessFunction = createRule({
   create(context) {
     const isStaticObjectLiteral = (object) => object.properties.every((property) => {
@@ -3282,7 +3296,7 @@ var noUselessFunction = createRule({
       let child = node;
       let current = node.parent;
       while (current) {
-        if (current.type === "CallExpression" && current.arguments.some((argument) => argument === child)) {
+        if (isDirectCallArgument(current, child)) {
           return true;
         }
         child = current;
@@ -4659,7 +4673,12 @@ var preferDrizzleQueryBuilders = createRule({
       CallExpression(node) {
         if (node.callee.type !== "MemberExpression")
           return;
-        if (memberName2(node.callee) !== "raw")
+        const method = memberName2(node.callee);
+        if (method === "unsafe") {
+          context.report({ messageId: "unsafeQuery", node });
+          return;
+        }
+        if (method !== "raw")
           return;
         if (node.callee.object.type !== "Identifier" || !drizzleSqlLocals.has(node.callee.object.name)) {
           return;
@@ -4704,7 +4723,8 @@ var preferDrizzleQueryBuilders = createRule({
       directColumn: "Select the Drizzle column directly. Wrapping a column in sql<T> bypasses its runtime driver decoder while only pretending the result has type T.",
       preferBuilder: "Use Drizzle's typed {{builder}}(...) query builder instead of an sql template for this expression.",
       rawSql: "Do not use sql.raw(); it bypasses Drizzle parameterization and typing. Compose identifiers and values with Drizzle's typed APIs.",
-      unmappedDate: "sql<Date> changes only TypeScript's belief; it does not decode the database value. Use Drizzle's typed max/min builder or append .mapWith(timestampColumn)."
+      unmappedDate: "sql<Date> changes only TypeScript's belief; it does not decode the database value. Use Drizzle's typed max/min builder or append .mapWith(timestampColumn).",
+      unsafeQuery: "Do not use .unsafe(); generic row annotations only assert a result type and do not apply Drizzle's runtime decoders. Use a typed Drizzle schema and query builder."
     },
     schema: [],
     type: "problem"
@@ -5728,6 +5748,26 @@ var staticLoadingClass = (node) => {
   const className = loadingClassName(classAttribute.value.value);
   return className === null ? null : { anchor: classAttribute, className, condition: null };
 };
+var objectLoadingClass = (properties, anchor) => {
+  const candidate = properties.find((property) => property.type === "Property" && propertyName3(property) !== null && hasLoadingToken(propertyName3(property) ?? ""));
+  if (candidate?.type !== "Property")
+    return null;
+  const className = propertyName3(candidate);
+  if (className === null)
+    return null;
+  return { anchor, className, condition: candidate.value ?? null };
+};
+var arrayLoadingClass = (elements, anchor) => {
+  const element = elements.find((candidate) => candidate?.type === "Literal" && typeof candidate.value === "string" && loadingClassName(candidate.value) !== null);
+  if (element?.type !== "Literal" || typeof element.value !== "string") {
+    return null;
+  }
+  return {
+    anchor,
+    className: loadingClassName(element.value) ?? element.value,
+    condition: null
+  };
+};
 var boundLoadingClass = (node) => {
   const classBinding = node.startTag.attributes.find((attribute) => boundAttribute2(attribute, "class"));
   if (classBinding === undefined)
@@ -5736,41 +5776,21 @@ var boundLoadingClass = (node) => {
   if (expression === null || expression === undefined)
     return null;
   if (expression.type === "ObjectExpression") {
-    for (const candidate of expression.properties) {
-      if (candidate.type !== "Property")
-        continue;
-      const name = propertyName3(candidate);
-      if (name !== null && hasLoadingToken(name)) {
-        return {
-          anchor: classBinding,
-          className: name,
-          condition: candidate.value ?? null
-        };
-      }
-    }
-    return null;
+    return objectLoadingClass(expression.properties, classBinding);
   }
   if (expression.type === "ArrayExpression") {
-    for (const element of expression.elements) {
-      if (element !== null && element.type === "Literal" && typeof element.value === "string" && loadingClassName(element.value) !== null) {
-        return {
-          anchor: classBinding,
-          className: loadingClassName(element.value) ?? element.value,
-          condition: null
-        };
-      }
-    }
+    return arrayLoadingClass(expression.elements, classBinding);
   }
   return null;
 };
 var hasAriaBusy = (node) => node.startTag.attributes.some((attribute) => attributeName(attribute) === "aria-busy");
 var isProgressbar = (node) => node.startTag.attributes.some((attribute) => literalAttribute2(attribute, "role") && attribute.value?.type === "VLiteral" && attribute.value.value === "progressbar" || boundAttribute2(attribute, "role"));
 var busyAncestor = (node) => {
-  let parent = node.parent;
+  let { parent } = node;
   while (parent !== null && parent.type === "VElement") {
     if (hasAriaBusy(parent))
       return true;
-    parent = parent.parent;
+    ({ parent } = parent);
   }
   return false;
 };

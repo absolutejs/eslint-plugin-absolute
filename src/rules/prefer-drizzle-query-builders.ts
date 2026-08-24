@@ -2,7 +2,12 @@ import { TSESLint, TSESTree } from "@typescript-eslint/utils";
 import { createRule } from "../createRule";
 
 type Options = [];
-type MessageIds = "directColumn" | "preferBuilder" | "rawSql" | "unmappedDate";
+type MessageIds =
+	| "directColumn"
+	| "preferBuilder"
+	| "rawSql"
+	| "unsafeQuery"
+	| "unmappedDate";
 
 const SIMPLE_SQL_BUILDERS: ReadonlyArray<[RegExp, string]> = [
 	[/^\s*\$\{\}\s*=\s*\$\{\}\s*$/u, "eq"],
@@ -68,7 +73,13 @@ export const preferDrizzleQueryBuilders = createRule<Options, MessageIds>({
 		return {
 			CallExpression(node: TSESTree.CallExpression) {
 				if (node.callee.type !== "MemberExpression") return;
-				if (memberName(node.callee) !== "raw") return;
+				const method = memberName(node.callee);
+				if (method === "unsafe") {
+					context.report({ messageId: "unsafeQuery", node });
+
+					return;
+				}
+				if (method !== "raw") return;
 				if (
 					node.callee.object.type !== "Identifier" ||
 					!drizzleSqlLocals.has(node.callee.object.name)
@@ -133,7 +144,9 @@ export const preferDrizzleQueryBuilders = createRule<Options, MessageIds>({
 				"Use Drizzle's typed {{builder}}(...) query builder instead of an sql template for this expression.",
 			rawSql: "Do not use sql.raw(); it bypasses Drizzle parameterization and typing. Compose identifiers and values with Drizzle's typed APIs.",
 			unmappedDate:
-				"sql<Date> changes only TypeScript's belief; it does not decode the database value. Use Drizzle's typed max/min builder or append .mapWith(timestampColumn)."
+				"sql<Date> changes only TypeScript's belief; it does not decode the database value. Use Drizzle's typed max/min builder or append .mapWith(timestampColumn).",
+			unsafeQuery:
+				"Do not use .unsafe(); generic row annotations only assert a result type and do not apply Drizzle's runtime decoders. Use a typed Drizzle schema and query builder."
 		},
 		schema: [],
 		type: "problem"

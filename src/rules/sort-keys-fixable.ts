@@ -54,6 +54,7 @@ type TopLevelBinding =
 	  };
 
 const SORT_BEFORE = -1;
+const LAST_ENTRY = -1;
 const PURE_CONSTRUCTORS = new Set(["Date"]);
 const PURE_GLOBAL_IDENTIFIERS = new Set([
 	"Array",
@@ -2146,21 +2147,24 @@ export const sortKeysFixable = createRule<Options, MessageIds>({
 			// ever happens WITHIN a segment, so a key can never cross a spread
 			// (which would change which value wins). Each segment is sorted on its
 			// own; the spreads stay exactly where they are.
-			const segments: TSESTree.Property[][] = [];
-			let currentSegment: TSESTree.Property[] = [];
-			for (const prop of node.properties) {
-				if (prop.type === "Property") {
-					currentSegment.push(prop);
-					continue;
-				}
-				if (currentSegment.length > 0) {
-					segments.push(currentSegment);
-					currentSegment = [];
-				}
-			}
-			if (currentSegment.length > 0) {
-				segments.push(currentSegment);
-			}
+			const segments = node.properties
+				.reduce<TSESTree.Property[][]>(
+					(groups, property) => {
+						const currentSegment = groups.at(LAST_ENTRY);
+						if (property.type === "Property") {
+							currentSegment?.push(property);
+
+							return groups;
+						}
+						if (currentSegment && currentSegment.length > 0) {
+							groups.push([]);
+						}
+
+						return groups;
+					},
+					[[]]
+				)
+				.filter((segment) => segment.length > 0);
 
 			// Global fix blockers (rare, kept deliberately conservative): a
 			// computed key, a non-Identifier/Literal key, or a real duplicate

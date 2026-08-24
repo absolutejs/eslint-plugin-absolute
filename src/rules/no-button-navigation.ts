@@ -1,4 +1,4 @@
-import { TSESTree } from "@typescript-eslint/utils";
+import { TSESLint, TSESTree } from "@typescript-eslint/utils";
 import type { AST } from "vue-eslint-parser";
 import { createRule } from "../createRule";
 
@@ -23,11 +23,14 @@ type TemplateVisitor = {
 	VElement: (node: AST.VElement) => void;
 };
 
-const emptyDetection = (): DetectionState => ({
+const LAST_ITEM = -1;
+const EMPTY_DETECTION: DetectionState = {
 	reason: null,
 	sawAllowedLocationRead: false,
 	sawHistoryCall: false
-});
+};
+
+const emptyDetection = () => ({ ...EMPTY_DETECTION });
 
 const isWindowLocationMember = (member: TSESTree.MemberExpression) => {
 	const { object } = member;
@@ -201,59 +204,82 @@ const buttonClickDirective = (node: AST.VElement) => {
 	);
 };
 
+const isAstNode = (value: unknown): value is TSESTree.Node => {
+	if (value === null || typeof value !== "object" || !("type" in value)) {
+		return false;
+	}
+
+	return typeof value.type === "string";
+};
+
+const applyNamedNavigationCall = (
+	state: DetectionState,
+	call: TSESTree.CallExpression,
+	navigationFunctions: ReadonlyMap<string, string>
+) => {
+	if (call.callee.type !== "Identifier" || state.reason) return;
+	const reason = navigationFunctions.get(call.callee.name);
+	if (!reason) return;
+	state.reason = `${call.callee.name} handler: ${reason}`;
+};
+
+const applyNamedNavigationIdentifier = (
+	state: DetectionState,
+	identifier: TSESTree.Identifier,
+	navigationFunctions: ReadonlyMap<string, string>
+) => {
+	if (state.reason) return;
+	const reason = navigationFunctions.get(identifier.name);
+	if (!reason) return;
+	state.reason = `${identifier.name} handler: ${reason}`;
+};
+
+const collectExpressionNavigation = (
+	value: unknown,
+	state: DetectionState,
+	navigationFunctions: ReadonlyMap<string, string>,
+	pending: unknown[],
+	seen: WeakSet<object>
+) => {
+	if (Array.isArray(value)) {
+		pending.push(...value);
+
+		return;
+	}
+	if (!isAstNode(value) || seen.has(value)) return;
+	seen.add(value);
+	if (value.type === "AssignmentExpression") applyAssignment(state, value);
+	if (value.type === "CallExpression") {
+		applyCall(state, value);
+		applyNamedNavigationCall(state, value, navigationFunctions);
+	}
+	if (value.type === "Identifier") {
+		applyNamedNavigationIdentifier(state, value, navigationFunctions);
+	}
+	if (value.type === "MemberExpression") applyLocationRead(state, value);
+	Object.entries(value).forEach(([key, child]) => {
+		if (!["parent", "loc", "range", "references"].includes(key)) {
+			pending.push(child);
+		}
+	});
+};
+
 const expressionReason = (
 	value: unknown,
 	navigationFunctions: ReadonlyMap<string, string>
 ) => {
 	const state = emptyDetection();
 	const seen = new WeakSet<object>();
-	const visit = (candidate: unknown): void => {
-		if (
-			candidate === null ||
-			typeof candidate !== "object" ||
-			seen.has(candidate)
-		) {
-			return;
-		}
-		seen.add(candidate);
-		const node = candidate as { type?: string };
-		if (node.type === "AssignmentExpression") {
-			applyAssignment(state, candidate as TSESTree.AssignmentExpression);
-		}
-		if (node.type === "CallExpression") {
-			const call = candidate as TSESTree.CallExpression;
-			applyCall(state, call);
-			if (call.callee.type === "Identifier") {
-				const reason = navigationFunctions.get(call.callee.name);
-				if (!state.reason && reason) {
-					state.reason = `${call.callee.name} handler: ${reason}`;
-				}
-			}
-		}
-		if (node.type === "Identifier") {
-			const identifier = candidate as TSESTree.Identifier;
-			const reason = navigationFunctions.get(identifier.name);
-			if (!state.reason && reason) {
-				state.reason = `${identifier.name} handler: ${reason}`;
-			}
-		}
-		if (node.type === "MemberExpression") {
-			applyLocationRead(state, candidate as TSESTree.MemberExpression);
-		}
-		for (const [key, child] of Object.entries(candidate)) {
-			if (
-				key === "parent" ||
-				key === "loc" ||
-				key === "range" ||
-				key === "references"
-			) {
-				continue;
-			}
-			if (Array.isArray(child)) child.forEach(visit);
-			else visit(child);
-		}
-	};
-	visit(value);
+	const pending: unknown[] = [value];
+	while (pending.length > 0) {
+		collectExpressionNavigation(
+			pending.pop(),
+			state,
+			navigationFunctions,
+			pending,
+			seen
+		);
+	}
 
 	return detectionReason(state);
 };
@@ -263,14 +289,14 @@ export const noButtonNavigation = createRule<Options, MessageIds>({
 		const handlerStack: HandlerState[] = [];
 		const functionStack: FunctionState[] = [];
 		const navigationFunctions = new Map<string, string>();
-		const currentHandler = () => handlerStack.at(-1) ?? null;
-		const currentFunction = () => functionStack.at(-1) ?? null;
-		const activeStates = (): DetectionState[] => {
+		const currentHandler = () => handlerStack.at(LAST_ITEM) ?? null;
+		const currentFunction = () => functionStack.at(LAST_ITEM) ?? null;
+		const activeStates = () => {
 			const states: DetectionState[] = [];
 			const handler = currentHandler();
-			const fn = currentFunction();
+			const functionState = currentFunction();
 			if (handler) states.push(handler);
-			if (fn) states.push(fn);
+			if (functionState) states.push(functionState);
 
 			return states;
 		};
@@ -284,6 +310,15 @@ export const noButtonNavigation = createRule<Options, MessageIds>({
 				messageId: "noButtonNavigation"
 			});
 		};
+		const enterClickHandler = (
+			node:
+				| TSESTree.ArrowFunctionExpression
+				| TSESTree.FunctionExpression
+		) => {
+			const attribute = clickAttribute(node);
+			if (!attribute) return;
+			handlerStack.push({ ...emptyDetection(), attribute });
+		};
 		const enterFunction = (
 			node:
 				| TSESTree.ArrowFunctionExpression
@@ -294,18 +329,21 @@ export const noButtonNavigation = createRule<Options, MessageIds>({
 				...emptyDetection(),
 				name: functionName(node)
 			});
-			if (
-				node.type === "ArrowFunctionExpression" ||
-				node.type === "FunctionExpression"
-			) {
-				const attribute = clickAttribute(node);
-				if (attribute) {
-					handlerStack.push({
-						...emptyDetection(),
-						attribute
-					});
-				}
-			}
+			if (node.type === "FunctionDeclaration") return;
+			enterClickHandler(node);
+		};
+		const exitClickHandler = (
+			node:
+				| TSESTree.ArrowFunctionExpression
+				| TSESTree.FunctionExpression
+		) => {
+			const attribute = clickAttribute(node);
+			if (!attribute) return;
+			const handlerState = handlerStack.pop();
+			const handlerReason = handlerState
+				? detectionReason(handlerState)
+				: null;
+			if (handlerReason) report(attribute, handlerReason);
 		};
 		const exitFunction = (
 			node:
@@ -324,21 +362,11 @@ export const noButtonNavigation = createRule<Options, MessageIds>({
 			) {
 				navigationFunctions.set(functionState.name, reason);
 			}
-			if (
-				node.type === "ArrowFunctionExpression" ||
-				node.type === "FunctionExpression"
-			) {
-				const attribute = clickAttribute(node);
-				if (!attribute) return;
-				const handlerState = handlerStack.pop();
-				const handlerReason = handlerState
-					? detectionReason(handlerState)
-					: null;
-				if (handlerReason) report(attribute, handlerReason);
-			}
+			if (node.type === "FunctionDeclaration") return;
+			exitClickHandler(node);
 		};
 
-		const scriptVisitor = {
+		const scriptVisitor: TSESLint.RuleListener = {
 			ArrowFunctionExpression: enterFunction,
 			"ArrowFunctionExpression:exit": exitFunction,
 			AssignmentExpression(node: TSESTree.AssignmentExpression) {

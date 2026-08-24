@@ -80,8 +80,10 @@ because JSON application data never needs the Fetch escape hatch.
 validation; use a bounded type derived from the runtime schema and validate
 untrusted input before persistence.
 
-`absolute/prefer-drizzle-query-builders` rejects `sql.raw()` and recognizes raw
-Drizzle SQL templates that have direct typed equivalents such as `eq`, `gte`,
-`isNull`, `inArray`, `like`, and `desc`. SQL remains available for database
-features that Drizzle cannot express, including JSONPath and aggregate/window
-expressions.
+`absolute/prefer-drizzle-query-builders` rejects `.unsafe()` and `sql.raw()`
+calls, and recognizes raw Drizzle SQL templates that have direct typed
+equivalents such as `eq`, `gte`, `isNull`, `inArray`, `like`, and `desc`.
+Generic row annotations on raw client queries are only compile-time assertions;
+they do not apply Drizzle's runtime column decoders. SQL templates remain
+available for database features that Drizzle cannot express, including JSONPath
+and aggregate/window expressions.

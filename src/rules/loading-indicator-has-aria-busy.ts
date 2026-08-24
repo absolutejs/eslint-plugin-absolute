@@ -65,14 +65,7 @@ const propertyName = (property: AST.ESLintProperty) => {
 	return null;
 };
 
-type LoadingClassMatch = {
-	anchor: AST.VAttribute | AST.VDirective;
-	className: string;
-	/** Present when the class is conditional — the fix binds to it. */
-	condition: { range: [number, number] } | null;
-};
-
-const staticLoadingClass = (node: AST.VElement): LoadingClassMatch | null => {
+const staticLoadingClass = (node: AST.VElement) => {
 	const classAttribute = node.startTag.attributes.find((attribute) =>
 		literalAttribute(attribute, "class")
 	);
@@ -90,7 +83,45 @@ const staticLoadingClass = (node: AST.VElement): LoadingClassMatch | null => {
 		: { anchor: classAttribute, className, condition: null };
 };
 
-const boundLoadingClass = (node: AST.VElement): LoadingClassMatch | null => {
+const objectLoadingClass = (
+	properties: AST.ESLintObjectExpression["properties"],
+	anchor: AST.VDirective
+) => {
+	const candidate = properties.find(
+		(property) =>
+			property.type === "Property" &&
+			propertyName(property) !== null &&
+			hasLoadingToken(propertyName(property) ?? "")
+	);
+	if (candidate?.type !== "Property") return null;
+	const className = propertyName(candidate);
+	if (className === null) return null;
+
+	return { anchor, className, condition: candidate.value ?? null };
+};
+
+const arrayLoadingClass = (
+	elements: AST.ESLintArrayExpression["elements"],
+	anchor: AST.VDirective
+) => {
+	const element = elements.find(
+		(candidate) =>
+			candidate?.type === "Literal" &&
+			typeof candidate.value === "string" &&
+			loadingClassName(candidate.value) !== null
+	);
+	if (element?.type !== "Literal" || typeof element.value !== "string") {
+		return null;
+	}
+
+	return {
+		anchor,
+		className: loadingClassName(element.value) ?? element.value,
+		condition: null
+	};
+};
+
+const boundLoadingClass = (node: AST.VElement) => {
 	const classBinding = node.startTag.attributes.find((attribute) =>
 		boundAttribute(attribute, "class")
 	);
@@ -98,35 +129,10 @@ const boundLoadingClass = (node: AST.VElement): LoadingClassMatch | null => {
 	const expression = classBinding.value?.expression;
 	if (expression === null || expression === undefined) return null;
 	if (expression.type === "ObjectExpression") {
-		for (const candidate of expression.properties) {
-			if (candidate.type !== "Property") continue;
-			const name = propertyName(candidate);
-			if (name !== null && hasLoadingToken(name)) {
-				return {
-					anchor: classBinding,
-					className: name,
-					condition: candidate.value ?? null
-				};
-			}
-		}
-
-		return null;
+		return objectLoadingClass(expression.properties, classBinding);
 	}
 	if (expression.type === "ArrayExpression") {
-		for (const element of expression.elements) {
-			if (
-				element !== null &&
-				element.type === "Literal" &&
-				typeof element.value === "string" &&
-				loadingClassName(element.value) !== null
-			) {
-				return {
-					anchor: classBinding,
-					className: loadingClassName(element.value) ?? element.value,
-					condition: null
-				};
-			}
-		}
+		return arrayLoadingClass(expression.elements, classBinding);
 	}
 
 	return null;
@@ -147,10 +153,10 @@ const isProgressbar = (node: AST.VElement) =>
 	);
 
 const busyAncestor = (node: AST.VElement) => {
-	let parent: AST.VElement["parent"] = node.parent;
+	let { parent }: AST.VElement = node;
 	while (parent !== null && parent.type === "VElement") {
 		if (hasAriaBusy(parent)) return true;
-		parent = parent.parent;
+		({ parent } = parent);
 	}
 
 	return false;

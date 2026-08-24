@@ -9,6 +9,38 @@ type AnyFunctionNode =
 	| TSESTree.FunctionExpression
 	| TSESTree.ArrowFunctionExpression;
 
+const isAstNode = (value: unknown): value is TSESTree.Node => {
+	if (value === null || typeof value !== "object" || !("type" in value)) {
+		return false;
+	}
+
+	return typeof value.type === "string";
+};
+
+const collectNodeTypeReferences = (
+	value: unknown,
+	names: Set<string>,
+	pending: unknown[],
+	seen: WeakSet<object>
+) => {
+	if (Array.isArray(value)) {
+		pending.push(...value);
+
+		return;
+	}
+	if (!isAstNode(value) || seen.has(value)) return;
+	seen.add(value);
+	if (
+		value.type === "TSTypeReference" &&
+		value.typeName.type === "Identifier"
+	) {
+		names.add(value.typeName.name);
+	}
+	Object.entries(value).forEach(([key, child]) => {
+		if (key !== "parent") pending.push(child);
+	});
+};
+
 export const noExplicitReturnTypes = createRule<Options, MessageIds>({
 	create(context) {
 		const hasSingleObjectReturn = (body: TSESTree.BlockStatement) => {
@@ -52,34 +84,11 @@ export const noExplicitReturnTypes = createRule<Options, MessageIds>({
 		// `keyof T` all surface the identifier `T`.
 		const collectTypeReferenceNames = (root: unknown) => {
 			const names = new Set<string>();
-			const visit = (value: unknown) => {
-				if (!value || typeof value !== "object") {
-					return;
-				}
-				if (Array.isArray(value)) {
-					value.forEach(visit);
-
-					return;
-				}
-				const candidate = value as { type?: unknown };
-				if (typeof candidate.type !== "string") {
-					return;
-				}
-				const astNode = value as TSESTree.Node;
-				if (
-					astNode.type === "TSTypeReference" &&
-					astNode.typeName.type === "Identifier"
-				) {
-					names.add(astNode.typeName.name);
-				}
-				for (const key of Object.keys(astNode)) {
-					if (key === "parent") {
-						continue;
-					}
-					visit((astNode as unknown as Record<string, unknown>)[key]);
-				}
-			};
-			visit(root);
+			const pending: unknown[] = [root];
+			const seen = new WeakSet<object>();
+			while (pending.length > 0) {
+				collectNodeTypeReferences(pending.pop(), names, pending, seen);
+			}
 
 			return names;
 		};
@@ -97,12 +106,11 @@ export const noExplicitReturnTypes = createRule<Options, MessageIds>({
 			}
 
 			const returnTypeNames = collectTypeReferenceNames(node.returnType);
-			const parameterTypeNames = new Set<string>();
-			for (const parameter of node.params) {
-				for (const name of collectTypeReferenceNames(parameter)) {
-					parameterTypeNames.add(name);
-				}
-			}
+			const parameterTypeNames = new Set(
+				node.params.flatMap((parameter) => [
+					...collectTypeReferenceNames(parameter)
+				])
+			);
 
 			return declaredTypeParams.some(
 				(typeParam) =>
