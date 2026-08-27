@@ -323,19 +323,114 @@ export const sortExports = createRule<Options, MessageIds>({
 				? option.variablesBeforeFunctions
 				: false;
 
-		const getNodeStart = (node: TSESTree.ExportNamedDeclaration) =>
-			getDeclarationDecorators(node.declaration).reduce(
+		// A JSDoc block sitting directly above an export documents THAT export, so
+		// it has to travel with the declaration when the block is reordered.
+		// Without this the fixer's replace-range swallowed every comment between
+		// the first and last export and emitted only the declarations back —
+		// silent documentation loss that no typecheck or build can catch.
+		//
+		// "Directly above" means no blank line in between: a blank line is what
+		// separates a file header (or a section banner) from the export that
+		// follows, and those must stay put.
+		const isAttachedToFollowing = (
+			comment: TSESTree.Comment,
+			followingStart: number
+		) => {
+			const between = sourceCode
+				.getText()
+				.slice(comment.range[1], followingStart);
+
+			return !/\n[^\S\n]*\n/.test(between);
+		};
+
+		// `export const a = 1; // why` — that trailing comment documents `a`, not
+		// whatever follows it, so it must never be dragged onto the next export.
+		const startsOwnLine = (comment: TSESTree.Comment) => {
+			const previous = sourceCode.getTokenBefore(comment, {
+				includeComments: true
+			});
+
+			if (!previous) {
+				return true;
+			}
+
+			return /\n/.test(
+				sourceCode.getText().slice(previous.range[1], comment.range[0])
+			);
+		};
+
+		const getAttachedComments = (node: TSESTree.ExportNamedDeclaration) => {
+			const comments = sourceCode.getCommentsBefore(node);
+			const attached: TSESTree.Comment[] = [];
+			// Walk upward from the declaration so the run breaks at the first gap.
+			let followingStart = node.range[0];
+			for (let idx = comments.length - 1; idx >= 0; idx -= 1) {
+				const comment = comments[idx];
+				if (
+					!comment ||
+					!startsOwnLine(comment) ||
+					!isAttachedToFollowing(comment, followingStart)
+				) {
+					break;
+				}
+				attached.unshift(comment);
+				followingStart = comment.range[0];
+			}
+
+			return attached;
+		};
+
+		const getNodeStart = (node: TSESTree.ExportNamedDeclaration) => {
+			const declarationStart = getDeclarationDecorators(
+				node.declaration
+			).reduce(
 				(start, decorator) => Math.min(start, decorator.range[0]),
 				node.range[0]
 			);
 
-		const getNodeText = (node: TSESTree.ExportNamedDeclaration) =>
-			sourceCode.getText().slice(getNodeStart(node), node.range[1]);
+			return getAttachedComments(node).reduce(
+				(start, comment) => Math.min(start, comment.range[0]),
+				declarationStart
+			);
+		};
 
-		const generateExportText = (node: TSESTree.ExportNamedDeclaration) =>
-			getNodeText(node)
+		// `export const a = 1; // why` — a same-line trailing comment belongs to
+		// this export and would otherwise fall inside the replaced range while
+		// being part of no declaration's text, i.e. silently deleted.
+		const getTrailingComment = (node: TSESTree.ExportNamedDeclaration) => {
+			const [next] = sourceCode.getCommentsAfter(node);
+
+			if (!next) {
+				return null;
+			}
+
+			const between = sourceCode
+				.getText()
+				.slice(node.range[1], next.range[0]);
+
+			return /\n/.test(between) ? null : next;
+		};
+
+		const getNodeEnd = (node: TSESTree.ExportNamedDeclaration) =>
+			getTrailingComment(node)?.range[1] ?? node.range[1];
+
+		const getNodeText = (node: TSESTree.ExportNamedDeclaration) =>
+			sourceCode.getText().slice(getNodeStart(node), getNodeEnd(node));
+
+		const generateExportText = (node: TSESTree.ExportNamedDeclaration) => {
+			// Normalize the semicolon on the DECLARATION, then re-attach the
+			// trailing comment — otherwise the `;` lands after the comment text.
+			const declaration = sourceCode
+				.getText()
+				.slice(getNodeStart(node), node.range[1])
 				.trim()
 				.replace(/\s*;?\s*$/, ";");
+			const trailing = getTrailingComment(node);
+
+			return trailing
+				? `${declaration} ${sourceCode.getText(trailing)}`
+				: declaration;
+		};
 
 		const compareStrings = (strLeft: string, strRight: string) => {
 			let left = strLeft;
@@ -552,7 +647,7 @@ export const sortExports = createRule<Options, MessageIds>({
 						.join("\n");
 
 					const rangeStart = getNodeStart(firstNode);
-					const [, rangeEnd] = lastNode.range;
+					const rangeEnd = getNodeEnd(lastNode);
 
 					const fullText = sourceCode.getText();
 					const originalText = fullText.slice(rangeStart, rangeEnd);

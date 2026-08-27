@@ -289,4 +289,28 @@ tsRuleTester.run("sort-exports (decorated classes)", sortExports, {
 	]
 });
 
+ruleTester.run("sort-exports (leading comments)", sortExports, {
+	invalid: [
+		{
+			code: `/** Bee. */\nexport const b = 2;\n/** Ay. */\nexport const a = 1;`,
+			errors: [{ messageId: "alphabetical" }],
+			name: "a JSDoc block moves with the export it documents",
+			output: `/** Ay. */\nexport const a = 1;\n/** Bee. */\nexport const b = 2;`
+		},
+		{
+			code: `// bee\n// still bee\nexport const b = 2;\n// ay\nexport const a = 1;`,
+			errors: [{ messageId: "alphabetical" }],
+			name: "a contiguous run of line comments moves as one unit",
+			output: `// ay\nexport const a = 1;\n// bee\n// still bee\nexport const b = 2;`
+		},
+		{
+			code: `export const b = 2; // trailing bee\nexport const a = 1;`,
+			errors: [{ messageId: "alphabetical" }],
+			name: "a trailing comment is not stolen by the following export",
+			output: `export const a = 1;\nexport const b = 2; // trailing bee`
+		}
+	],
+	valid: []
+});
+
 console.log("sort-exports: All tests passed!");

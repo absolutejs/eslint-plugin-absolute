@@ -2356,9 +2356,52 @@ var sortExports = createRule({
     const natural = option && typeof option.natural === "boolean" ? option.natural : false;
     const minKeys = option && typeof option.minKeys === "number" ? option.minKeys : 2;
     const variablesBeforeFunctions = option && typeof option.variablesBeforeFunctions === "boolean" ? option.variablesBeforeFunctions : false;
-    const getNodeStart = (node) => getDeclarationDecorators(node.declaration).reduce((start, decorator) => Math.min(start, decorator.range[0]), node.range[0]);
-    const getNodeText = (node) => sourceCode.getText().slice(getNodeStart(node), node.range[1]);
-    const generateExportText = (node) => getNodeText(node).trim().replace(/\s*;?\s*$/, ";");
+    const isAttachedToFollowing = (comment, followingStart) => {
+      const between = sourceCode.getText().slice(comment.range[1], followingStart);
+      return !/\n[^\S\n]*\n/.test(between);
+    };
+    const startsOwnLine = (comment) => {
+      const previous = sourceCode.getTokenBefore(comment, {
+        includeComments: true
+      });
+      if (!previous) {
+        return true;
+      }
+      return /\n/.test(sourceCode.getText().slice(previous.range[1], comment.range[0]));
+    };
+    const getAttachedComments = (node) => {
+      const comments = sourceCode.getCommentsBefore(node);
+      const attached = [];
+      let followingStart = node.range[0];
+      for (let idx = comments.length - 1;idx >= 0; idx -= 1) {
+        const comment = comments[idx];
+        if (!comment || !startsOwnLine(comment) || !isAttachedToFollowing(comment, followingStart)) {
+          break;
+        }
+        attached.unshift(comment);
+        followingStart = comment.range[0];
+      }
+      return attached;
+    };
+    const getNodeStart = (node) => {
+      const declarationStart = getDeclarationDecorators(node.declaration).reduce((start, decorator) => Math.min(start, decorator.range[0]), node.range[0]);
+      return getAttachedComments(node).reduce((start, comment) => Math.min(start, comment.range[0]), declarationStart);
+    };
+    const getTrailingComment = (node) => {
+      const [next] = sourceCode.getCommentsAfter(node);
+      if (!next) {
+        return null;
+      }
+      const between = sourceCode.getText().slice(node.range[1], next.range[0]);
+      return /\n/.test(between) ? null : next;
+    };
+    const getNodeEnd = (node) => getTrailingComment(node)?.range[1] ?? node.range[1];
+    const getNodeText = (node) => sourceCode.getText().slice(getNodeStart(node), getNodeEnd(node));
+    const generateExportText = (node) => {
+      const declaration = sourceCode.getText().slice(getNodeStart(node), node.range[1]).trim().replace(/\s*;?\s*$/, ";");
+      const trailing = getTrailingComment(node);
+      return trailing ? `${declaration} ${sourceCode.getText(trailing)}` : declaration;
+    };
     const compareStrings = (strLeft, strRight) => {
       let left = strLeft;
       let right = strRight;
@@ -2507,7 +2550,7 @@ var sortExports = createRule({
           const sortedText = sortedItems.map((item) => generateExportText(item.node)).join(`
 `);
           const rangeStart = getNodeStart(firstNode);
-          const [, rangeEnd] = lastNode.range;
+          const rangeEnd = getNodeEnd(lastNode);
           const fullText = sourceCode.getText();
           const originalText = fullText.slice(rangeStart, rangeEnd);
           if (originalText === sortedText) {
