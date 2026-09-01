@@ -39,14 +39,6 @@ const isDialog = (node: AST.VElement) =>
 			attribute.value.value.toLowerCase() === "dialog"
 	);
 
-const hasConditionalUnmount = (node: AST.VElement) =>
-	node.startTag.attributes.some(
-		(attribute) =>
-			attribute.directive &&
-			attribute.key.name.name === "if" &&
-			attribute.key.argument === null
-	);
-
 const hasBeforeUnmountHandler = (node: AST.VElement) =>
 	node.startTag.attributes.some(
 		(attribute) =>
@@ -68,7 +60,7 @@ export const dialogHasFocusRestoration = createRule<Options, MessageIds>({
 
 		return parserServices.defineTemplateBodyVisitor({
 			VElement(node) {
-				if (!isDialog(node) || !hasConditionalUnmount(node)) return;
+				if (!isDialog(node)) return;
 				if (!hasAttribute(node, "ref")) {
 					context.report({ loc: node.loc, messageId: "missingRef" });
 				}
@@ -85,13 +77,13 @@ export const dialogHasFocusRestoration = createRule<Options, MessageIds>({
 	meta: {
 		docs: {
 			description:
-				"Require conditionally unmounted Vue dialogs to expose a focus-restoration lifecycle hook."
+				"Require Vue dialogs to expose a focus-restoration lifecycle hook for local or component teardown."
 		},
 		messages: {
 			missingBeforeUnmount:
-				"A conditionally unmounted dialog needs a @vue:before-unmount handler that restores focus before the focused subtree is removed.",
+				"A dialog needs a @vue:before-unmount handler that restores focus before local or parent-controlled teardown removes its focused subtree.",
 			missingRef:
-				"A conditionally unmounted dialog needs a template ref so its restoration handler can determine whether it owns focus."
+				"A dialog needs a template ref so its restoration handler can determine whether it owns focus."
 		},
 		schema: [],
 		type: "problem"

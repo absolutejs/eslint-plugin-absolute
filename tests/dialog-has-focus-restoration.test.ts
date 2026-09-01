@@ -30,6 +30,15 @@ ruleTester.run("dialog-has-focus-restoration", dialogHasFocusRestoration, {
 			errors: [{ messageId: "missingBeforeUnmount" }],
 			filename: "NativeDialog.vue",
 			name: "a conditional native dialog needs a restoration hook"
+		},
+		{
+			code: `<template><div role="dialog"></div></template>`,
+			errors: [
+				{ messageId: "missingRef" },
+				{ messageId: "missingBeforeUnmount" }
+			],
+			filename: "ChildDialog.vue",
+			name: "a dialog can be removed when its component is unmounted by a parent"
 		}
 	],
 	valid: [
@@ -39,9 +48,9 @@ ruleTester.run("dialog-has-focus-restoration", dialogHasFocusRestoration, {
 			name: "a conditional dialog with a restoration lifecycle is accepted"
 		},
 		{
-			code: `<template><div role="dialog"></div></template>`,
-			filename: "PersistentDialog.vue",
-			name: "a persistent dialog is outside the conditional-unmount contract"
+			code: `<template><div ref="dialog" role="dialog" @vue:before-unmount="restoreFocus"></div></template>`,
+			filename: "ChildManagedDialog.vue",
+			name: "a component-owned dialog with a restoration lifecycle is accepted"
 		},
 		{
 			code: `<template><section v-if="open"></section></template>`,

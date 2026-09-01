@@ -19,13 +19,13 @@ for Tab containment. The rule cannot prove runtime focus behavior; pair it with
 an accessibility runtime signal or browser test.
 
 `absolute/dialog-has-focus-restoration` covers the complementary close side of
-the lifecycle for modal and non-modal dialogs. A literal `role="dialog"` or
-native `<dialog>` using `v-if` must expose a template ref and a
-`@vue:before-unmount` handler. The ref lets the handler determine whether the
-dialog owns focus, and the lifecycle hook covers every Vue-controlled unmount
-without requiring static analysis to infer indirect state changes. The rule is
-structural: the handler's runtime focus destination still requires a browser
-test or accessibility signal.
+the lifecycle for modal and non-modal dialogs. Every literal `role="dialog"` or
+native `<dialog>` must expose a template ref and a `@vue:before-unmount`
+handler. The ref lets the handler determine whether the dialog owns focus, and
+the lifecycle hook covers local conditional removal as well as a parent
+unmounting the complete dialog component. The rule is structural: the
+handler's runtime focus destination still requires a browser test or
+accessibility signal.
 
 ## Elysia composition boundaries
 

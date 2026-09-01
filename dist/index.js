@@ -5888,7 +5888,6 @@ var literalAttribute3 = (attribute, name) => !attribute.directive && attribute.k
 var boundAttribute3 = (attribute, name) => attribute.directive && attribute.key.name.name === "bind" && directiveArgument3(attribute) === name;
 var hasAttribute = (node, name) => node.startTag.attributes.some((attribute) => literalAttribute3(attribute, name) || boundAttribute3(attribute, name));
 var isDialog = (node) => node.rawName.toLowerCase() === "dialog" || node.startTag.attributes.some((attribute) => literalAttribute3(attribute, "role") && attribute.value?.type === "VLiteral" && attribute.value.value.toLowerCase() === "dialog");
-var hasConditionalUnmount = (node) => node.startTag.attributes.some((attribute) => attribute.directive && attribute.key.name.name === "if" && attribute.key.argument === null);
 var hasBeforeUnmountHandler = (node) => node.startTag.attributes.some((attribute) => attribute.directive && attribute.key.name.name === "on" && directiveArgument3(attribute) === "vue:before-unmount");
 var dialogHasFocusRestoration = createRule({
   create(context) {
@@ -5898,7 +5897,7 @@ var dialogHasFocusRestoration = createRule({
     }
     return parserServices.defineTemplateBodyVisitor({
       VElement(node) {
-        if (!isDialog(node) || !hasConditionalUnmount(node))
+        if (!isDialog(node))
           return;
         if (!hasAttribute(node, "ref")) {
           context.report({ loc: node.loc, messageId: "missingRef" });
@@ -5915,11 +5914,11 @@ var dialogHasFocusRestoration = createRule({
   defaultOptions: [],
   meta: {
     docs: {
-      description: "Require conditionally unmounted Vue dialogs to expose a focus-restoration lifecycle hook."
+      description: "Require Vue dialogs to expose a focus-restoration lifecycle hook for local or component teardown."
     },
     messages: {
-      missingBeforeUnmount: "A conditionally unmounted dialog needs a @vue:before-unmount handler that restores focus before the focused subtree is removed.",
-      missingRef: "A conditionally unmounted dialog needs a template ref so its restoration handler can determine whether it owns focus."
+      missingBeforeUnmount: "A dialog needs a @vue:before-unmount handler that restores focus before local or parent-controlled teardown removes its focused subtree.",
+      missingRef: "A dialog needs a template ref so its restoration handler can determine whether it owns focus."
     },
     schema: [],
     type: "problem"
