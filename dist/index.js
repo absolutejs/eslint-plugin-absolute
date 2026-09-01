@@ -5882,18 +5882,63 @@ ${leadingText}` : " ";
   name: "loading-indicator-has-aria-busy"
 });
 
-// src/rules/modal-has-focus-management.ts
+// src/rules/dialog-has-focus-restoration.ts
 var directiveArgument3 = (attribute) => attribute.directive && attribute.key.argument?.type === "VIdentifier" ? attribute.key.argument.name : null;
 var literalAttribute3 = (attribute, name) => !attribute.directive && attribute.key.name === name;
 var boundAttribute3 = (attribute, name) => attribute.directive && attribute.key.name.name === "bind" && directiveArgument3(attribute) === name;
 var hasAttribute = (node, name) => node.startTag.attributes.some((attribute) => literalAttribute3(attribute, name) || boundAttribute3(attribute, name));
+var isDialog = (node) => node.rawName.toLowerCase() === "dialog" || node.startTag.attributes.some((attribute) => literalAttribute3(attribute, "role") && attribute.value?.type === "VLiteral" && attribute.value.value.toLowerCase() === "dialog");
+var hasConditionalUnmount = (node) => node.startTag.attributes.some((attribute) => attribute.directive && attribute.key.name.name === "if" && attribute.key.argument === null);
+var hasBeforeUnmountHandler = (node) => node.startTag.attributes.some((attribute) => attribute.directive && attribute.key.name.name === "on" && directiveArgument3(attribute) === "vue:before-unmount");
+var dialogHasFocusRestoration = createRule({
+  create(context) {
+    const { parserServices } = context.sourceCode;
+    if (!parserServices || !("defineTemplateBodyVisitor" in parserServices) || typeof parserServices.defineTemplateBodyVisitor !== "function") {
+      return {};
+    }
+    return parserServices.defineTemplateBodyVisitor({
+      VElement(node) {
+        if (!isDialog(node) || !hasConditionalUnmount(node))
+          return;
+        if (!hasAttribute(node, "ref")) {
+          context.report({ loc: node.loc, messageId: "missingRef" });
+        }
+        if (!hasBeforeUnmountHandler(node)) {
+          context.report({
+            loc: node.loc,
+            messageId: "missingBeforeUnmount"
+          });
+        }
+      }
+    });
+  },
+  defaultOptions: [],
+  meta: {
+    docs: {
+      description: "Require conditionally unmounted Vue dialogs to expose a focus-restoration lifecycle hook."
+    },
+    messages: {
+      missingBeforeUnmount: "A conditionally unmounted dialog needs a @vue:before-unmount handler that restores focus before the focused subtree is removed.",
+      missingRef: "A conditionally unmounted dialog needs a template ref so its restoration handler can determine whether it owns focus."
+    },
+    schema: [],
+    type: "problem"
+  },
+  name: "dialog-has-focus-restoration"
+});
+
+// src/rules/modal-has-focus-management.ts
+var directiveArgument4 = (attribute) => attribute.directive && attribute.key.argument?.type === "VIdentifier" ? attribute.key.argument.name : null;
+var literalAttribute4 = (attribute, name) => !attribute.directive && attribute.key.name === name;
+var boundAttribute4 = (attribute, name) => attribute.directive && attribute.key.name.name === "bind" && directiveArgument4(attribute) === name;
+var hasAttribute2 = (node, name) => node.startTag.attributes.some((attribute) => literalAttribute4(attribute, name) || boundAttribute4(attribute, name));
 var isAriaModal = (node) => node.startTag.attributes.some((attribute) => {
-  if (literalAttribute3(attribute, "aria-modal")) {
+  if (literalAttribute4(attribute, "aria-modal")) {
     return attribute.value?.type === "VLiteral" && attribute.value.value.toLowerCase() === "true";
   }
-  return boundAttribute3(attribute, "aria-modal");
+  return boundAttribute4(attribute, "aria-modal");
 });
-var hasKeydownHandler = (node) => node.startTag.attributes.some((attribute) => attribute.directive && attribute.key.name.name === "on" && directiveArgument3(attribute) === "keydown");
+var hasKeydownHandler = (node) => node.startTag.attributes.some((attribute) => attribute.directive && attribute.key.name.name === "on" && directiveArgument4(attribute) === "keydown");
 var modalHasFocusManagement = createRule({
   create(context) {
     const { parserServices } = context.sourceCode;
@@ -5904,10 +5949,10 @@ var modalHasFocusManagement = createRule({
       VElement(node) {
         if (!isAriaModal(node))
           return;
-        if (!hasAttribute(node, "ref")) {
+        if (!hasAttribute2(node, "ref")) {
           context.report({ loc: node.loc, messageId: "missingRef" });
         }
-        if (!hasAttribute(node, "tabindex")) {
+        if (!hasAttribute2(node, "tabindex")) {
           context.report({
             loc: node.loc,
             messageId: "missingTabindex"
@@ -5939,8 +5984,8 @@ var modalHasFocusManagement = createRule({
 });
 
 // src/rules/progressbar-has-state.ts
-var directiveArgument4 = (attribute) => attribute.directive && attribute.key.argument?.type === "VIdentifier" ? attribute.key.argument.name : null;
-var attributeName2 = (attribute) => attribute.directive ? directiveArgument4(attribute) : attribute.key.name;
+var directiveArgument5 = (attribute) => attribute.directive && attribute.key.argument?.type === "VIdentifier" ? attribute.key.argument.name : null;
+var attributeName2 = (attribute) => attribute.directive ? directiveArgument5(attribute) : attribute.key.name;
 var isProgressbar2 = (node) => node.startTag.attributes.some((attribute) => !attribute.directive && attribute.key.name === "role" && attribute.value?.type === "VLiteral" && attribute.value.value === "progressbar");
 var hasState = (node) => node.startTag.attributes.some((attribute) => {
   const name = attributeName2(attribute);
@@ -5986,6 +6031,7 @@ var src_default = {
     "active-button-has-aria-state": activeButtonHasAriaState,
     "angular-one-feature-per-file": angularOneFeaturePerFile,
     "button-icon-is-hidden": buttonIconIsHidden,
+    "dialog-has-focus-restoration": dialogHasFocusRestoration,
     "eden-requires-react-query": edenRequiresReactQuery,
     "elysia-composition-boundaries": elysiaCompositionBoundaries,
     "elysia-no-response-return": elysiaNoResponseReturn,

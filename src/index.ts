@@ -39,6 +39,7 @@ import { elysiaNoResponseReturn } from "./rules/elysia-no-response-return";
 import { elysiaRouteBoundaries } from "./rules/elysia-route-boundaries";
 import { edenRequiresReactQuery } from "./rules/eden-requires-react-query";
 import { loadingIndicatorHasAriaBusy } from "./rules/loading-indicator-has-aria-busy";
+import { dialogHasFocusRestoration } from "./rules/dialog-has-focus-restoration";
 import { modalHasFocusManagement } from "./rules/modal-has-focus-management";
 import { progressbarHasState } from "./rules/progressbar-has-state";
 
@@ -50,6 +51,7 @@ export default {
 		"active-button-has-aria-state": activeButtonHasAriaState,
 		"angular-one-feature-per-file": angularOneFeaturePerFile,
 		"button-icon-is-hidden": buttonIconIsHidden,
+		"dialog-has-focus-restoration": dialogHasFocusRestoration,
 		"eden-requires-react-query": edenRequiresReactQuery,
 		"elysia-composition-boundaries": elysiaCompositionBoundaries,
 		"elysia-no-response-return": elysiaNoResponseReturn,
