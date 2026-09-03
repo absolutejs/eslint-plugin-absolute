@@ -6,6 +6,10 @@ const ruleTester = new RuleTester({
 	languageOptions: {
 		ecmaVersion: 2020,
 		parser: tsParser,
+		parserOptions: {
+			projectService: { allowDefaultProject: ["file.ts"] },
+			tsconfigRootDir: `${import.meta.dir}/..`
+		},
 		sourceType: "module"
 	}
 });
@@ -41,6 +45,14 @@ ruleTester.run("prefer-drizzle-query-builders", preferDrizzleQueryBuilders, {
 		{
 			code: `import { sql } from "drizzle-orm"; const rows = db.select({ latest: sql<Date | null>\`max(\${users.createdAt})\` });`,
 			errors: [{ messageId: "unmappedDate" }]
+		},
+		{
+			code: `import { sql } from "drizzle-orm"; const scopes: string[] = ["openid"]; const value = sql\`CASE WHEN \${active} THEN \${scopes} ELSE \${tokens.scopes} END\`;`,
+			errors: [{ messageId: "directArray" }]
+		},
+		{
+			code: `import { sql } from "drizzle-orm"; const scopes = ["openid"] as const; const value = sql\`CASE WHEN \${active} THEN \${scopes} ELSE \${tokens.scopes} END\`;`,
+			errors: [{ messageId: "directArray" }]
 		}
 	],
 	valid: [
@@ -48,6 +60,8 @@ ruleTester.run("prefer-drizzle-query-builders", preferDrizzleQueryBuilders, {
 		`import { sql } from "drizzle-orm"; const count = sql<number>\`count(*)\`;`,
 		`import { max } from "drizzle-orm"; const rows = db.select({ latest: max(users.createdAt) });`,
 		`import { sql } from "drizzle-orm"; const rows = db.select({ latest: sql\`max(\${users.createdAt}) filter (where \${users.kind} = 'reply')\`.mapWith(users.createdAt) });`,
+		`import { sql } from "drizzle-orm"; const scopes: string[] = ["openid"]; const value = sql\`CASE WHEN \${active} THEN \${sql.param(scopes, tokens.scopes)} ELSE \${tokens.scopes} END\`;`,
+		`import { sql } from "drizzle-orm"; const values: string[] = ["a"]; const list = sql.join(values.map((value) => sql\`\${value}\`), sql\`, \`);`,
 		`const rows = await db.select().from(runs);`,
 		`import { sql } from "other-package"; const fragment = sql\`\${left} = \${right}\`;`
 	]

@@ -1,9 +1,11 @@
 import { TSESLint, TSESTree } from "@typescript-eslint/utils";
 import { createRule } from "../createRule";
+import * as ts from "typescript";
 
 type Options = [];
 type MessageIds =
 	| "directColumn"
+	| "directArray"
 	| "preferBuilder"
 	| "rawSql"
 	| "unsafeQuery"
@@ -69,6 +71,31 @@ const declaresDateResult = (
 export const preferDrizzleQueryBuilders = createRule<Options, MessageIds>({
 	create(context) {
 		const drizzleSqlLocals = new Set<string>();
+		const parserServices = context.sourceCode.parserServices ?? null;
+		const tsProgram =
+			parserServices && "program" in parserServices
+				? parserServices.program
+				: null;
+		const tsChecker = tsProgram ? tsProgram.getTypeChecker() : null;
+		const esTreeNodeToTSNodeMap =
+			parserServices && "esTreeNodeToTSNodeMap" in parserServices
+				? parserServices.esTreeNodeToTSNodeMap
+				: null;
+		const isArrayInterpolation = (node: TSESTree.Expression) => {
+			if (node.type === "ArrayExpression") return true;
+			if (!tsChecker || !esTreeNodeToTSNodeMap) return false;
+			const type = tsChecker.getTypeAtLocation(
+				esTreeNodeToTSNodeMap.get(node)
+			);
+			const isArrayType = (candidate: ts.Type): boolean =>
+				candidate.isUnion()
+					? candidate.types.some(isArrayType)
+					: tsChecker.isArrayType(candidate) ||
+						tsChecker.isTupleType(candidate) ||
+						candidate.getSymbol()?.getName() === "ReadonlyArray";
+
+			return isArrayType(type);
+		};
 
 		return {
 			CallExpression(node: TSESTree.CallExpression) {
@@ -103,6 +130,17 @@ export const preferDrizzleQueryBuilders = createRule<Options, MessageIds>({
 					return;
 				}
 				const shape = templateShape(node.quasi);
+				const directArray = node.quasi.expressions.find((expression) =>
+					isArrayInterpolation(expression)
+				);
+				if (directArray !== undefined) {
+					context.report({
+						messageId: "directArray",
+						node: directArray
+					});
+
+					return;
+				}
 				if (
 					shape.trim() === "${}" &&
 					node.quasi.expressions[0]?.type === "MemberExpression"
@@ -138,6 +176,8 @@ export const preferDrizzleQueryBuilders = createRule<Options, MessageIds>({
 				"Require Drizzle's typed query builders for comparisons, null checks, membership, ordering, and patterns that do not need raw SQL."
 		},
 		messages: {
+			directArray:
+				"Do not interpolate an array directly into a Drizzle sql template: Drizzle expands it as a SQL tuple, not one database array value. Use inArray()/sql.join() for a list, or sql.param(value, columnEncoder) for a database array.",
 			directColumn:
 				"Select the Drizzle column directly. Wrapping a column in sql<T> bypasses its runtime driver decoder while only pretending the result has type T.",
 			preferBuilder:

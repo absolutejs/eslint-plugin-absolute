@@ -92,6 +92,10 @@ untrusted input before persistence.
 `absolute/prefer-drizzle-query-builders` rejects `.unsafe()` and `sql.raw()`
 calls, and recognizes raw Drizzle SQL templates that have direct typed
 equivalents such as `eq`, `gte`, `isNull`, `inArray`, `like`, and `desc`.
+It also rejects arrays interpolated directly into `sql` templates because
+Drizzle expands them as SQL tuples rather than encoded database-array values.
+Use `inArray` or `sql.join` for lists and `sql.param(value, columnEncoder)` for
+one database array value.
 Generic row annotations on raw client queries are only compile-time assertions;
 they do not apply Drizzle's runtime column decoders. SQL templates remain
 available for database features that Drizzle cannot express, including JSONPath
