@@ -311,9 +311,7 @@ export const noButtonNavigation = createRule<Options, MessageIds>({
 			});
 		};
 		const enterClickHandler = (
-			node:
-				| TSESTree.ArrowFunctionExpression
-				| TSESTree.FunctionExpression
+			node: TSESTree.ArrowFunctionExpression | TSESTree.FunctionExpression
 		) => {
 			const attribute = clickAttribute(node);
 			if (!attribute) return;
@@ -333,9 +331,7 @@ export const noButtonNavigation = createRule<Options, MessageIds>({
 			enterClickHandler(node);
 		};
 		const exitClickHandler = (
-			node:
-				| TSESTree.ArrowFunctionExpression
-				| TSESTree.FunctionExpression
+			node: TSESTree.ArrowFunctionExpression | TSESTree.FunctionExpression
 		) => {
 			const attribute = clickAttribute(node);
 			if (!attribute) return;

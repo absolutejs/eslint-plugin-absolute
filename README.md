@@ -100,3 +100,23 @@ Generic row annotations on raw client queries are only compile-time assertions;
 they do not apply Drizzle's runtime column decoders. SQL templates remain
 available for database features that Drizzle cannot express, including JSONPath
 and aggregate/window expressions.
+
+## Timestamps carry their zone
+
+`absolute/timestamp-with-timezone` requires `withTimezone: true` on every
+Drizzle `timestamp` column, and fixes the ones it can.
+
+A timestamp column holds an instant, and `timestamp without time zone` cannot.
+The driver writes a `Date` as its UTC wall clock and reads a naive value back
+as local, so a process outside UTC reads every one of them late by its own
+offset. Postgres compares them correctly — it reads them in the session's zone,
+which is what they were written in — so nothing looks wrong until something
+compares one against the clock in JavaScript. Then a token that expired hours
+ago reads as valid, a lease nobody holds reads as held, and a scheduled run is
+skipped, with the data insisting all three are fine.
+
+The fix is the same every time and costs nothing, so the rule asks for it on
+every column rather than waiting for one to become load-bearing. `date` and
+`time` columns are untouched: a birthday and an opening hour are wall clocks,
+and a zone on either would be a different kind of wrong. Settings handed over
+as a variable are skipped, since they can be neither read nor appended to.

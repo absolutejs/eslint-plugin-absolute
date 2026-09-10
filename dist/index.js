@@ -1828,6 +1828,52 @@ ${indent}`;
   name: "sort-keys-fixable"
 });
 
+// src/rules/timestamp-with-timezone.ts
+var timestampWithTimezone = createRule({
+  create(context) {
+    const declaresZone = (argument) => argument.type === "ObjectExpression" && argument.properties.some((property) => property.type === "Property" && !property.computed && (property.key.type === "Identifier" && property.key.name === "withTimezone" || property.key.type === "Literal" && property.key.value === "withTimezone") && property.value.type === "Literal" && property.value.value === true);
+    return {
+      CallExpression(node) {
+        if (node.callee.type !== "Identifier" || node.callee.name !== "timestamp")
+          return;
+        const [options] = node.arguments;
+        const settings = options?.type === "Literal" ? node.arguments[1] : options;
+        if (settings !== undefined && settings.type !== "ObjectExpression")
+          return;
+        if (settings !== undefined && declaresZone(settings))
+          return;
+        context.report({
+          fix: (fixer) => {
+            if (settings === undefined) {
+              const open = context.sourceCode.getLastToken(node);
+              return open === null ? null : fixer.insertTextBefore(open, node.arguments.length > 0 ? ", { withTimezone: true }" : "{ withTimezone: true }");
+            }
+            if (settings.type !== "ObjectExpression")
+              return null;
+            const last = settings.properties.at(-1);
+            return last === undefined ? fixer.replaceText(settings, "{ withTimezone: true }") : fixer.insertTextAfter(last, ", withTimezone: true");
+          },
+          messageId: "timestampNeedsZone",
+          node
+        });
+      }
+    };
+  },
+  defaultOptions: [],
+  meta: {
+    docs: {
+      description: "Require withTimezone on Drizzle timestamp columns, which hold instants"
+    },
+    fixable: "code",
+    messages: {
+      timestampNeedsZone: "A timestamp column holds an instant, so it needs `withTimezone: true`. Without it the value reads back shifted by the reading process's offset, and a deadline compared in JavaScript is wrong by that much."
+    },
+    schema: [],
+    type: "problem"
+  },
+  name: "timestamp-with-timezone"
+});
+
 // src/rules/no-transition-cssproperties.ts
 var getKeyName = (prop) => {
   if (prop.key.type === "Identifier") {
@@ -6091,7 +6137,8 @@ var src_default = {
     "seperate-style-files": seperateStyleFiles,
     "sort-exports": sortExports,
     "sort-keys-fixable": sortKeysFixable,
-    "spring-naming-convention": springNamingConvention
+    "spring-naming-convention": springNamingConvention,
+    "timestamp-with-timezone": timestampWithTimezone
   }
 };
 export {

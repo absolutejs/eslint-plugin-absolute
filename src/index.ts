@@ -5,6 +5,7 @@ import { noNestedJSXReturn } from "./rules/no-nested-jsx-return";
 import { noChainedTypeAssertions } from "./rules/no-chained-type-assertions";
 import { explicitObjectTypes } from "./rules/explicit-object-types";
 import { sortKeysFixable } from "./rules/sort-keys-fixable";
+import { timestampWithTimezone } from "./rules/timestamp-with-timezone";
 import { noTransitionCSSProperties } from "./rules/no-transition-cssproperties";
 import { noExplicitReturnTypes } from "./rules/no-explicit-return-types";
 import { maxJSXNesting } from "./rules/max-jsx-nesting";
@@ -90,6 +91,7 @@ export default {
 		"seperate-style-files": seperateStyleFiles,
 		"sort-exports": sortExports,
 		"sort-keys-fixable": sortKeysFixable,
-		"spring-naming-convention": springNamingConvention
+		"spring-naming-convention": springNamingConvention,
+		"timestamp-with-timezone": timestampWithTimezone
 	}
 };

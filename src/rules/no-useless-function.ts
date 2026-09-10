@@ -4,10 +4,7 @@ import { createRule } from "../createRule";
 type Options = [];
 type MessageIds = "uselessFunction";
 
-const isDirectCallArgument = (
-	parent: TSESTree.Node,
-	child: TSESTree.Node
-) =>
+const isDirectCallArgument = (parent: TSESTree.Node, child: TSESTree.Node) =>
 	parent.type === "CallExpression" &&
 	parent.arguments.some((argument) => argument === child);
 
@@ -20,9 +17,7 @@ export const noUselessFunction = createRule<Options, MessageIds>({
 		// something, spreads, or nests a function/object/array, the function is a
 		// real factory: it defers evaluation so each call captures live state
 		// (config read at call time, fresh mutable counters, a mock method, ...).
-		const isStaticObjectLiteral = (
-			object: TSESTree.ObjectExpression
-		) =>
+		const isStaticObjectLiteral = (object: TSESTree.ObjectExpression) =>
 			object.properties.every((property) => {
 				if (property.type !== "Property" || property.computed) {
 					return false;
