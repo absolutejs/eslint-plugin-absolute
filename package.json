@@ -3,6 +3,7 @@
 	"description": "ESLint plugin for AbsoluteJS",
 	"devDependencies": {
 		"@absolutejs/absolute": "0.20.0-beta.0",
+		"@absolutejs/changelog": "^0.1.2",
 		"@types/bun": "1.3.3",
 		"@types/react": "19.2.14",
 		"@typescript-eslint/rule-tester": "8.56.0",
@@ -15,9 +16,11 @@
 		"vue-eslint-parser": "10.4.1"
 	},
 	"files": [
-		"dist",
+		"CHANGELOG.md",
 		"LICENSE",
-		"README.md"
+		"README.md",
+		"changelog.json",
+		"dist"
 	],
 	"license": "MIT",
 	"main": "./dist/index.js",
@@ -39,7 +42,8 @@
 		"lint": "bun run build && bun run absolutejs eslint",
 		"release": "bun run format && bun run build && bun publish",
 		"test": "bun test tests/",
-		"typecheck": "bun run tsc --noEmit"
+		"typecheck": "bun run tsc --noEmit",
+		"check:package": "absolute-changelog check"
 	},
 	"type": "module",
 	"version": "0.12.0"
