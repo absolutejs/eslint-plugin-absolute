@@ -68,6 +68,14 @@ and route closures must become explicit factory dependencies.
 
 ## Typed request boundaries
 
+`absolute/eden-explicit-date-parsing` requires a literal `parseDate` policy on
+inline Eden Treaty options. Choose `false` to preserve JSON strings, or `true`
+when consumers explicitly accept revived Date objects. It recognizes aliased
+and namespace imports from both Eden package names and ignores shadowed local
+functions. Reusable configuration objects remain the configuration owner's
+responsibility; the rule does not infer runtime policies through imported code.
+No automatic fix changes the application's date semantics.
+
 `absolute/eden-requires-react-query` requires browser Eden Treaty requests to
 execute inside a TanStack React Query `queryFn` or `mutationFn`. The rule follows
 aliased React Query imports, same-file helper functions, and request closures

@@ -1,5 +1,19 @@
 {
 	"contract": 1,
 	"name": "eslint-plugin-absolute",
-	"releases": []
+	"releases": [
+		{
+			"changes": [
+				{
+					"kind": "added",
+					"summary": "Add eden-explicit-date-parsing to require a deliberate date parsing policy on inline Treaty clients and prevent accidental string-to-Date revival.",
+					"symbols": [
+						"default"
+					]
+				}
+			],
+			"date": "2026-09-27",
+			"version": "0.13.0"
+		}
+	]
 }

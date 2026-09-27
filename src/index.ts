@@ -1,3 +1,4 @@
+import { edenExplicitDateParsing } from "./rules/eden-explicit-date-parsing";
 import { angularOneFeaturePerFile } from "./rules/angular-one-feature-per-file";
 import { activeButtonHasAriaState } from "./rules/active-button-has-aria-state";
 import { headingOrder } from "./rules/heading-order";
@@ -54,6 +55,7 @@ export default {
 		"button-icon-is-hidden": buttonIconIsHidden,
 		"dialog-has-focus-restoration": dialogHasFocusRestoration,
 		"eden-requires-react-query": edenRequiresReactQuery,
+		"eden-explicit-date-parsing": edenExplicitDateParsing,
 		"elysia-composition-boundaries": elysiaCompositionBoundaries,
 		"elysia-no-response-return": elysiaNoResponseReturn,
 		"elysia-route-boundaries": elysiaRouteBoundaries,
