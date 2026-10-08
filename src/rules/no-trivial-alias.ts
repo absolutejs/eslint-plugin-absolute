@@ -87,6 +87,7 @@ export const noTrivialAlias = createRule<Options, MessageIds>({
 				});
 			},
 			VariableDeclarator(node: TSESTree.VariableDeclarator) {
+				if (node.parent.kind !== "const") return;
 				if (node.id.type !== "Identifier") return;
 				// A type annotation may be narrowing the inferred type, which
 				// is real semantic work. Defer that case to

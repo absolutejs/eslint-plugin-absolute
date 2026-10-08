@@ -56,6 +56,16 @@ ruleTester.run("no-trivial-alias", noTrivialAlias, {
 		}
 	],
 	valid: [
+		{
+			code: `const initialCount = 0;\nlet count = initialCount;\ncount += 1;`,
+			filename,
+			name: "let destination initialized from const before mutation"
+		},
+		{
+			code: `const initialCount = 0;\nvar count = initialCount;\ncount += 1;`,
+			filename,
+			name: "var destination initialized from const before mutation"
+		},
 		// Transformations: generic application, unions, type operators — not bare renames.
 		{
 			code: `type Foo = Array<string>;`,
