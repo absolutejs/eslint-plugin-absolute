@@ -5,6 +5,16 @@
 		{
 			"changes": [
 				{
+					"kind": "fixed",
+					"summary": "Reject unencoded Date parameters in Drizzle SQL before they can break payment failure persistence."
+				}
+			],
+			"date": "2026-11-21",
+			"version": "0.13.1"
+		},
+		{
+			"changes": [
+				{
 					"kind": "added",
 					"summary": "Add eden-explicit-date-parsing to require a deliberate date parsing policy on inline Treaty clients and prevent accidental string-to-Date revival.",
 					"symbols": [

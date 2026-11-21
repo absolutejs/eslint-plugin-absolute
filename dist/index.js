@@ -341,9 +341,9 @@ var noNestedJSXReturn = createRule({
     const isSingularJSXReturn = (node) => {
       if (!isJSX(node))
         return false;
-      const children = node.children.filter((child2) => {
-        if (child2.type === AST_NODE_TYPES2.JSXText) {
-          return child2.value.trim() !== "";
+      const children = node.children.filter((child) => {
+        if (child.type === AST_NODE_TYPES2.JSXText) {
+          return child.value.trim() !== "";
         }
         return true;
       });
@@ -1648,8 +1648,8 @@ ${indent}`;
         if (idx === 0) {
           const originalFirstChunk = chunks[0];
           const originalLeadingWs = originalFirstChunk.text.match(/^(\s*)/)?.[1] ?? "";
-          const stripped2 = chunk.text.replace(/^\s*/, "");
-          return originalLeadingWs + stripped2;
+          const stripped = chunk.text.replace(/^\s*/, "");
+          return originalLeadingWs + stripped;
         }
         const stripped = chunk.text.replace(/^\s*/, "");
         return separator + stripped;
@@ -3098,7 +3098,7 @@ var functionName = (node) => {
 var isNavigationOnlyFunction = (node) => {
   if (node.body.type !== "BlockStatement")
     return true;
-  const statements = node.body.body.filter((statement2) => statement2.type !== "EmptyStatement");
+  const statements = node.body.body.filter((statement) => statement.type !== "EmptyStatement");
   if (statements.length !== 1)
     return false;
   const [statement] = statements;
@@ -4164,7 +4164,7 @@ var noInlinePropTypes = createRule({
 import { AST_NODE_TYPES as AST_NODE_TYPES4 } from "@typescript-eslint/utils";
 var BANNED_TEMPLATE_PATTERN = /\bMath\.random\s*\(|\bDate\.now\s*\(|\bnew\s+Date\s*\(\s*\)|\bcrypto\.randomUUID\s*\(|\bperformance\.now\s*\(/;
 var isIdentifier2 = (node, name) => node?.type === AST_NODE_TYPES4.Identifier && node.name === name;
-var isStaticMemberCall = (node, objectName, propertyName2) => node.callee.type === AST_NODE_TYPES4.MemberExpression && !node.callee.computed && isIdentifier2(node.callee.object, objectName) && isIdentifier2(node.callee.property, propertyName2);
+var isStaticMemberCall = (node, objectName, propertyName) => node.callee.type === AST_NODE_TYPES4.MemberExpression && !node.callee.computed && isIdentifier2(node.callee.object, objectName) && isIdentifier2(node.callee.property, propertyName);
 var getPropertyName2 = (node) => {
   const { key } = node;
   if (key.type === AST_NODE_TYPES4.Identifier)
@@ -4825,6 +4825,14 @@ var preferDrizzleQueryBuilders = createRule({
       const isArrayType = (candidate) => candidate.isUnion() ? candidate.types.some(isArrayType) : tsChecker.isArrayType(candidate) || tsChecker.isTupleType(candidate) || candidate.getSymbol()?.getName() === "ReadonlyArray";
       return isArrayType(type);
     };
+    const isDateInterpolation = (node) => {
+      if (node.type === "NewExpression" && node.callee.type === "Identifier" && node.callee.name === "Date")
+        return true;
+      if (!tsChecker || !esTreeNodeToTSNodeMap)
+        return false;
+      const isDateType = (type) => type.isUnion() || type.isIntersection() ? type.types.some(isDateType) : type.getSymbol()?.getName() === "Date";
+      return isDateType(tsChecker.getTypeAtLocation(esTreeNodeToTSNodeMap.get(node)));
+    };
     return {
       CallExpression(node) {
         if (node.callee.type !== "MemberExpression")
@@ -4848,6 +4856,14 @@ var preferDrizzleQueryBuilders = createRule({
       },
       TaggedTemplateExpression(node) {
         if (node.tag.type !== "Identifier" || !drizzleSqlLocals.has(node.tag.name)) {
+          return;
+        }
+        const directDate = node.quasi.expressions.find(isDateInterpolation);
+        if (directDate !== undefined) {
+          context.report({
+            messageId: "directDate",
+            node: directDate
+          });
           return;
         }
         const shape = templateShape(node.quasi);
@@ -4884,6 +4900,7 @@ var preferDrizzleQueryBuilders = createRule({
       description: "Require Drizzle's typed query builders for comparisons, null checks, membership, ordering, and patterns that do not need raw SQL."
     },
     messages: {
+      directDate: "A Date interpolated into raw Drizzle SQL has no column encoder. Serialize it explicitly with toISOString() (and an appropriate database cast), or use a typed query-builder parameter.",
       directArray: "Do not interpolate an array directly into a Drizzle sql template: Drizzle expands it as a SQL tuple, not one database array value. Use inArray()/sql.join() for a list, or sql.param(value, columnEncoder) for a database array.",
       directColumn: "Select the Drizzle column directly. Wrapping a column in sql<T> bypasses its runtime driver decoder while only pretending the result has type T.",
       preferBuilder: "Use Drizzle's typed {{builder}}(...) query builder instead of an sql template for this expression.",

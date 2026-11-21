@@ -42,10 +42,10 @@
 		"lint": "bun run build && bun run absolutejs eslint",
 		"release": "bun run format && bun run build && bun publish",
 		"test": "bun test tests/",
-		"typecheck": "bun run tsc --noEmit",
+		"typecheck": "absolute typecheck",
 		"check:package": "absolute-changelog check",
 		"prepublishOnly": "bun run check:package"
 	},
 	"type": "module",
-	"version": "0.13.0"
+	"version": "0.13.1"
 }

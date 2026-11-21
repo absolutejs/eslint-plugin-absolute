@@ -17,6 +17,22 @@ const ruleTester = new RuleTester({
 ruleTester.run("prefer-drizzle-query-builders", preferDrizzleQueryBuilders, {
 	invalid: [
 		{
+			code: 'import { sql } from "drizzle-orm"; const value = sql`coalesce(${users.failedAt}, ${new Date()})`;',
+			errors: [{ messageId: "directDate" }]
+		},
+		{
+			code: 'import { sql as query } from "drizzle-orm"; const now = new Date(); const value = query`coalesce(${users.failedAt}, ${now})`;',
+			errors: [{ messageId: "directDate" }]
+		},
+		{
+			code: 'import { sql } from "drizzle-orm"; function update(now: Date) { return sql`case when ${active} then ${now} else null end`; }',
+			errors: [{ messageId: "directDate" }]
+		},
+		{
+			code: 'import { sql } from "drizzle-orm"; function update(now: Date | null) { return sql`coalesce(${users.failedAt}, ${now})`; }',
+			errors: [{ messageId: "directDate" }]
+		},
+		{
 			code: `import { sql } from "drizzle-orm"; const where = sql\`\${users.id} = \${id}\`;`,
 			errors: [{ data: { builder: "eq" }, messageId: "preferBuilder" }]
 		},
@@ -56,6 +72,8 @@ ruleTester.run("prefer-drizzle-query-builders", preferDrizzleQueryBuilders, {
 		}
 	],
 	valid: [
+		'import { sql } from "drizzle-orm"; const now = new Date(); const value = sql`coalesce(${users.failedAt}, ${now.toISOString()}::timestamp)`;',
+		'import { eq } from "drizzle-orm"; const where = eq(users.createdAt, new Date());',
 		`import { eq } from "drizzle-orm"; const where = eq(users.id, id);`,
 		`import { sql } from "drizzle-orm"; const count = sql<number>\`count(*)\`;`,
 		`import { max } from "drizzle-orm"; const rows = db.select({ latest: max(users.createdAt) });`,

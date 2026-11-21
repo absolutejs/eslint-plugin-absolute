@@ -6,6 +6,7 @@ type Options = [];
 type MessageIds =
 	| "directColumn"
 	| "directArray"
+	| "directDate"
 	| "preferBuilder"
 	| "rawSql"
 	| "unsafeQuery"
@@ -97,6 +98,23 @@ export const preferDrizzleQueryBuilders = createRule<Options, MessageIds>({
 			return isArrayType(type);
 		};
 
+		const isDateInterpolation = (node: TSESTree.Expression) => {
+			if (
+				node.type === "NewExpression" &&
+				node.callee.type === "Identifier" &&
+				node.callee.name === "Date"
+			)
+				return true;
+			if (!tsChecker || !esTreeNodeToTSNodeMap) return false;
+			const isDateType = (type: ts.Type): boolean =>
+				type.isUnion() || type.isIntersection()
+					? type.types.some(isDateType)
+					: type.getSymbol()?.getName() === "Date";
+			return isDateType(
+				tsChecker.getTypeAtLocation(esTreeNodeToTSNodeMap.get(node))
+			);
+		};
+
 		return {
 			CallExpression(node: TSESTree.CallExpression) {
 				if (node.callee.type !== "MemberExpression") return;
@@ -129,6 +147,16 @@ export const preferDrizzleQueryBuilders = createRule<Options, MessageIds>({
 				) {
 					return;
 				}
+				const directDate =
+					node.quasi.expressions.find(isDateInterpolation);
+				if (directDate !== undefined) {
+					context.report({
+						messageId: "directDate",
+						node: directDate
+					});
+					return;
+				}
+
 				const shape = templateShape(node.quasi);
 				const directArray = node.quasi.expressions.find((expression) =>
 					isArrayInterpolation(expression)
@@ -176,6 +204,8 @@ export const preferDrizzleQueryBuilders = createRule<Options, MessageIds>({
 				"Require Drizzle's typed query builders for comparisons, null checks, membership, ordering, and patterns that do not need raw SQL."
 		},
 		messages: {
+			directDate:
+				"A Date interpolated into raw Drizzle SQL has no column encoder. Serialize it explicitly with toISOString() (and an appropriate database cast), or use a typed query-builder parameter.",
 			directArray:
 				"Do not interpolate an array directly into a Drizzle sql template: Drizzle expands it as a SQL tuple, not one database array value. Use inArray()/sql.join() for a list, or sql.param(value, columnEncoder) for a database array.",
 			directColumn:
