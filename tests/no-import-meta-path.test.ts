@@ -13,6 +13,14 @@ const ruleTester = new RuleTester({
 ruleTester.run("no-import-meta-path", noImportMetaPath, {
 	invalid: [
 		{
+			code: `const root = import.meta.dirname;`,
+			errors: [
+				{ data: { property: "dirname" }, messageId: "importMetaPath" }
+			],
+			filename: "/project/absolute.config.ts",
+			name: "the app's absolute.config.ts is loaded by the server"
+		},
+		{
 			code: `const dir = import.meta.dir;`,
 			errors: [
 				{ data: { property: "dir" }, messageId: "importMetaPath" }
@@ -57,6 +65,16 @@ ruleTester.run("no-import-meta-path", noImportMetaPath, {
 		}
 	],
 	valid: [
+		{
+			code: `const root = import.meta.dirname;`,
+			filename: "/project/eslint.config.mjs",
+			name: "a tool's own config runs from where it sits"
+		},
+		{
+			code: `const root = dirname(fileURLToPath(import.meta.url));`,
+			filename: "/project/prettier.config.ts",
+			name: "fileURLToPath in a tool config"
+		},
 		{
 			code: `const asset = new URL("./asset.js", import.meta.url);`,
 			name: "new URL(relative, import.meta.url) asset reference is bundler-safe"

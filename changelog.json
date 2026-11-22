@@ -5,6 +5,17 @@
 		{
 			"changes": [
 				{
+					"detail": "no-import-meta-path no longer flags a development tool's own config (eslint.config.*, prettier.config.*, knip, stylelint, commitlint, lint-staged, tailwind, postcss, vite, vitest, playwright). Those run when the tool does, from where they sit, and are never bundled into the server, so `import.meta.dirname` (say, for typescript-eslint's `tsconfigRootDir`) is right there. The app's `absolute.config.ts` is still checked: the server loads it.",
+					"kind": "fixed",
+					"summary": "no-import-meta-path leaves tool configs alone (an eslint.config's import.meta.dirname)"
+				}
+			],
+			"date": "2026-11-22",
+			"version": "0.13.2"
+		},
+		{
+			"changes": [
+				{
 					"kind": "fixed",
 					"summary": "Reject unencoded Date parameters in Drizzle SQL before they can break payment failure persistence."
 				}
