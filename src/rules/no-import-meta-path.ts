@@ -8,6 +8,13 @@ type MessageIds = "importMetaPath" | "importMetaUrl";
 // module's own location: Bun's `dir`, Node's `dirname`/`filename`.
 const FILESYSTEM_PATH_PROPERTIES = new Set(["dir", "dirname", "filename"]);
 
+/* A development tool's own config (eslint, prettier, knip, ...): it runs
+ * when the tool does, from where it sits, and is never bundled into the
+ * server, so a path from its own location is right there. The app's
+ * `absolute.config.ts` is not one of these: the server loads it. */
+const TOOL_CONFIG_FILE =
+	/(^|[\\/])(eslint|prettier|knip|stylelint|commitlint|lint-staged|tailwind|postcss|vite|vitest|playwright)\.config\.[cm]?[jt]s$/;
+
 const isImportMeta = (node: TSESTree.Node) =>
 	node.type === "MetaProperty" &&
 	node.meta.name === "import" &&
@@ -51,6 +58,8 @@ const calleeName = (callee: TSESTree.Node) => {
  */
 export const noImportMetaPath = createRule<Options, MessageIds>({
 	create(context) {
+		if (TOOL_CONFIG_FILE.test(context.filename)) return {};
+
 		return {
 			CallExpression(node: TSESTree.CallExpression) {
 				if (calleeName(node.callee) !== "fileURLToPath") return;
