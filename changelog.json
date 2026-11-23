@@ -6,6 +6,16 @@
 			"changes": [
 				{
 					"kind": "added",
+					"summary": "Expose compact project ESLint JSON reports using absolute-lint-report"
+				}
+			],
+			"date": "2026-11-23",
+			"version": "0.14.1"
+		},
+		{
+			"changes": [
+				{
+					"kind": "added",
 					"summary": "Add browser-scoped no-raw-browser-fetch and check angle-bracket double assertions"
 				}
 			],
