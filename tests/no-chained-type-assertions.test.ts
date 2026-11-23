@@ -17,6 +17,10 @@ ruleTester.run("no-chained-type-assertions", noChainedTypeAssertions, {
 			errors: [{ messageId: "chainedAssertion" }]
 		},
 		{
+			code: "const output = <string>(input as unknown);",
+			errors: [{ messageId: "chainedAssertion" }]
+		},
+		{
 			code: "const output = input as any as string;",
 			errors: [{ messageId: "chainedAssertion" }]
 		}

@@ -8,32 +8,27 @@ const EDEN_IMPORTS = new Set([
 	"@elysiajs/eden/treaty"
 ]);
 
+const identifierOf = (callee: TSESTree.CallExpression["callee"]) => {
+	if (callee.type === "Identifier") return callee;
+	if (
+		callee.type === "MemberExpression" &&
+		callee.object.type === "Identifier"
+	)
+		return callee.object;
+	return undefined;
+};
+
+const keyName = (key: TSESTree.Node, computed: boolean) => {
+	if (!computed && key.type === "Identifier") return key.name;
+	return key.type === "Literal" ? key.value : undefined;
+};
+
 export const edenExplicitDateParsing = createRule<[], "explicitDateParsing">({
-	name: "eden-explicit-date-parsing",
-	defaultOptions: [],
-	meta: {
-		type: "problem",
-		docs: {
-			description:
-				"Require an explicit Eden Treaty date parsing policy; implicit revival changes declared string responses into Date objects."
-		},
-		schema: [],
-		messages: {
-			explicitDateParsing:
-				"Set parseDate explicitly on this Treaty client. Use false to preserve JSON date strings; use true only when consumers handle revived Date values."
-		}
-	},
 	create(context) {
 		return {
 			CallExpression(node: TSESTree.CallExpression) {
-				const callee = node.callee;
-				const identifier =
-					callee.type === "Identifier"
-						? callee
-						: callee.type === "MemberExpression" &&
-							  callee.object.type === "Identifier"
-							? callee.object
-							: null;
+				const { callee } = node;
+				const identifier = identifierOf(callee);
 				if (!identifier) return;
 				const variable = context.sourceCode
 					.getScope(identifier)
@@ -65,17 +60,10 @@ export const edenExplicitDateParsing = createRule<[], "explicitDateParsing">({
 						callee.type !== "MemberExpression"
 					)
 						return;
-					const name = callee.property;
-					if (
-						(name.type === "Identifier" && !callee.computed
-							? name.name
-							: name.type === "Literal"
-								? name.value
-								: null) !== "treaty"
-					)
+					if (keyName(callee.property, callee.computed) !== "treaty")
 						return;
 				}
-				const options = node.arguments[1];
+				const [, options] = node.arguments;
 				// A reusable config can own its policy outside this call. This rule
 				// checks inline options, where accidental omission is unambiguous.
 				if (options && options.type !== "ObjectExpression") return;
@@ -83,12 +71,8 @@ export const edenExplicitDateParsing = createRule<[], "explicitDateParsing">({
 					(property) =>
 						property.type === "SpreadElement" ||
 						(property.type === "Property" &&
-							(property.key.type === "Identifier" &&
-							!property.computed
-								? property.key.name
-								: property.key.type === "Literal"
-									? property.key.value
-									: null) === "parseDate")
+							keyName(property.key, property.computed) ===
+								"parseDate")
 				);
 				if (
 					policy?.type === "Property" &&
@@ -96,8 +80,22 @@ export const edenExplicitDateParsing = createRule<[], "explicitDateParsing">({
 					typeof policy.value.value === "boolean"
 				)
 					return;
-				context.report({ node, messageId: "explicitDateParsing" });
+				context.report({ messageId: "explicitDateParsing", node });
 			}
 		};
-	}
+	},
+	defaultOptions: [],
+	meta: {
+		docs: {
+			description:
+				"Require an explicit Eden Treaty date parsing policy; implicit revival changes declared string responses into Date objects."
+		},
+		messages: {
+			explicitDateParsing:
+				"Set parseDate explicitly on this Treaty client. Use false to preserve JSON date strings; use true only when consumers handle revived Date values."
+		},
+		schema: [],
+		type: "problem"
+	},
+	name: "eden-explicit-date-parsing"
 });

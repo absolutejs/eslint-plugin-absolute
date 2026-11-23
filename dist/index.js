@@ -10,24 +10,24 @@ var EDEN_IMPORTS = new Set([
   "@elysiajs/eden",
   "@elysiajs/eden/treaty"
 ]);
+var identifierOf = (callee) => {
+  if (callee.type === "Identifier")
+    return callee;
+  if (callee.type === "MemberExpression" && callee.object.type === "Identifier")
+    return callee.object;
+  return;
+};
+var keyName = (key, computed) => {
+  if (!computed && key.type === "Identifier")
+    return key.name;
+  return key.type === "Literal" ? key.value : undefined;
+};
 var edenExplicitDateParsing = createRule({
-  name: "eden-explicit-date-parsing",
-  defaultOptions: [],
-  meta: {
-    type: "problem",
-    docs: {
-      description: "Require an explicit Eden Treaty date parsing policy; implicit revival changes declared string responses into Date objects."
-    },
-    schema: [],
-    messages: {
-      explicitDateParsing: "Set parseDate explicitly on this Treaty client. Use false to preserve JSON date strings; use true only when consumers handle revived Date values."
-    }
-  },
   create(context) {
     return {
       CallExpression(node) {
-        const callee = node.callee;
-        const identifier = callee.type === "Identifier" ? callee : callee.type === "MemberExpression" && callee.object.type === "Identifier" ? callee.object : null;
+        const { callee } = node;
+        const identifier = identifierOf(callee);
         if (!identifier)
           return;
         const variable = context.sourceCode.getScope(identifier).references.find((reference) => reference.identifier === identifier)?.resolved;
@@ -43,20 +43,31 @@ var edenExplicitDateParsing = createRule({
         } else {
           if (imported.node.type !== "ImportNamespaceSpecifier" || callee.type !== "MemberExpression")
             return;
-          const name = callee.property;
-          if ((name.type === "Identifier" && !callee.computed ? name.name : name.type === "Literal" ? name.value : null) !== "treaty")
+          if (keyName(callee.property, callee.computed) !== "treaty")
             return;
         }
-        const options = node.arguments[1];
+        const [, options] = node.arguments;
         if (options && options.type !== "ObjectExpression")
           return;
-        const policy = options?.properties.findLast((property) => property.type === "SpreadElement" || property.type === "Property" && (property.key.type === "Identifier" && !property.computed ? property.key.name : property.key.type === "Literal" ? property.key.value : null) === "parseDate");
+        const policy = options?.properties.findLast((property) => property.type === "SpreadElement" || property.type === "Property" && keyName(property.key, property.computed) === "parseDate");
         if (policy?.type === "Property" && policy.value.type === "Literal" && typeof policy.value.value === "boolean")
           return;
-        context.report({ node, messageId: "explicitDateParsing" });
+        context.report({ messageId: "explicitDateParsing", node });
       }
     };
-  }
+  },
+  defaultOptions: [],
+  meta: {
+    docs: {
+      description: "Require an explicit Eden Treaty date parsing policy; implicit revival changes declared string responses into Date objects."
+    },
+    messages: {
+      explicitDateParsing: "Set parseDate explicitly on this Treaty client. Use false to preserve JSON date strings; use true only when consumers handle revived Date values."
+    },
+    schema: [],
+    type: "problem"
+  },
+  name: "eden-explicit-date-parsing"
 });
 
 // src/rules/angular-one-feature-per-file.ts
@@ -440,8 +451,8 @@ var noNestedJSXReturn = createRule({
 // src/rules/no-chained-type-assertions.ts
 var noChainedTypeAssertions = createRule({
   create: (context) => ({
-    TSAsExpression(node) {
-      if (node.expression.type !== "TSAsExpression")
+    "TSAsExpression, TSTypeAssertion"(node) {
+      if (node.expression.type !== "TSAsExpression" && node.expression.type !== "TSTypeAssertion")
         return;
       context.report({ messageId: "chainedAssertion", node });
     }
@@ -458,6 +469,44 @@ var noChainedTypeAssertions = createRule({
     type: "problem"
   },
   name: "no-chained-type-assertions"
+});
+
+// src/rules/no-raw-browser-fetch.ts
+import { ASTUtils } from "@typescript-eslint/utils";
+var fetchReceiver = (callee) => {
+  if (callee.type === "Identifier")
+    return callee.name === "fetch" ? callee : undefined;
+  if (callee.type !== "MemberExpression" || callee.object.type !== "Identifier" || !["globalThis", "window", "self"].includes(callee.object.name))
+    return;
+  const { property } = callee;
+  const matches = callee.computed ? property.type === "Literal" && property.value === "fetch" : property.type === "Identifier" && property.name === "fetch";
+  return matches ? callee.object : undefined;
+};
+var noRawBrowserFetch = createRule({
+  create: (context) => ({
+    CallExpression(node) {
+      const { callee } = node;
+      const receiver = fetchReceiver(callee);
+      if (!receiver)
+        return;
+      const variable = ASTUtils.findVariable(context.sourceCode.getScope(receiver), receiver.name);
+      if (variable?.defs.length)
+        return;
+      context.report({ messageId: "rawFetch", node: callee });
+    }
+  }),
+  defaultOptions: [],
+  meta: {
+    docs: {
+      description: "Require a typed API client for browser requests in the configured files."
+    },
+    messages: {
+      rawFetch: "Use the typed Eden client for browser API requests so the endpoint, request and response are checked together."
+    },
+    schema: [],
+    type: "problem"
+  },
+  name: "no-raw-browser-fetch"
 });
 
 // src/rules/explicit-object-types.ts
@@ -2472,14 +2521,13 @@ var sortExports = createRule({
     const getAttachedComments = (node) => {
       const comments = sourceCode.getCommentsBefore(node);
       const attached = [];
-      let followingStart = node.range[0];
+      let [followingStart] = node.range;
       for (let idx = comments.length - 1;idx >= 0; idx -= 1) {
         const comment = comments[idx];
-        if (!comment || !startsOwnLine(comment) || !isAttachedToFollowing(comment, followingStart)) {
+        if (!comment || !startsOwnLine(comment) || !isAttachedToFollowing(comment, followingStart))
           break;
-        }
         attached.unshift(comment);
-        followingStart = comment.range[0];
+        [followingStart] = comment.range;
       }
       return attached;
     };
@@ -4468,6 +4516,7 @@ var noUnsafeSchemaTypes = createRule({
 
 // src/rules/no-import-meta-path.ts
 var FILESYSTEM_PATH_PROPERTIES = new Set(["dir", "dirname", "filename"]);
+var TOOL_CONFIG_FILE = /(^|[\\/])(eslint|prettier|knip|stylelint|commitlint|lint-staged|tailwind|postcss|vite|vitest|playwright)\.config\.[cm]?[jt]s$/;
 var isImportMeta = (node) => node.type === "MetaProperty" && node.meta.name === "import" && node.property.name === "meta";
 var importMetaProperty = (node) => {
   if (!isImportMeta(node.object))
@@ -4486,6 +4535,8 @@ var calleeName = (callee) => {
 };
 var noImportMetaPath = createRule({
   create(context) {
+    if (TOOL_CONFIG_FILE.test(context.filename))
+      return {};
     return {
       CallExpression(node) {
         if (calleeName(node.callee) !== "fileURLToPath")
@@ -4900,9 +4951,9 @@ var preferDrizzleQueryBuilders = createRule({
       description: "Require Drizzle's typed query builders for comparisons, null checks, membership, ordering, and patterns that do not need raw SQL."
     },
     messages: {
-      directDate: "A Date interpolated into raw Drizzle SQL has no column encoder. Serialize it explicitly with toISOString() (and an appropriate database cast), or use a typed query-builder parameter.",
       directArray: "Do not interpolate an array directly into a Drizzle sql template: Drizzle expands it as a SQL tuple, not one database array value. Use inArray()/sql.join() for a list, or sql.param(value, columnEncoder) for a database array.",
       directColumn: "Select the Drizzle column directly. Wrapping a column in sql<T> bypasses its runtime driver decoder while only pretending the result has type T.",
+      directDate: "A Date interpolated into raw Drizzle SQL has no column encoder. Serialize it explicitly with toISOString() (and an appropriate database cast), or use a typed query-builder parameter.",
       preferBuilder: "Use Drizzle's typed {{builder}}(...) query builder instead of an sql template for this expression.",
       rawSql: "Do not use sql.raw(); it bypasses Drizzle parameterization and typing. Compose identifiers and values with Drizzle's typed APIs.",
       unmappedDate: "sql<Date> changes only TypeScript's belief; it does not decode the database value. Use Drizzle's typed max/min builder or append .mapWith(timestampColumn).",
@@ -6170,8 +6221,8 @@ var src_default = {
     "angular-one-feature-per-file": angularOneFeaturePerFile,
     "button-icon-is-hidden": buttonIconIsHidden,
     "dialog-has-focus-restoration": dialogHasFocusRestoration,
-    "eden-requires-react-query": edenRequiresReactQuery,
     "eden-explicit-date-parsing": edenExplicitDateParsing,
+    "eden-requires-react-query": edenRequiresReactQuery,
     "elysia-composition-boundaries": elysiaCompositionBoundaries,
     "elysia-no-response-return": elysiaNoResponseReturn,
     "elysia-route-boundaries": elysiaRouteBoundaries,
@@ -6195,6 +6246,7 @@ var src_default = {
     "no-nested-jsx-return": noNestedJSXReturn,
     "no-nondeterministic-render": noNondeterministicRender,
     "no-or-none-component": noOrNoneComponent,
+    "no-raw-browser-fetch": noRawBrowserFetch,
     "no-redundant-type-annotation": noRedundantTypeAnnotation,
     "no-transition-cssproperties": noTransitionCSSProperties,
     "no-trivial-alias": noTrivialAlias,

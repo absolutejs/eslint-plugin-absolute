@@ -363,18 +363,17 @@ export const sortExports = createRule<Options, MessageIds>({
 			const comments = sourceCode.getCommentsBefore(node);
 			const attached: TSESTree.Comment[] = [];
 			// Walk upward from the declaration so the run breaks at the first gap.
-			let followingStart = node.range[0];
+			let [followingStart] = node.range;
 			for (let idx = comments.length - 1; idx >= 0; idx -= 1) {
 				const comment = comments[idx];
 				if (
 					!comment ||
 					!startsOwnLine(comment) ||
 					!isAttachedToFollowing(comment, followingStart)
-				) {
+				)
 					break;
-				}
 				attached.unshift(comment);
-				followingStart = comment.range[0];
+				[followingStart] = comment.range;
 			}
 
 			return attached;
