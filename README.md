@@ -134,3 +134,10 @@ browser modules that use a typed Eden API client. It checks calls to the
 global fetch function and its window, self and globalThis forms. Locally
 defined functions and server files outside the block are unaffected.
 React projects can also enable `absolute/eden-requires-react-query` there.
+
+Run `bunx --no-install absolute-lint-report` in a project to print its ESLint
+results as JSON. Each entry contains a project-relative file path and ESLint's
+rule ID, message, severity, line and column. It uses the project's installed
+ESLint and configuration, and omits embedded source text from the report.
+Exit status is 0 for a completed run without errors, 1 for lint errors and 2
+when ESLint could not complete the check.

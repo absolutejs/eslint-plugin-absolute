@@ -1,5 +1,8 @@
 {
 	"author": "Alex Kahn",
+	"bin": {
+		"absolute-lint-report": "./report.mjs"
+	},
 	"description": "ESLint plugin for AbsoluteJS",
 	"devDependencies": {
 		"@absolutejs/absolute": "0.20.0-beta.0",
@@ -22,7 +25,8 @@
 		"LICENSE",
 		"README.md",
 		"changelog.json",
-		"dist"
+		"dist",
+		"report.mjs"
 	],
 	"license": "MIT",
 	"main": "./dist/index.js",
@@ -49,5 +53,5 @@
 		"typecheck": "absolute typecheck"
 	},
 	"type": "module",
-	"version": "0.14.0"
+	"version": "0.14.1"
 }
