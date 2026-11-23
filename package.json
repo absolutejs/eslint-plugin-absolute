@@ -4,8 +4,10 @@
 	"devDependencies": {
 		"@absolutejs/absolute": "0.20.0-beta.0",
 		"@absolutejs/changelog": "^0.6.0",
+		"@eslint/js": "10",
 		"@types/bun": "1.3.3",
 		"@types/react": "19.2.14",
+		"@typescript-eslint/parser": "8.56.0",
 		"@typescript-eslint/rule-tester": "8.56.0",
 		"@typescript-eslint/utils": "8.56.0",
 		"eslint": "10",
@@ -36,16 +38,16 @@
 	},
 	"scripts": {
 		"build": "rm -rf dist && bun build src/index.ts --outdir dist --splitting --target=bun --external eslint --external @typescript-eslint/utils --external typescript",
+		"check:package": "absolute-changelog check",
 		"config": "absolute config",
-		"format": "absolutejs prettier --write",
+		"format": "absolute prettier --write",
 		"knip": "knip",
-		"lint": "bun run build && bun run absolutejs eslint",
+		"lint": "bun run build && absolute eslint",
+		"prepublishOnly": "bun run check:package",
 		"release": "bun run format && bun run build && bun publish",
 		"test": "bun test tests/",
-		"typecheck": "absolute typecheck",
-		"check:package": "absolute-changelog check",
-		"prepublishOnly": "bun run check:package"
+		"typecheck": "absolute typecheck"
 	},
 	"type": "module",
-	"version": "0.13.2"
+	"version": "0.14.0"
 }

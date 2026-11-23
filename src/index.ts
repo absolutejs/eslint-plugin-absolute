@@ -4,6 +4,7 @@ import { activeButtonHasAriaState } from "./rules/active-button-has-aria-state";
 import { headingOrder } from "./rules/heading-order";
 import { noNestedJSXReturn } from "./rules/no-nested-jsx-return";
 import { noChainedTypeAssertions } from "./rules/no-chained-type-assertions";
+import { noRawBrowserFetch } from "./rules/no-raw-browser-fetch";
 import { explicitObjectTypes } from "./rules/explicit-object-types";
 import { sortKeysFixable } from "./rules/sort-keys-fixable";
 import { timestampWithTimezone } from "./rules/timestamp-with-timezone";
@@ -54,8 +55,8 @@ export default {
 		"angular-one-feature-per-file": angularOneFeaturePerFile,
 		"button-icon-is-hidden": buttonIconIsHidden,
 		"dialog-has-focus-restoration": dialogHasFocusRestoration,
-		"eden-requires-react-query": edenRequiresReactQuery,
 		"eden-explicit-date-parsing": edenExplicitDateParsing,
+		"eden-requires-react-query": edenRequiresReactQuery,
 		"elysia-composition-boundaries": elysiaCompositionBoundaries,
 		"elysia-no-response-return": elysiaNoResponseReturn,
 		"elysia-route-boundaries": elysiaRouteBoundaries,
@@ -79,6 +80,7 @@ export default {
 		"no-nested-jsx-return": noNestedJSXReturn,
 		"no-nondeterministic-render": noNondeterministicRender,
 		"no-or-none-component": noOrNoneComponent,
+		"no-raw-browser-fetch": noRawBrowserFetch,
 		"no-redundant-type-annotation": noRedundantTypeAnnotation,
 		"no-transition-cssproperties": noTransitionCSSProperties,
 		"no-trivial-alias": noTrivialAlias,

@@ -128,3 +128,9 @@ every column rather than waiting for one to become load-bearing. `date` and
 `time` columns are untouched: a birthday and an opening hour are wall clocks,
 and a zone on either would be a different kind of wrong. Settings handed over
 as a variable are skipped, since they can be neither read nor appended to.
+
+Enable `absolute/no-raw-browser-fetch` in the flat-config `files` block for
+browser modules that use a typed Eden API client. It checks calls to the
+global fetch function and its window, self and globalThis forms. Locally
+defined functions and server files outside the block are unaffected.
+React projects can also enable `absolute/eden-requires-react-query` there.

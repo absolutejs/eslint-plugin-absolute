@@ -95,6 +95,7 @@ export default defineConfig([
 	{
 		files: [
 			"eslint.config.mjs",
+			"changelog.json",
 			"knip.json",
 			"package.json",
 			"**/tsconfig.json",

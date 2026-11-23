@@ -6,8 +6,14 @@ type MessageIds = "chainedAssertion";
 
 export const noChainedTypeAssertions = createRule<Options, MessageIds>({
 	create: (context) => ({
-		TSAsExpression(node: TSESTree.TSAsExpression) {
-			if (node.expression.type !== "TSAsExpression") return;
+		"TSAsExpression, TSTypeAssertion"(
+			node: TSESTree.TSAsExpression | TSESTree.TSTypeAssertion
+		) {
+			if (
+				node.expression.type !== "TSAsExpression" &&
+				node.expression.type !== "TSTypeAssertion"
+			)
+				return;
 			context.report({ messageId: "chainedAssertion", node });
 		}
 	}),

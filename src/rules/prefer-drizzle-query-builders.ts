@@ -204,12 +204,12 @@ export const preferDrizzleQueryBuilders = createRule<Options, MessageIds>({
 				"Require Drizzle's typed query builders for comparisons, null checks, membership, ordering, and patterns that do not need raw SQL."
 		},
 		messages: {
-			directDate:
-				"A Date interpolated into raw Drizzle SQL has no column encoder. Serialize it explicitly with toISOString() (and an appropriate database cast), or use a typed query-builder parameter.",
 			directArray:
 				"Do not interpolate an array directly into a Drizzle sql template: Drizzle expands it as a SQL tuple, not one database array value. Use inArray()/sql.join() for a list, or sql.param(value, columnEncoder) for a database array.",
 			directColumn:
 				"Select the Drizzle column directly. Wrapping a column in sql<T> bypasses its runtime driver decoder while only pretending the result has type T.",
+			directDate:
+				"A Date interpolated into raw Drizzle SQL has no column encoder. Serialize it explicitly with toISOString() (and an appropriate database cast), or use a typed query-builder parameter.",
 			preferBuilder:
 				"Use Drizzle's typed {{builder}}(...) query builder instead of an sql template for this expression.",
 			rawSql: "Do not use sql.raw(); it bypasses Drizzle parameterization and typing. Compose identifiers and values with Drizzle's typed APIs.",
