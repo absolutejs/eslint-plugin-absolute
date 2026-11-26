@@ -5,6 +5,17 @@
 		{
 			"changes": [
 				{
+					"detail": "no-redundant-type-annotation, prefer-drizzle-query-builders and sort-keys-fixable read the TypeScript type checker when the parser provides it, but did not say so. They now declare meta.docs.requiresTypeChecking (typescript-eslint's convention, which also marks rules that still run, with fewer findings, without types), and each description says what is lost without type information. A test now fails if any rule reads the type checker without declaring it.",
+					"kind": "fixed",
+					"summary": "Rules that use type information declare requiresTypeChecking"
+				}
+			],
+			"date": "2026-11-26",
+			"version": "0.14.2"
+		},
+		{
+			"changes": [
+				{
 					"kind": "added",
 					"summary": "Expose compact project ESLint JSON reports using absolute-lint-report"
 				}

@@ -2497,7 +2497,8 @@ export const sortKeysFixable = createRule<Options, MessageIds>({
 	meta: {
 		docs: {
 			description:
-				"enforce sorted keys in object literals with auto-fix (limited to simple cases, preserving comments)"
+				"enforce sorted keys in object literals with auto-fix (limited to simple cases, preserving comments). Uses type information to tell that calls to imported pure functions can be reordered; without it, such objects are left unsorted.",
+			requiresTypeChecking: true
 		},
 		fixable: "code",
 		messages: {
