@@ -182,7 +182,8 @@ export const noRedundantTypeAnnotation = createRule<Options, MessageIds>({
 	meta: {
 		docs: {
 			description:
-				"Disallow type annotations on variable declarations whose initializer already has the same inferred type."
+				"Disallow type annotations on variable declarations whose initializer already has the same inferred type. Uses type information (parserOptions.projectService); without it, only annotations that are syntactically identical to the initializer are found.",
+			requiresTypeChecking: true
 		},
 		fixable: "code",
 		messages: {

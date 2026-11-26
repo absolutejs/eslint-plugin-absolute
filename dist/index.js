@@ -1890,7 +1890,8 @@ ${indent}`;
   defaultOptions: [{}],
   meta: {
     docs: {
-      description: "enforce sorted keys in object literals with auto-fix (limited to simple cases, preserving comments)"
+      description: "enforce sorted keys in object literals with auto-fix (limited to simple cases, preserving comments). Uses type information to tell that calls to imported pure functions can be reordered; without it, such objects are left unsorted.",
+      requiresTypeChecking: true
     },
     fixable: "code",
     messages: {
@@ -4413,7 +4414,8 @@ var noRedundantTypeAnnotation = createRule({
   defaultOptions: [],
   meta: {
     docs: {
-      description: "Disallow type annotations on variable declarations whose initializer already has the same inferred type."
+      description: "Disallow type annotations on variable declarations whose initializer already has the same inferred type. Uses type information (parserOptions.projectService); without it, only annotations that are syntactically identical to the initializer are found.",
+      requiresTypeChecking: true
     },
     fixable: "code",
     messages: {
@@ -4948,7 +4950,8 @@ var preferDrizzleQueryBuilders = createRule({
   defaultOptions: [],
   meta: {
     docs: {
-      description: "Require Drizzle's typed query builders for comparisons, null checks, membership, ordering, and patterns that do not need raw SQL."
+      description: "Require Drizzle's typed query builders for comparisons, null checks, membership, ordering, and patterns that do not need raw SQL. Uses type information to recognize Drizzle columns and tables; without it, it catches fewer cases.",
+      requiresTypeChecking: true
     },
     messages: {
       directArray: "Do not interpolate an array directly into a Drizzle sql template: Drizzle expands it as a SQL tuple, not one database array value. Use inArray()/sql.join() for a list, or sql.param(value, columnEncoder) for a database array.",

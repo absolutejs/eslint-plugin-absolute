@@ -201,7 +201,8 @@ export const preferDrizzleQueryBuilders = createRule<Options, MessageIds>({
 	meta: {
 		docs: {
 			description:
-				"Require Drizzle's typed query builders for comparisons, null checks, membership, ordering, and patterns that do not need raw SQL."
+				"Require Drizzle's typed query builders for comparisons, null checks, membership, ordering, and patterns that do not need raw SQL. Uses type information to recognize Drizzle columns and tables; without it, it catches fewer cases.",
+			requiresTypeChecking: true
 		},
 		messages: {
 			directArray:
