@@ -67,6 +67,35 @@ const variableFor = (
 		?.resolved;
 };
 
+/* Plugins known to be functions, by the package and name they are imported
+ * from, for when there is no type information: `networking` is
+ * `(app) => app`, and `openapi()` returns a union with a function. */
+const KNOWN_FUNCTION_PLUGINS: Record<string, readonly string[]> = {
+	"@absolutejs/absolute": ["networking"],
+	"@elysia/openapi": ["openapi"]
+};
+
+/** Whether `name` here is imported from a package as one of its known
+ *  function plugins. */
+const isKnownFunctionPluginImport = (
+	context: Parameters<TSESLint.RuleModule<MessageIds, Options>["create"]>[0],
+	name: TSESTree.Identifier
+) =>
+	variableFor(context, name)?.defs.some((definition) => {
+		if (definition.type !== "ImportBinding") return false;
+		const specifier = definition.node;
+		const declaration = definition.parent;
+		if (
+			specifier.type !== "ImportSpecifier" ||
+			specifier.imported.type !== "Identifier" ||
+			declaration?.type !== "ImportDeclaration"
+		)
+			return false;
+		const known = KNOWN_FUNCTION_PLUGINS[declaration.source.value];
+
+		return known?.includes(specifier.imported.name) ?? false;
+	}) ?? false;
+
 const blockReturnExpressions = (body: TSESTree.BlockStatement) =>
 	body.body.flatMap((statement) =>
 		statement.type === "ReturnStatement" && statement.argument
@@ -188,8 +217,18 @@ export const elysiaCompositionBoundaries = createRule<Options, MessageIds>({
 		 * no array form to ask for. Known only with type information;
 		 * without it every plugin is treated as composable. */
 		const isFunctionPlugin = (plugin: TSESTree.CallExpressionArgument) => {
-			if (!checker || !nodeMap || plugin.type === "SpreadElement")
-				return false;
+			if (plugin.type === "SpreadElement") return false;
+			if (!checker || !nodeMap) {
+				/* No types: only the plugins known to be functions, as an
+				 * identifier (networking) or a call of one (openapi()). */
+				const name =
+					plugin.type === "CallExpression" ? plugin.callee : plugin;
+
+				return (
+					name.type === "Identifier" &&
+					isKnownFunctionPluginImport(context, name)
+				);
+			}
 			const type = checker.getTypeAtLocation(nodeMap.get(plugin));
 			const members = type.isUnion() ? type.types : [type];
 
