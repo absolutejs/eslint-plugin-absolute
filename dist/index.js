@@ -5197,6 +5197,20 @@ var variableFor = (context, id) => {
   const scope = context.sourceCode.getScope(id);
   return scope.references.find((reference) => reference.identifier === id)?.resolved;
 };
+var KNOWN_FUNCTION_PLUGINS = {
+  "@absolutejs/absolute": ["networking"],
+  "@elysia/openapi": ["openapi"]
+};
+var isKnownFunctionPluginImport = (context, name) => variableFor(context, name)?.defs.some((definition) => {
+  if (definition.type !== "ImportBinding")
+    return false;
+  const specifier = definition.node;
+  const declaration = definition.parent;
+  if (specifier.type !== "ImportSpecifier" || specifier.imported.type !== "Identifier" || declaration?.type !== "ImportDeclaration")
+    return false;
+  const known = KNOWN_FUNCTION_PLUGINS[declaration.source.value];
+  return known?.includes(specifier.imported.name) ?? false;
+}) ?? false;
 var blockReturnExpressions = (body) => body.body.flatMap((statement) => statement.type === "ReturnStatement" && statement.argument ? [statement.argument] : []);
 var factoryReturnExpressions = (definition) => {
   if (definition.type !== "Variable")
@@ -5266,8 +5280,12 @@ var elysiaCompositionBoundaries = createRule({
     const checker = parserServices && "program" in parserServices && parserServices.program ? parserServices.program.getTypeChecker() : null;
     const nodeMap = parserServices && "esTreeNodeToTSNodeMap" in parserServices ? parserServices.esTreeNodeToTSNodeMap : null;
     const isFunctionPlugin = (plugin) => {
-      if (!checker || !nodeMap || plugin.type === "SpreadElement")
+      if (plugin.type === "SpreadElement")
         return false;
+      if (!checker || !nodeMap) {
+        const name = plugin.type === "CallExpression" ? plugin.callee : plugin;
+        return name.type === "Identifier" && isKnownFunctionPluginImport(context, name);
+      }
       const type = checker.getTypeAtLocation(nodeMap.get(plugin));
       const members = type.isUnion() ? type.types : [type];
       return members.some((member) => member.getCallSignatures().length > 0);

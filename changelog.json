@@ -6,6 +6,16 @@
 			"changes": [
 				{
 					"kind": "fixed",
+					"summary": "elysia-composition-boundaries knows networking and openapi() are function plugins without type information"
+				}
+			],
+			"date": "2026-11-27",
+			"version": "0.14.4"
+		},
+		{
+			"changes": [
+				{
+					"kind": "fixed",
 					"summary": "elysia-composition-boundaries no longer asks for an array form that cannot type-check"
 				}
 			],

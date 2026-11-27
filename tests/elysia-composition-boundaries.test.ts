@@ -10,6 +10,16 @@ ruleTester.run("elysia-composition-boundaries", elysiaCompositionBoundaries, {
 	invalid: [
 		{
 			code: `import { Elysia } from "elysia";
+import { networking } from "./local";
+const app = new Elysia().use(auth).use(networking);`,
+			errors: [{ messageId: "preferUseArray" }],
+			name: "a networking that is not AbsoluteJS's is not assumed to be a function",
+			output: `import { Elysia } from "elysia";
+import { networking } from "./local";
+const app = new Elysia().use([auth, networking]);`
+		},
+		{
+			code: `import { Elysia } from "elysia";
 const publicApp = new Elysia().get("/", () => "ok");
 const adminApp = publicApp.get("/admin", () => "admin");`,
 			errors: [
@@ -60,6 +70,13 @@ const app = new Elysia()
 		}
 	],
 	valid: [
+		{
+			code: `import { Elysia } from "elysia";
+import { networking } from "@absolutejs/absolute";
+import { openapi } from "@elysia/openapi";
+const app = new Elysia().use(openapi()).use(networking);`,
+			name: "without types, the known function plugins keep their chain"
+		},
 		{
 			code: `import { Elysia } from "elysia";
 const publicApp = new Elysia({ name: "public" }).use([auth, metrics]).get("/", () => "ok");
