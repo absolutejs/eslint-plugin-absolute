@@ -5262,12 +5262,22 @@ var elysiaConstructorLocal = (node) => {
 var elysiaCompositionBoundaries = createRule({
   create(context) {
     const elysiaConstructors = new Set;
+    const { parserServices } = context.sourceCode;
+    const checker = parserServices && "program" in parserServices && parserServices.program ? parserServices.program.getTypeChecker() : null;
+    const nodeMap = parserServices && "esTreeNodeToTSNodeMap" in parserServices ? parserServices.esTreeNodeToTSNodeMap : null;
+    const isFunctionPlugin = (plugin) => {
+      if (!checker || !nodeMap || plugin.type === "SpreadElement")
+        return false;
+      const type = checker.getTypeAtLocation(nodeMap.get(plugin));
+      const members = type.isUnion() ? type.types : [type];
+      return members.some((member) => member.getCallSignatures().length > 0);
+    };
     return {
       CallExpression(node) {
         if (!isUseCall(node) || parentIsUseCall(node))
           return;
         const { plugins, root } = collectUseChain(node);
-        if (plugins.length < 2)
+        if (plugins.length < 2 || plugins.some(isFunctionPlugin))
           return;
         const comments = context.sourceCode.getCommentsInside(node);
         context.report({
@@ -5302,7 +5312,8 @@ var elysiaCompositionBoundaries = createRule({
   defaultOptions: [],
   meta: {
     docs: {
-      description: "Require independent Elysia route applications and prefer shallow array plugin composition so TypeScript does not instantiate an ever-growing server graph."
+      description: "Require independent Elysia route applications and prefer shallow array plugin composition so TypeScript does not instantiate an ever-growing server graph. Uses type information (parserOptions.projectService) to leave chains with a function plugin alone, since `.use([...])` accepts Elysia instances only; without it, every adjacent `.use()` pair is reported.",
+      requiresTypeChecking: true
     },
     fixable: "code",
     messages: {
